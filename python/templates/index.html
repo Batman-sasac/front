@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <meta charset="UTF-8">
+    <title>스마트 복습 - OCR</title>
+    <style>
+        .upload-box {
+            border: 2px dashed #007bff;
+            padding: 20px;
+            text-align: center;
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #image-preview {
+            display: none;
+            margin: 15px auto;
+            max-width: 300px;
+            max-height: 400px;
+            border-radius: 8px;
+            object-fit: contain;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 5px;
+        }
+
+        .btn-ocr {
+            background: #007bff;
+            color: white;
+        }
+
+        #result-area {
+            white-space: pre-wrap;
+            /* 줄바꿈(\n)과 공백을 그대로 유지 */
+            word-break: break-all;
+            /* 단어가 길어도 영역 밖으로 나가지 않게 함 */
+            line-height: 1.6;
+        }
+
+        #result-area strong {
+            color: #000 !important;
+            font-weight: 900 !important;
+            background-color: #f0db72 !important;
+            padding: 2px 4px !important;
+            border-radius: 4px !important;
+        }
+
+        .blank-span {
+            background: #fff3bf;
+            border-bottom: 2px solid #f08c00;
+            padding: 0 4px;
+            font-weight: bold;
+            color: #f08c00;
+        }
+
+        /* 퀴즈 입력창 스타일 */
+        .quiz-input {
+            border: none;
+            border-bottom: 2px solid #007bff;
+            background: #e7f1ff;
+            width: 100px;
+            text-align: center;
+            font-weight: bold;
+            margin: 0 5px;
+            padding: 2px;
+        }
+
+        .correct {
+            background-color: #d4edda !important;
+            color: #155724 !important;
+            border-bottom-color: #28a745 !important;
+        }
+
+        .wrong {
+            background-color: #f8d7da !important;
+            color: #721c24 !important;
+            border-bottom-color: #dc3545 !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>📸 학습 이미지 업로드</h2>
+        <div class="upload-box" onclick="document.getElementById('fileInput').click()">
+            <p>클릭하여 이미지를 업로드하세요.</p>
+            <input type="file" id="fileInput" accept="image/*, .pdf" style="display:none" onchange="previewImage(this)">
+            <img id="image-preview" alt="미리보기">
+        </div>
+
+        <div class="subject-selection" style="margin: 20px 0;">
+            <label for="subjectName">📚 과목 선택: </label>
+            <select id="subjectName" class="form-select" style="padding: 5px; border-radius: 5px;">
+                <option value="국어">국어</option>
+                <option value="영어">영어</option>
+                <option value="수학">수학</option>
+                <option value="사회">사회</option>
+                <option value="과학">과학</option>
+                <option value="기타">직접 입력</option>
+            </select>
+            <input type="text" id="customSubject" placeholder="과목명 직접 입력" style="display:none; margin-top:5px;">
+        </div>
+        <input type="text" id="studyName" placeholder="학습명 입력">
+
+        <button class="btn btn-ocr" onclick="startOCR()">텍스트 추출 시작</button>
+        <div id="result-area">텍스트가 추출되면 이곳에 표시됩니다.</div>
+
+        <div id="control-buttons" style="margin-top: 15px;">
+            <button class="btn" style="background: #ffc107;" onclick="makeBlank()">빈칸 생성</button>
+            <button class="btn" id="study-btn" style="background: #28a745; color: white;"
+                onclick="saveAndStartLearning()">학습 시작</button>
+        </div>
+
+        <div id="pdf-controls"
+            style="margin: 15px 0; display: none; text-align: center; background: #f8f9fa; padding: 10px; border-radius: 8px;">
+            <button class="btn" style="background: #6c757d; color: white;" onclick="changePage(-1)">◀ 이전 페이지</button>
+            <span id="page-indicator" style="font-weight: bold; margin: 0 15px; font-size: 1.1em;">1 / 1</span>
+            <button class="btn" style="background: #6c757d; color: white;" onclick="changePage(1)">다음 페이지 ▶</button>
+        </div>
+    </div>
+
+    <script>
+        // 1. 전역 변수 선언부 (함수 밖 상단에 위치해야 함)
+        let g_pdfPages = [];
+        let g_keywords = [];
+        let g_originalText = "";
+        let answerList = [];
+        let g_currentPageIndex = 0;
+        let g_pagesKeywords = [];
+
+        async function startOCR() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) return alert("파일을 선택하세요!");
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            const resultArea = document.getElementById('result-area');
+            resultArea.innerHTML = "🔍 파일 분석 중... PDF는 최대 1분 정도 소요";
+
+            try {
+                const res = await fetch("/ocr", {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (data.status === "success") {
+                    // [중요 수정] g_pdgPages -> g_pdfPages 오타 수정
+                    g_pdfPages = data.pages || [data.original_text];
+                    g_originalText = data.original_text;
+
+
+                    // 백에서 보낸 페이지뱔 키워드 저장
+                    g_pagesKeywords = data.pages_keywords || [];
+                    g_keywords = data.keywords || []; // 전역 변수에 할당
+
+                    g_currentPageIndex = 0; // 시작 시 첫 페이지 초기화
+                    renderCurrentPage();
+                } else {
+                    resultArea.innerText = "에러: " + data.message;
+                }
+            } catch (e) {
+                resultArea.innerHTML = `❌ 연결 실패: ${e.message}<br>파일 용량이 너무 크거나 서버 응답 시간이 초과되었습니다.`;
+            }
+        }
+
+        let g_pageQuizzes = {};
+        let g_pageAnswers = {};
+
+        function renderCurrentPage() {
+            const resultArea = document.getElementById('result-area');
+            if (!g_pdfPages || g_pdfPages.length === 0) return;
+
+            // 1. 이미 퀴즈(빈칸)를 만든 적이 있는 페이지라면 해당 상태를 복원
+            if (g_pageQuizzes[g_currentPageIndex]) {
+                resultArea.innerHTML = g_pageQuizzes[g_currentPageIndex];
+                answerList = g_pageAnswers[g_currentPageIndex] || [];
+                updatePageUI();
+                return;
+            }
+
+            // 2. 신규 페이지 렌더링을 위한 텍스트 확보
+            let rawContent = g_pdfPages[g_currentPageIndex];
+            if (typeof rawContent === 'object' && rawContent !== null) {
+                rawContent = rawContent.text || rawContent.content || JSON.stringify(rawContent);
+            } else {
+                rawContent = String(rawContent);
+            }
+
+            // [수정 핵심] 3. 현재 페이지에 맞는 키워드 세트만 가져오기
+            const currentPageKeywords = (g_pagesKeywords && g_pagesKeywords[g_currentPageIndex])
+                ? g_pagesKeywords[g_currentPageIndex] : [];
+
+            // 4. 키워드 강조 처리 (Strong)
+            if (currentPageKeywords.length > 0) {
+                // [수정] g_keywords 대신 currentPageKeywords를 사용하여 강조합니다.
+                const sortedKeywords = [...currentPageKeywords]
+                    .filter(w => w.trim().length >= 2)
+                    .sort((a, b) => b.length - a.length);
+
+                if (sortedKeywords.length > 0) {
+                    const escaped = sortedKeywords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                    const pattern = new RegExp(`(${escaped.join('|')})`, 'g');
+
+                    // \n이 포함된 상태에서 <strong> 태그만 입힙니다.
+                    rawContent = rawContent.replace(pattern, '<strong>$1</strong>');
+                }
+            }
+
+            // 5. 화면 반영
+            resultArea.innerHTML = rawContent;
+            g_originalText = rawContent;
+            answerList = [];
+
+            updatePageUI();
+        }
+
+        function changePage(direction) {
+            const newIndex = g_currentPageIndex + direction;
+            if (newIndex >= 0 && newIndex < g_pdfPages.length) {
+                g_currentPageIndex = newIndex;
+                renderCurrentPage();
+            }
+        }
+
+
+        function updatePageUI() {
+            const controls = document.getElementById('pdf-controls');
+            const indicator = document.getElementById('page-indicator');
+
+            if (g_pdfPages && g_pdfPages.length > 1) {
+                controls.style.display = 'block';
+                indicator.innerText = `${g_currentPageIndex + 1} / ${g_pdfPages.length}`;
+            } else {
+                controls.style.display = 'none';
+            }
+        }
+
+        function makeBlank() {
+            const selection = window.getSelection();
+            const selectedText = selection.toString().trim();
+            if (!selectedText) return alert("단어를 드래그하세요!");
+
+            answerList.push(selectedText);
+            const range = selection.getRangeAt(0);
+            const span = document.createElement("span");
+            span.className = "blank-span";
+            span.dataset.answer = selectedText;
+            span.innerText = `(${answerList.length})`;
+
+            range.deleteContents();
+            range.insertNode(span);
+            selection.removeAllRanges();
+
+            // 빈칸 생성 후 상태 저장
+            saveCurrentPageState();
+        }
+
+        function saveCurrentPageState() {
+            const resultArea = document.getElementById('result-area');
+
+            g_pageQuizzes[g_currentPageIndex] = resultArea.innerHTML;
+            g_pageAnswers[g_currentPageIndex] = [...answerList];
+        }
+
+        async function saveAndStartLearning() {
+            // [수정] 현재 페이지뿐만 아니라 모든 페이지의 정답을 합칩니다.
+            const allAnswers = Object.values(g_pageAnswers).flat();
+
+            // 만약 드래그만 하고 아직 다른 페이지로 안 넘어가서 g_pageAnswers에 안 담겼을 경우를 대비해 
+            // 현재 화면에 보이는 빈칸들도 체크합니다.
+            const currentBlanks = document.querySelectorAll('.blank-span');
+            if (allAnswers.length === 0 && currentBlanks.length === 0) return alert("빈칸을 먼저 만들어주세요!");
+
+            const subjectSelect = document.getElementById('subjectName');
+            let subjectName = subjectSelect.value;
+            if (subjectName === "기타") {
+                subjectName = document.getElementById('customSubject').value || "미지정 과목";
+            }
+
+            // [추가] 사용자가 입력한 학습명 가져오기
+            const studyNameInput = document.getElementById('studyName');
+            const studyName = studyNameInput.value.trim() || `${subjectName} 학습 (${new Date().toLocaleDateString()})`;
+
+            // [핵심 수정] 모든 페이지의 퀴즈 HTML과 정답 데이터를 준비합니다.
+            // 아직 저장되지 않은 현재 페이지 상태를 마지막으로 업데이트합니다.
+            saveCurrentPageState();
+
+            try {
+                const response = await fetch("/ocr/save-test", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        subject_name: subjectName,
+                        study_name: studyName,
+                        original: g_pdfPages,            // 전체 페이지 텍스트 리스트
+                        quiz: JSON.stringify(g_pageQuizzes), // 각 페이지별 HTML이 담긴 JSON 객체
+                        answers: allAnswers              // 모든 페이지의 정답 리스트 합본
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.status === "success") {
+                    document.getElementById('result-area').dataset.quizId = result.quiz_id;
+                    console.log(`✅ [${subjectName}] 전체 저장 성공! ID: ${result.quiz_id}`);
+
+                    // 현재 화면에 보이는 빈칸들을 input으로 교체
+                    const currentVisibleBlanks = document.querySelectorAll('.blank-span');
+                    currentVisibleBlanks.forEach((span, index) => {
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'quiz-input';
+                        input.dataset.correctAnswer = span.dataset.answer;
+                        input.placeholder = `(${index + 1})`;
+                        span.parentNode.replaceChild(input, span);
+                    });
+
+                    const studyBtn = document.getElementById('study-btn');
+                    studyBtn.innerText = "🎯 채점하기";
+                    studyBtn.onclick = checkAnswers;
+                } else {
+                    alert("저장 실패: " + result.message);
+                }
+            } catch (e) {
+                console.error("서버 연결 실패:", e);
+            }
+        }
+
+        async function checkAnswers() {
+            const inputs = document.querySelectorAll('.quiz-input');
+            let score = 0;
+            const userAnswers = [];
+            const correctAnswers = [];
+
+            inputs.forEach(input => {
+                const userAnswer = input.value.trim();
+                const correctAnswer = input.dataset.correctAnswer;
+                userAnswers.push(userAnswer);
+                correctAnswers.push(correctAnswer);
+
+                if (userAnswer === correctAnswer) {
+                    input.classList.remove('wrong');
+                    input.classList.add('correct');
+                    score++;
+                } else {
+                    input.classList.remove('correct');
+                    input.classList.add('wrong');
+                    input.value = `${userAnswer} (정답: ${correctAnswer})`;
+                }
+                input.disabled = true;
+            });
+
+            alert(`채점 완료! 총 ${inputs.length}개 중 ${score}개 맞혔습니다.`);
+
+            const userTypedAnswers = Array.from(inputs).map(input => input.value.trim());
+            const quizId = document.getElementById('result-area').dataset.quizId;
+            if (quizId) {
+                try {
+                    // [수정] 경로를 /quiz/grade로, 키값을 correct_answers로 변경
+                    const response = await fetch("/study/grade", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            quiz_id: parseInt(quizId),
+                            user_answers: userAnswers,
+                            answer: correctAnswers
+                        })
+                    });
+
+                    const result = await response.json();
+                    if (result.status === "success") {
+                        console.log(`✅ DB 업데이트 성공! 획득 포인트: ${result.reward_given}`);
+                    }
+                } catch (e) {
+                    console.error("서버 연결 에러:", e);
+                }
+            }
+
+            const studyBtn = document.getElementById('study-btn');
+            studyBtn.innerText = "새로고침하여 다시하기";
+            studyBtn.onclick = () => location.reload();
+        }
+    </script>
+</body>
+
+</html>
