@@ -14,6 +14,7 @@ import {
     Modal,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
+import { saveTest } from '../../api/ocr';
 
 type Step = '1-1' | '1-2' | '1-3';
 type GradeState = 'idle' | 'correct' | 'wrong';
@@ -39,6 +40,7 @@ type Props = {
     loading: boolean;
     error: string | null;
     onRetry: () => void;
+    onSave?: (answers: string[]) => Promise<void>;
 };
 
 const BG = '#F6F7FB';
@@ -56,6 +58,7 @@ export default function ScaffoldingScreen({
     loading,
     error,
     onRetry,
+    onSave,
 }: Props) {
     /** 로딩/에러 */
     if (loading) {
@@ -168,15 +171,36 @@ export default function ScaffoldingScreen({
 
     /** 왼쪽 설명 카드(상/하 색 분리) */
     const HelpChip = () => {
-        const titleText = step === '1-1' ? '단어 터치하기' : step === '1-2' ? '빈칸 터치하기' : '결과 확인';
-        const descTop =
-            step === '1-1' ? '단어를 터치하면' : step === '1-2' ? '빈칸을 터치해' : '단어를 터치하면';
-        const descBottom =
-            step === '1-1'
-                ? '의미를 확인할 수 있어요!'
-                : step === '1-2'
-                    ? '답을 입력할 수 있어요!'
-                    : '의미를 다시 확인할 수 있어요.';
+        if (step === '1-2') {
+            return (
+                <>
+                    <View style={styles.helpBox}>
+                        <View style={[styles.helpHeader, { backgroundColor: HIGHLIGHT_BG }]}>
+                            <Text style={styles.helpTitle}>빈칸 터치하기</Text>
+                        </View>
+                        <View style={styles.helpBody}>
+                            <Text style={styles.helpDesc}>빈칸의 정답을</Text>
+                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>입력할 수 있어요!</Text>
+                        </View>
+                    </View>
+                    <View style={styles.helpBox}>
+                        <View style={[styles.helpHeader, { backgroundColor: HIGHLIGHT_BG }]}>
+                            <Text style={styles.helpTitle}>빈칸 꾹 누르기</Text>
+                        </View>
+                        <View style={styles.helpBody}>
+                            <Text style={styles.helpDesc}>H1을 누르면 첫글자,</Text>
+                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>H2를 누르면 마지막글자,</Text>
+                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>H3을 누르면 전체 단어의</Text>
+                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>초성이 제공돼요!</Text>
+                        </View>
+                    </View>
+                </>
+            );
+        }
+
+        const titleText = step === '1-1' ? '단어 터치하기' : '결과 확인';
+        const descTop = step === '1-1' ? '단어를 터치하면' : '단어를 터치하면';
+        const descBottom = step === '1-1' ? '의미를 확인할 수 있어요!' : '의미를 다시 확인할 수 있어요.';
 
         return (
             <View style={styles.helpBox}>
@@ -228,7 +252,7 @@ export default function ScaffoldingScreen({
                     <HelpChip />
 
                     {step === '1-1' && (
-                        <>
+                        <View style={styles.buttonGroup}>
                             <Pressable style={styles.imgBtnWrap} onPress={onReselectWords}>
                                 <Image
                                     source={require('../../../assets/study/re-selection-button.png')}
@@ -243,19 +267,39 @@ export default function ScaffoldingScreen({
                                     resizeMode="contain"
                                 />
                             </Pressable>
-                        </>
+                        </View>
                     )}
 
                     {step === '1-2' && (
-                        <Pressable style={styles.primaryRectBtn} onPress={onGrade}>
-                            <Text style={styles.primaryRectBtnText}>채점하기</Text>
-                        </Pressable>
+                        <View style={styles.buttonGroup}>
+                            <Pressable style={styles.imgBtnWrap} onPress={onGrade}>
+                                <Image
+                                    source={require('../../../assets/study/grade-button.png')}
+                                    style={styles.startImg}
+                                    resizeMode="contain"
+                                />
+                            </Pressable>
+                        </View>
                     )}
 
                     {step === '1-3' && (
                         <Pressable
                             style={styles.primaryRectBtn}
-                            onPress={() => Alert.alert('Round 2', '2단계는 다음 작업에서 연결하겠습니다.')}
+                            onPress={async () => {
+                                if (onSave) {
+                                    try {
+                                        const answerList = keywordInstances.map((ins) =>
+                                            answers[ins.instanceId] ?? ''
+                                        );
+                                        await onSave(answerList);
+                                        Alert.alert('저장 완료', '학습 데이터가 저장되었습니다.');
+                                    } catch (e: any) {
+                                        Alert.alert('저장 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
+                                    }
+                                } else {
+                                    Alert.alert('Round 2', '2단계는 다음 작업에서 연결하겠습니다.');
+                                }
+                            }}
                         >
                             <Text style={styles.primaryRectBtnText}>Round 2</Text>
                         </Pressable>
@@ -296,16 +340,19 @@ export default function ScaffoldingScreen({
                                             onPress={() => onPressBlank(instanceId)}
                                             onLongPress={onLongPressBlank}
                                             delayLongPress={450}
-                                            style={[styles.blankBox, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
+                                            style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
                                         >
-                                            <TextInput
-                                                ref={(r) => { inputRefs.current[instanceId] = r; }}
-                                                value={userValue}
-                                                onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
-                                                style={styles.blankInput}
-                                                blurOnSubmit
-                                                onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
-                                            />
+                                            <View style={{ position: 'relative' }}>
+                                                <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
+                                                <TextInput
+                                                    ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
+                                                    value={userValue}
+                                                    onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
+                                                    style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
+                                                    blurOnSubmit
+                                                    onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
+                                                />
+                                            </View>
                                         </Pressable>
                                     );
                                 }
@@ -477,7 +524,7 @@ const styles = StyleSheet.create({
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: scale(8), flex: 1 },
     headerTitle: { fontSize: fontScale(16), fontWeight: '900', color: '#111827' },
     headerSubtitle: { fontSize: fontScale(12), fontWeight: '800', color: '#111827', opacity: 0.75 },
-    scoreText: { fontSize: fontScale(12), fontWeight: '900', color: '#111827', paddingTop: scale(2) },
+    scoreText: { fontSize: fontScale(16), fontWeight: '900', color: '#9CA3AF', paddingTop: scale(2) },
 
     barsRow: { marginTop: scale(8), flexDirection: 'row', gap: scale(4) },
     bar: { flex: 1, height: scale(10), borderRadius: scale(3) },
@@ -492,6 +539,12 @@ const styles = StyleSheet.create({
         borderRadius: scale(16),
         paddingHorizontal: scale(12),
         paddingVertical: scale(12),
+        gap: scale(12),
+        justifyContent: 'flex-start',
+    },
+
+    buttonGroup: {
+        marginTop: 'auto',
         gap: scale(12),
     },
 
@@ -518,8 +571,8 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: '#D6DBFF',
     },
-    helpTitle: { fontSize: fontScale(12), fontWeight: '900', color: '#111827', textAlign: 'center' },
-    helpDesc: { fontSize: fontScale(10), fontWeight: '700', color: MUTED, lineHeight: fontScale(14), textAlign: 'center' },
+    helpTitle: { fontSize: fontScale(13), fontWeight: '900', color: '#111827', textAlign: 'center' },
+    helpDesc: { fontSize: fontScale(11), fontWeight: '700', color: MUTED, lineHeight: fontScale(16), textAlign: 'center' },
     helpDescBottom: { marginTop: scale(2) },
 
     imgBtnWrap: { width: '100%', alignItems: 'center' },
@@ -540,14 +593,14 @@ const styles = StyleSheet.create({
     textContainer: { paddingHorizontal: scale(14), paddingVertical: scale(14) },
     flow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
     newline: { width: '100%', height: fontScale(14) },
-    bodyText: { fontSize: fontScale(13), lineHeight: fontScale(20), fontWeight: '600', color: '#111827' },
+    bodyText: { fontSize: fontScale(14), lineHeight: fontScale(22), fontWeight: '600', color: '#111827' },
 
-    wordPill: { paddingHorizontal: scale(6), paddingVertical: scale(2), borderRadius: scale(6), marginVertical: scale(1) },
-    wordText: { fontSize: fontScale(13), lineHeight: fontScale(20), fontWeight: '900', color: '#111827' },
+    wordPill: { paddingHorizontal: 0, paddingVertical: 0, borderRadius: scale(4), marginVertical: 0 },
+    wordText: { fontSize: fontScale(13), lineHeight: fontScale(20), fontWeight: '600', color: '#111827' },
 
-    blankBox: { minWidth: scale(72), height: scale(24), borderRadius: scale(6), marginVertical: scale(2), justifyContent: 'center', paddingHorizontal: scale(6) },
+    blankBox: { paddingHorizontal: 0, paddingVertical: 0, borderRadius: scale(4), marginVertical: 0, justifyContent: 'center' },
     blankBoxActive: { borderWidth: 2, borderColor: '#5E82FF' },
-    blankInput: { padding: 0, margin: 0, fontSize: fontScale(13), fontWeight: '800', color: '#111827' },
+    blankInput: { padding: 0, margin: 0, fontSize: fontScale(13), fontWeight: '600', color: '#111827', lineHeight: fontScale(20) },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(18) },
     modalCard: { width: '100%', maxWidth: scale(430), backgroundColor: '#FFFFFF', borderRadius: scale(16), paddingHorizontal: scale(18), paddingTop: scale(18), paddingBottom: scale(16) },

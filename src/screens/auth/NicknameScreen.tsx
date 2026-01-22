@@ -7,34 +7,70 @@ import {
     Pressable,
     Image,
     Platform,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
+import { setNickname } from '../../api/auth';
+import { saveAuthData } from '../../lib/storage';
 
 type Props = {
-    onConfirm: (nickname: string) => void;
+    email: string;
+    socialId: string;
+    onNicknameSet: (email: string, nickname: string) => void;
 };
 
-export default function NicknameScreen({ onConfirm }: Props) {
-    const [nickname, setNickname] = useState('');
+export default function NicknameScreen({ email, socialId, onNicknameSet }: Props) {
+    const [nickname, setNicknameValue] = useState('');
     const [errorText, setErrorText] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    // 🔧 임시: 백엔드 없이 테스트 (나중에 삭제)
+    const MOCK_MODE = true;
 
     const trimmed = nickname.trim();
-    const isValid = trimmed.length > 0;
-
-    const handleChange = (text: string) => {
-        setNickname(text);
-    };
+    const isValid = trimmed.length >= 2 && trimmed.length <= 10 && !errorText;
 
     const handleClear = () => {
-        setNickname('');
+        setNicknameValue('');
+        setErrorText('');
     };
 
-    const handleSubmit = () => {
-        if (!isValid) return;
-        onConfirm(trimmed);
+    const handleSubmit = async () => {
+        if (!isValid || loading) return;
+
+        try {
+            setLoading(true);
+
+            // 🔧 임시: Mock 데이터로 테스트
+            if (MOCK_MODE) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                onNicknameSet(email, trimmed);
+                return;
+            }
+
+            // 백엔드에 닉네임 설정 요청
+            const response = await setNickname(email, trimmed);
+
+            // 토큰 저장
+            await saveAuthData(response.token, response.email, response.nickname);
+
+            // 완료 콜백 호출
+            onNicknameSet(response.email, response.nickname);
+
+        } catch (error) {
+            console.error('닉네임 설정 오류:', error);
+            Alert.alert(
+                '오류',
+                error instanceof Error ? error.message : '닉네임 설정에 실패했습니다.'
+            );
+        } finally {
+            setLoading(false);
+        }
     };
+
     const handleChangeNickname = (text: string) => {
-        setNickname(text);
+        setNicknameValue(text);
 
         if (text.length === 0) {
             setErrorText('');
@@ -91,12 +127,16 @@ export default function NicknameScreen({ onConfirm }: Props) {
                     <Pressable
                         style={[
                             styles.button,
-                            !isValid && styles.buttonDisabled,
+                            (!isValid || loading) && styles.buttonDisabled,
                         ]}
                         onPress={handleSubmit}
-                        disabled={!isValid}
+                        disabled={!isValid || loading}
                     >
-                        <Text style={styles.buttonText}>확인</Text>
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.buttonText}>확인</Text>
+                        )}
                     </Pressable>
                 </View>
             </View>

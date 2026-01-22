@@ -162,7 +162,11 @@ export default function AlarmScreen({ onNavigate }: Props) {
 
                                 <View style={styles.cardRight}>
                                     <Text style={styles.cardTime}>{alarm.timeLabel}</Text>
-                                    <Text style={styles.cardArrow}>{'>'}</Text>
+                                    <Image
+                                        source={require('../../../assets/shift.png')}
+                                        style={styles.cardArrowImage}
+                                        resizeMode="contain"
+                                    />
                                 </View>
                             </Pressable>
                         ))}
@@ -270,9 +274,9 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         marginBottom: scale(8),
     },
-    cardArrow: {
-        fontSize: fontScale(18),
-        color: '#9CA3AF',
-        fontWeight: '700',
+    cardArrowImage: {
+        width: scale(18),
+        height: scale(18),
+        tintColor: '#9CA3AF',
     },
 });

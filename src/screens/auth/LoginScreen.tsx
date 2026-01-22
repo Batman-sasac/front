@@ -1,12 +1,66 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
+import { getOAuthUrl, loginWithOAuth } from '../../api/auth';
+import { saveAuthData } from '../../lib/storage';
+import OAuthWebView from '../../components/OAuthWebView';
 
 type Props = {
-  // ⬇️ 수정: 어떤 소셜인지 알려주도록 타입 변경
-  onSocialLogin: (provider: 'kakao' | 'naver') => void;
+  onLoginSuccess: (email: string, nickname: string) => void;
+  onNicknameRequired: (email: string, socialId: string) => void;
 };
 
-export default function LoginScreen({ onSocialLogin }: Props) {
+export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Props) {
+  const [loading, setLoading] = useState(false);
+  const [showOAuthWebView, setShowOAuthWebView] = useState(false);
+  const [oauthProvider, setOauthProvider] = useState<'kakao' | 'naver'>('kakao');
+
+  const handleSocialLogin = async (provider: 'kakao' | 'naver') => {
+    setOauthProvider(provider);
+    setShowOAuthWebView(true);
+  };
+
+  const handleOAuthCode = async (code: string) => {
+    try {
+      setLoading(true);
+
+      // 백엔드에 인가 코드 전송
+      const response = await loginWithOAuth(oauthProvider, code);
+      
+      console.log('OAuth 응답:', response);
+
+      if (response.status === 'nickname_required') {
+        // 닉네임 설정 필요
+        console.log('닉네임 설정 필요:', response.email, response.social_id);
+        onNicknameRequired(response.email, response.social_id!);
+      } else if (response.status === 'success') {
+        // 로그인 성공 - 토큰 저장
+        console.log('로그인 성공:', response.email, response.nickname);
+        await saveAuthData(response.token!, response.email, response.nickname!);
+        onLoginSuccess(response.email, response.nickname!);
+      } else {
+        console.log('알 수 없는 응답 상태:', response);
+        Alert.alert('로그인 실패', '알 수 없는 응답입니다.');
+      }
+    } catch (error) {
+      console.error(`${oauthProvider} 로그인 오류:`, error);
+      Alert.alert(
+        '로그인 실패',
+        error instanceof Error ? error.message : '로그인 중 오류가 발생했습니다.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#5E82FF" />
+        <Text style={styles.loadingText}>로그인 중...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Image
@@ -19,7 +73,7 @@ export default function LoginScreen({ onSocialLogin }: Props) {
         {/* 카카오 로그인 */}
         <Pressable
           style={[styles.button, styles.kakao]}
-          onPress={() => onSocialLogin('kakao')}   // ⬅️ 여기
+          onPress={() => handleSocialLogin('kakao')}
         >
           <Image
             source={require('../../../assets/kakao.png')}
@@ -32,7 +86,7 @@ export default function LoginScreen({ onSocialLogin }: Props) {
         {/* 네이버 로그인 */}
         <Pressable
           style={[styles.button, styles.naver]}
-          onPress={() => onSocialLogin('naver')}    // ⬅️ 그리고 여기
+          onPress={() => handleSocialLogin('naver')}
         >
           <Text style={styles.naverIcon}>N</Text>
           <Text style={[styles.buttonText, styles.naverText]}>
@@ -41,6 +95,14 @@ export default function LoginScreen({ onSocialLogin }: Props) {
         </Pressable>
       </View>
 
+      {/* OAuth WebView */}
+      <OAuthWebView
+        visible={showOAuthWebView}
+        provider={oauthProvider}
+        oauthUrl={getOAuthUrl(oauthProvider)}
+        onCode={handleOAuthCode}
+        onClose={() => setShowOAuthWebView(false)}
+      />
     </View>
   );
 }
@@ -104,6 +166,11 @@ const styles = StyleSheet.create({
     width: 160,     // 필요하면 조정 가능
     height: 70,
     marginBottom: 40,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#5E82FF',
   },
 
 });

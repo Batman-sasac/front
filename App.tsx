@@ -17,7 +17,9 @@ import TakePicture from './src/screens/input_data/TakePicture';
 import SelectPicture from './src/screens/input_data/SelectPicture';
 import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
-import { runOcr } from './src/api/ocr';
+import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
+import { runOcr, ScaffoldingPayload, saveTest, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
+import { getToken, getUserInfo, saveAuthData } from './src/lib/storage';
 
 type SocialProvider = 'kakao' | 'naver';
 type Step =
@@ -36,11 +38,14 @@ type Step =
   | 'takePicture'
   | 'selectPicture'
   | 'talkingStudy'
-  | 'scaffolding';
+  | 'scaffolding'
+  | 'brushup';
 
 export default function App() {
   const [step, setStep] = useState<Step>('splash');
   const [nickname, setNickname] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userSocialId, setUserSocialId] = useState('');
   const [typeResult, setTypeResult] = useState<ResultStats | null>(null);
   const [typeLabel, setTypeLabel] = useState(''); // 홈 화면용
   const [level, setLevel] = useState(1);
@@ -56,21 +61,72 @@ export default function App() {
     showBonus: false,
   });
   useEffect(() => {
+    // 앱 시작시 자동 로그인 체크
+    checkAutoLogin();
+  }, []);
+
+  const checkAutoLogin = async () => {
+    try {
+      const token = await getToken();
+      if (token) {
+        const userInfo = await getUserInfo();
+        if (userInfo.email && userInfo.nickname) {
+          setUserEmail(userInfo.email);
+          setNickname(userInfo.nickname);
+          // splash 끝나면 바로 홈으로
+          setTimeout(() => setStep('home'), 2000);
+          return;
+        }
+      }
+      // 토큰 없으면 목표 설정 화면으로
+      setTimeout(() => setStep('goal'), 2000);
+    } catch (error) {
+      console.error('자동 로그인 확인 오류:', error);
+      setTimeout(() => setStep('goal'), 2000);
+    }
+  };
+
+  useEffect(() => {
     if (step === 'home') {
       handleDailyCheckIn();   // 홈 들어오자마자 자동 출석
+
+      // 통계 데이터 로드
+      (async () => {
+        try {
+          const [weekly, monthly] = await Promise.all([
+            getWeeklyGrowth(),
+            getMonthlyStats(),
+          ]);
+          setWeeklyGrowth(weekly);
+          setMonthlyStats(monthly.compare);
+        } catch (e) {
+          console.error('통계 데이터 로드 실패:', e);
+        }
+      })();
     }
   }, [step]);
 
-  // 소셜 로그인 처리 함수 (백엔드 연동 자리)
-  const handleSocialLogin = async (provider: SocialProvider) => {
-    // TODO: 여기서 백엔드 로그인 API 호출 예정
-    // 예시:
-    // const res = await fetch('https://api.bat-app.com/auth/social', { ... });
-    // const data = await res.json();
-    // accessToken, refreshToken, isNewUser, nickname 등을 받아서 분기
+  // 로그인 성공 핸들러
+  const handleLoginSuccess = async (email: string, userNickname: string) => {
+    setUserEmail(email);
+    setNickname(userNickname);
+    
+    // 바로 홈 화면으로 이동
+    setStep('home');
+  };
 
-    // 지금은 기존처럼 "신규 유저 플로우"만 유지
+  // 닉네임 설정 필요 핸들러
+  const handleNicknameRequired = (email: string, socialId: string) => {
+    setUserEmail(email);
+    setUserSocialId(socialId);
     setStep('nickname');
+  };
+
+  // 닉네임 설정 완료 핸들러
+  const handleNicknameSet = (email: string, userNickname: string) => {
+    setUserEmail(email);
+    setNickname(userNickname);
+    setStep('goal');  // 신규 유저는 목표 설정으로
   };
 
   const getTodayKey = () => new Date().toISOString().slice(0, 10);
@@ -156,15 +212,14 @@ export default function App() {
   };
   //촬영 결과 임시로 App으로 이동
   const [capturedSources, setCapturedSources] = useState<ImageSourcePropType[]>([]);
-  type ScaffoldingPayload = {
-    title: string;
-    extractedText: string;
-    blanks: Array<{ id: number; word: string; meaningLong?: string }>;
-  };
 
   const [scaffoldingPayload, setScaffoldingPayload] = useState<ScaffoldingPayload | null>(null);
   const [scaffoldingLoading, setScaffoldingLoading] = useState(false);
   const [scaffoldingError, setScaffoldingError] = useState<string | null>(null);
+
+  // 홈 화면 통계 데이터
+  const [weeklyGrowth, setWeeklyGrowth] = useState<{ labels: string[]; data: number[] } | undefined>();
+  const [monthlyStats, setMonthlyStats] = useState<any>(undefined);
 
   function buildBlankWordsFromText(text: string, limit = 8) {
     // 1) 공백/문장부호 기준 분리
@@ -189,20 +244,22 @@ export default function App() {
   return (
     <View style={{ flex: 1 }}>
       {step === 'splash' && (
-        <Splash duration={1500} onDone={() => setStep('login')} />
+        <Splash duration={1500} onDone={() => { }} />
       )}
 
       {step === 'login' && (
-        <LoginScreen onSocialLogin={handleSocialLogin} />
+        <LoginScreen
+          onLoginSuccess={handleLoginSuccess}
+          onNicknameRequired={handleNicknameRequired}
+        />
       )}
 
 
       {step === 'nickname' && (
         <NicknameScreen
-          onConfirm={(name) => {
-            setNickname(name);
-            setStep('goal');
-          }}
+          email={userEmail}
+          socialId={userSocialId}
+          onNicknameSet={handleNicknameSet}
         />
       )}
 
@@ -255,6 +312,9 @@ export default function App() {
           onCloseBaseReward={handleCloseBaseReward}
           onCloseBonusReward={handleCloseBonusReward}
           weekAttendance={weekAttendance}
+          weeklyGrowth={weeklyGrowth}
+          monthlyStats={monthlyStats}
+          monthlyGoal={monthlyGoal}
           onNavigate={(screen) => setStep(screen)}
         />
       )}
@@ -284,7 +344,9 @@ export default function App() {
           level={level}
           totalStudyCount={105}   // 우선 더미 값
           continuousDays={100}    // 우선 더미 값
+          monthlyGoal={monthlyGoal}
           onNavigate={(screen) => setStep(screen)}
+          onMonthlyGoalChange={(goal) => setMonthlyGoal(goal)}
         />
       )}
 
@@ -305,10 +367,10 @@ export default function App() {
         <SelectPicture
           sources={capturedSources}
           onBack={() => setStep('takePicture')}
-          onStartLearning={async (finalSources) => {
+          onStartLearning={async (finalSources, isOcrNeeded) => {
             setCapturedSources(finalSources);
 
-            // 1) OCR 요청 (ocr_app.py는 file 1개만 받으므로 우선 첫 이미지 사용) :contentReference[oaicite:6]{index=6}
+            // 1) OCR 요청 (필요할 때만)
             const first = finalSources[0] as any;
             const uri = first?.uri as string | undefined;
 
@@ -323,16 +385,8 @@ export default function App() {
             setScaffoldingError(null);
 
             try {
-              const extractedText = await runOcr(uri);
-
-              // 2) 임시 blank_words 생성 (추후 백엔드 AI 선정으로 교체)
-              const words = buildBlankWordsFromText(extractedText, 8);
-
-              setScaffoldingPayload({
-                title: '대표 결정 방식', // 지금 백엔드에 subject_name 연동 전이므로 임시
-                extractedText,
-                blanks: words.map((w, i) => ({ id: i + 1, word: w })),
-              });
+              const payload = await runOcr(uri);
+              setScaffoldingPayload(payload);
             } catch (e: any) {
               setScaffoldingPayload(null);
               setScaffoldingError(e?.message ?? 'OCR 호출에 실패했습니다.');
@@ -340,10 +394,8 @@ export default function App() {
               setScaffoldingLoading(false);
             }
 
-            // 3) 기존 흐름 유지
             setStep('talkingStudy');
           }}
-
         />
       )}
       {step === 'talkingStudy' && (
@@ -370,13 +422,8 @@ export default function App() {
             setScaffoldingLoading(true);
             setScaffoldingError(null);
             try {
-              const extractedText = await runOcr(uri);
-              const words = buildBlankWordsFromText(extractedText, 8);
-              setScaffoldingPayload({
-                title: '대표 결정 방식',
-                extractedText,
-                blanks: words.map((w, i) => ({ id: i + 1, word: w })),
-              });
+              const payload = await runOcr(uri);
+              setScaffoldingPayload(payload);
             } catch (e: any) {
               setScaffoldingPayload(null);
               setScaffoldingError(e?.message ?? '재시도에 실패했습니다.');
@@ -384,8 +431,24 @@ export default function App() {
               setScaffoldingLoading(false);
             }
           }}
+          onSave={async (answers) => {
+            if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
+
+            await saveTest({
+              subject_name: scaffoldingPayload.title,
+              original: scaffoldingPayload.extractedText,
+              quiz: scaffoldingPayload.extractedText, // 임시: 원본과 동일하게 설정
+              answers: answers.filter((a) => a.trim() !== ''),
+            });
+          }}
         />
 
+      )}
+
+      {step === 'brushup' && (
+        <BrushUPScreen
+          onBack={() => setStep('home')}
+        />
       )}
 
 

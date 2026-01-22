@@ -9,9 +9,11 @@ import {
     Pressable,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
+import Sidebar from '../../components/Sidebar';
+import { confirmLogout } from '../../lib/auth';
 
 // 어떤 화면으로 이동할지
-type Screen = 'home' | 'league' | 'mypage';
+type Screen = 'home' | 'league' | 'mypage' | 'takePicture' | 'brushup';
 
 // 리그 티어 타입
 export type LeagueTier = 'iron' | 'bronze' | 'silver' | 'gold' | 'dia';
@@ -98,77 +100,11 @@ export default function LeagueScreen({
 
     return (
         <View style={styles.root}>
-            {/* 좌측 사이드바 */}
-            <View style={styles.sidebar}>
-
-                <View style={styles.menuGroup}>
-                    {/* 홈 버튼 */}
-                    <Pressable
-                        style={styles.menuButton}
-                        onPress={() => onNavigate('home')}
-                    >
-                        <Image
-                            source={require('../../../assets/homebutton/home.png')}
-                            style={styles.menuIcon}
-                            resizeMode="contain"
-                        />
-                        <Text style={styles.menuText}>홈</Text>
-                    </Pressable>
-                    {/* 자료입력 버튼 */}
-                    <Pressable style={styles.menuButton} onPress={() => { }}>
-                        <Image
-                            source={require('../../../assets/homebutton/data.png')}
-                            style={styles.menuIcon}
-                            resizeMode="contain"
-                        />
-                        <Text style={styles.menuText}>자료 입력</Text>
-                    </Pressable>
-                    {/* 복습 버튼 */}
-                    <Pressable style={styles.menuButton} onPress={() => { }}>
-                        <Image
-                            source={require('../../../assets/homebutton/review.png')}
-                            style={styles.menuIcon}
-                            resizeMode="contain"
-                        />
-                        <Text style={styles.menuText}>복습</Text>
-                    </Pressable>
-                    {/* 리그 버튼 */}
-                    <Pressable
-                        style={styles.menuButton}
-                        onPress={() => onNavigate('league')}
-                    >
-                        <Image
-                            source={require('../../../assets/homebutton/league.png')}
-                            style={[styles.menuIcon, styles.menuIconActive]}
-                            resizeMode="contain"
-                        />
-                        <Text style={[styles.menuText, styles.menuTextActive]}>
-                            리그
-                        </Text>
-                    </Pressable>
-                    {/* 마이페이지 버튼 */}
-                    <Pressable
-                        style={styles.menuButton}
-                        onPress={() => onNavigate('mypage')}
-                    >
-                        <Image
-                            source={require('../../../assets/homebutton/my.png')}
-                            style={styles.menuIcon}
-                            resizeMode="contain"
-                        />
-                        <Text style={styles.menuText}>마이</Text>
-                    </Pressable>
-                    {/* 로그아웃 버튼 */}
-                    <Pressable style={styles.menuButton} onPress={() => { }}>
-                        <Image
-                            source={require('../../../assets/homebutton/logout.png')}
-                            style={styles.menuIcon}
-                            resizeMode="contain"
-                        />
-                        <Text style={styles.menuText}>로그아웃</Text>
-                    </Pressable>
-                </View>
-            </View>
+            <Sidebar
+                activeScreen="league"
+                onNavigate={onNavigate}
+                onLogout={() => confirmLogout(() => onNavigate('home'))}
+            />
 
             {/* 우측 리그 메인 영역 */}
             <ScrollView style={styles.main} contentContainerStyle={styles.mainContent}>
@@ -264,47 +200,6 @@ const styles = StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         backgroundColor: BG,
-    },
-
-    /* 사이드바 */
-    sidebar: {
-        width: scale(80),
-        backgroundColor: '#FFFFFF',       // 사이드바는 흰색
-        paddingTop: scale(32),
-        alignItems: 'center',
-        borderRightWidth: 1,
-        borderRightColor: '#E5E7EB',
-    },
-    menuTitle: {
-        fontSize: fontScale(18),
-        fontWeight: '800',
-        marginBottom: scale(24),
-        color: '#4B5563',
-    },
-    menuGroup: {
-        gap: scale(16),
-        alignItems: 'center',
-    },
-    menuButton: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: scale(4),
-    },
-    menuIcon: {
-        width: scale(24),
-        height: scale(24),
-        tintColor: '#9CA3AF',
-    },
-    menuText: {
-        fontSize: fontScale(12),
-        color: '#9CA3AF',
-    },
-    menuTextActive: {
-        color: '#5E82FF',
-        fontWeight: '700',
-    },
-    menuIconActive: {
-        tintColor: '#5E82FF',      // 선택된 메뉴 아이콘 파란색
     },
 
     /* 오른쪽 메인 영역 */
