@@ -15,8 +15,7 @@ export type OcrResponse =
     | { status: 'success'; original_text: string; keywords: string[] }
     | { status: 'error'; message: string };
 
-// const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
-const API_BASE = 'https://bat-sasac-api.loca.lt';
+ const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
 export async function runOcr(fileUri: string): Promise<ScaffoldingPayload> {
     console.log('🔵 OCR 요청 시작 - fileUri:', fileUri);
