@@ -145,6 +145,20 @@ export default function TakePicture({ onBack, onDone }: Props) {
                     ]}
                     onPress={() => {
                         onDone([
+                            require('../../../assets/ocr-test.png'),
+                        ]);
+                    }}
+                >
+                    <Text style={styles.primaryBtnText}>🧪 OCR 테스트 (스크린샷)</Text>
+                </Pressable>
+
+                <Pressable
+                    style={[
+                        styles.primaryBtn,
+                        { marginTop: scale(10), backgroundColor: '#3B82F6' },
+                    ]}
+                    onPress={() => {
+                        onDone([
                             require('../../../assets/dummy/text1.jpg'),
                             require('../../../assets/dummy/text2.jpg'),
                             require('../../../assets/dummy/text3.jpg'),
@@ -152,7 +166,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                         ]);
                     }}
                 >
-                    <Text style={styles.primaryBtnText}>(임시) SelectPicture 테스트</Text>
+                    <Text style={styles.primaryBtnText}>(임시) 더미 이미지 테스트</Text>
                 </Pressable>
 
                 <Pressable

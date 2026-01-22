@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 
 type Props = {
@@ -13,8 +13,12 @@ export default function TalkingStudyScreen({ onBack, onDone, onSkip }: Props) {
 
     return (
         <View style={styles.root}>
-            <Pressable style={styles.backBtn} onPress={onBack} hitSlop={10}>
-                <Text style={styles.backText}>{'<'}</Text>
+            <Pressable style={styles.backBtn} onPress={onBack} hitSlop={12}>
+                <Image
+                    source={require('../../../assets/shift.png')}
+                    style={styles.backIcon}
+                    resizeMode="contain"
+                />
             </Pressable>
 
             <View style={styles.center}>
@@ -53,8 +57,18 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         alignItems: 'center',
         justifyContent: 'center',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
+        zIndex: 10,
     },
-    backText: { fontSize: fontScale(18), fontWeight: '900', color: '#111827' },
+    backIcon: {
+        width: scale(20),
+        height: scale(20),
+        transform: [{ rotate: '180deg' }],
+    },
 
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(16) },
 

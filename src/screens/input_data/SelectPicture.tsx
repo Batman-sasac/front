@@ -15,7 +15,7 @@ import { scale, fontScale } from '../../lib/layout';
 type Props = {
     sources: ImageSourcePropType[];
     onBack: () => void;
-    onStartLearning: (finalSources: ImageSourcePropType[]) => void;
+    onStartLearning: (finalSources: ImageSourcePropType[], ocrLoading?: boolean) => void;
 };
 
 const BG = '#F6F7FB';
@@ -43,6 +43,7 @@ function getDisplayRect(cw: number, ch: number, iw: number, ih: number): Display
 
 export default function SelectPicture({ sources, onBack, onStartLearning }: Props) {
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const [rotation, setRotation] = useState(0);
 
     const selectedSource = useMemo(() => {
         if (!sources || sources.length === 0) return null;
@@ -67,6 +68,14 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const displayRef = useRef<DisplayRect>(displayRect);
     const containerRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
     const imageRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+
+    // 웹 마우스 이벤트 처리
+    const dragStateRef = useRef<{ type: 'move' | 'tl' | 'tr' | 'bl' | 'br' | null; startX: number; startY: number; startCrop: CropRect }>({
+        type: null,
+        startX: 0,
+        startY: 0,
+        startCrop: { x: 0, y: 0, w: 0, h: 0 },
+    });
 
     useEffect(() => {
         cropRef.current = crop;
@@ -156,22 +165,25 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         console.log('SelectedSource:', selectedSource);
         console.log('CropPixelRect:', pixelCrop);
 
-        // 여기에서 AI/백엔드로 보낼 데이터:
-        // 1) selectedSource(원본 이미지)
-        // 2) pixelCrop(px, py, pw, ph)
-        // 또는 프론트에서 crop 이미지 생성 후 그 결과 이미지만 전송
+        // 실제 이미지 파일이면 OCR 호출, 임시 더미 이미지면 스킵
+        const anySrc: any = selectedSource;
+        const uri = typeof anySrc?.uri === 'string' ? (anySrc.uri as string) : null;
 
-        onStartLearning(sources);
+        if (uri && uri.startsWith('file://')) {
+            // 실제 이미지 -> OCR 호출
+            onStartLearning(sources, true);
+        } else {
+            // 더미 이미지 (임시 테스트용)
+            onStartLearning(sources, false);
+        }
     };
 
     const handleRotateLeft = () => {
-        // 다음 단계: rotation state를 만들고 프리뷰만 회전시키거나,
-        // 학습 시작 시 rotation 값을 함께 전달하는 방식으로 연결
+        setRotation((prev) => prev - 90);
     };
 
     const handleRotateRight = () => {
-        // 다음 단계: rotation state를 만들고 프리뷰만 회전시키거나,
-        // 학습 시작 시 rotation 값을 함께 전달하는 방식으로 연결
+        setRotation((prev) => prev + 90);
     };
 
     const createMoveResponder = (): PanResponderInstance => {
@@ -272,6 +284,104 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const blResponder = useRef<PanResponderInstance>(createResizeResponder('bl')).current;
     const brResponder = useRef<PanResponderInstance>(createResizeResponder('br')).current;
 
+    // 웹 마우스 이벤트 핸들러
+    const handleMouseDown = (type: 'move' | 'tl' | 'tr' | 'bl' | 'br') => (e: any) => {
+        dragStateRef.current = {
+            type,
+            startX: e.clientX || e.pageX || 0,
+            startY: e.clientY || e.pageY || 0,
+            startCrop: { ...cropRef.current },
+        };
+    };
+
+    const handleMouseMove = (e: any) => {
+        if (dragStateRef.current.type === null) return;
+
+        const moveX = (e.clientX || e.pageX || 0) - dragStateRef.current.startX;
+        const moveY = (e.clientY || e.pageY || 0) - dragStateRef.current.startY;
+        const start = dragStateRef.current.startCrop;
+        const d = displayRef.current;
+        const minW = MIN_BOX;
+        const minH = MIN_BOX;
+
+        let next: CropRect;
+
+        if (dragStateRef.current.type === 'move') {
+            const minX = d.dx;
+            const minY = d.dy;
+            const maxX = d.dx + d.dw - start.w;
+            const maxY = d.dy + d.dh - start.h;
+
+            next = {
+                x: clamp(start.x + moveX, minX, maxX),
+                y: clamp(start.y + moveY, minY, maxY),
+                w: start.w,
+                h: start.h,
+            };
+        } else if (dragStateRef.current.type === 'br') {
+            const maxW = d.dx + d.dw - start.x;
+            const maxH = d.dy + d.dh - start.y;
+            next = {
+                x: start.x,
+                y: start.y,
+                w: clamp(start.w + moveX, minW, maxW),
+                h: clamp(start.h + moveY, minH, maxH),
+            };
+        } else if (dragStateRef.current.type === 'tr') {
+            const maxW = d.dx + d.dw - start.x;
+            const minY = d.dy;
+            const maxH = start.y + start.h - minY;
+
+            next = {
+                x: start.x,
+                y: clamp(start.y + moveY, minY, start.y + start.h - minH),
+                w: clamp(start.w + moveX, minW, maxW),
+                h: clamp(start.h - moveY, minH, maxH),
+            };
+        } else if (dragStateRef.current.type === 'bl') {
+            const minX = d.dx;
+            const maxW = start.x + start.w - minX;
+            const maxH = d.dy + d.dh - start.y;
+
+            next = {
+                x: clamp(start.x + moveX, minX, start.x + start.w - minW),
+                y: start.y,
+                w: clamp(start.w - moveX, minW, maxW),
+                h: clamp(start.h + moveY, minH, maxH),
+            };
+        } else {
+            // tl
+            const minX = d.dx;
+            const minY = d.dy;
+            const maxW = start.x + start.w - minX;
+            const maxH = start.y + start.h - minY;
+
+            next = {
+                x: clamp(start.x + moveX, minX, start.x + start.w - minW),
+                y: clamp(start.y + moveY, minY, start.y + start.h - minH),
+                w: clamp(start.w - moveX, minW, maxW),
+                h: clamp(start.h - moveY, minH, maxH),
+            };
+        }
+
+        setCrop(next);
+    };
+
+    const handleMouseUp = () => {
+        dragStateRef.current.type = null;
+    };
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const overlayStyles = useMemo(() => {
         const cw = containerRef.current.w;
         const ch = containerRef.current.h;
@@ -317,32 +427,32 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                                 setContainerH(height);
                             }}
                         >
-                            <Image source={selectedSource} style={styles.previewImage} resizeMode="contain" />
+                            <Image source={selectedSource} style={[styles.previewImage, { transform: [{ rotate: `${rotation}deg` }] }]} resizeMode="contain" />
 
-                            <View style={styles.cropArea} pointerEvents="box-none">
-                                <View style={[styles.maskTop, overlayStyles.top]} />
-                                <View style={[styles.maskBottom, overlayStyles.bottom]} />
-                                <View style={[styles.maskLeft, overlayStyles.left]} />
-                                <View style={[styles.maskRight, overlayStyles.right]} />
+                            <View style={styles.cropArea}>
+                                <View style={[styles.maskTop, overlayStyles.top]} pointerEvents="none" />
+                                <View style={[styles.maskBottom, overlayStyles.bottom]} pointerEvents="none" />
+                                <View style={[styles.maskLeft, overlayStyles.left]} pointerEvents="none" />
+                                <View style={[styles.maskRight, overlayStyles.right]} pointerEvents="none" />
 
-                                <View style={[styles.cropFrame, overlayStyles.frame]} {...moveResponder.panHandlers}>
-                                    <View style={styles.cropCornerTL} />
-                                    <View style={styles.cropCornerTR} />
-                                    <View style={styles.cropCornerBL} />
-                                    <View style={styles.cropCornerBR} />
+                                <View style={[styles.cropFrame, overlayStyles.frame]} {...moveResponder.panHandlers} pointerEvents="box-only">
+                                    <View style={styles.cropCornerTL} pointerEvents="none" />
+                                    <View style={styles.cropCornerTR} pointerEvents="none" />
+                                    <View style={styles.cropCornerBL} pointerEvents="none" />
+                                    <View style={styles.cropCornerBR} pointerEvents="none" />
 
-                                    <View style={[styles.handle, styles.handleTL]} {...tlResponder.panHandlers}>
+                                    <Pressable style={[styles.handle, styles.handleTL]} {...tlResponder.panHandlers} onPressIn={handleMouseDown('tl')}>
                                         <View style={styles.handleDot} />
-                                    </View>
-                                    <View style={[styles.handle, styles.handleTR]} {...trResponder.panHandlers}>
+                                    </Pressable>
+                                    <Pressable style={[styles.handle, styles.handleTR]} {...trResponder.panHandlers} onPressIn={handleMouseDown('tr')}>
                                         <View style={styles.handleDot} />
-                                    </View>
-                                    <View style={[styles.handle, styles.handleBL]} {...blResponder.panHandlers}>
+                                    </Pressable>
+                                    <Pressable style={[styles.handle, styles.handleBL]} {...blResponder.panHandlers} onPressIn={handleMouseDown('bl')}>
                                         <View style={styles.handleDot} />
-                                    </View>
-                                    <View style={[styles.handle, styles.handleBR]} {...brResponder.panHandlers}>
+                                    </Pressable>
+                                    <Pressable style={[styles.handle, styles.handleBR]} {...brResponder.panHandlers} onPressIn={handleMouseDown('br')}>
                                         <View style={styles.handleDot} />
-                                    </View>
+                                    </Pressable>
                                 </View>
                             </View>
                         </View>
@@ -353,8 +463,9 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                     )}
                 </View>
 
+                {/* 회전 버튼들 - 사진 밖에 배치 */}
                 <View style={styles.rotateRow}>
-                    <Pressable style={styles.rotateBtn} onPress={handleRotateLeft} hitSlop={10}>
+                    <Pressable style={styles.rotateBtnLeft} onPress={handleRotateLeft} hitSlop={10}>
                         <Image
                             source={require('../../../assets/turn-icon.png')}
                             style={styles.rotateIcon}
@@ -362,7 +473,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                         />
                     </Pressable>
 
-                    <Pressable style={styles.rotateBtn} onPress={handleRotateRight} hitSlop={10}>
+                    <Pressable style={styles.rotateBtnRight} onPress={handleRotateRight} hitSlop={10}>
                         <Image
                             source={require('../../../assets/turn-icon.png')}
                             style={[styles.rotateIcon, styles.rotateRight]}
@@ -398,13 +509,11 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                 onPress={handleStart}
                 disabled={!sources || sources.length === 0}
             >
-                <View style={styles.fabCircle}>
-                    <View style={styles.checkWrap}>
-                        <View style={styles.checkShort} />
-                        <View style={styles.checkLong} />
-                    </View>
-                </View>
-                <Text style={styles.fabText}>학습 시작</Text>
+                <Image
+                    source={require('../../../assets/study/start-study-button.png')}
+                    style={styles.fabImage}
+                    resizeMode="contain"
+                />
             </Pressable>
         </View>
     );
@@ -442,24 +551,35 @@ const styles = StyleSheet.create({
     centerWrap: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: 'space-between',
         paddingHorizontal: scale(16),
+        paddingTop: scale(60),
+        paddingBottom: scale(24),
     },
 
     guide: {
         textAlign: 'center',
-        fontSize: fontScale(20),
-        fontWeight: '900',
+        fontSize: fontScale(18),
+        fontWeight: '800',
         color: '#111827',
-        marginBottom: scale(18),
+        marginBottom: scale(24),
+        lineHeight: fontScale(26),
     },
 
     previewWrap: {
         width: '100%',
-        maxWidth: scale(520),
-        height: scale(360),
+        maxWidth: scale(550),
+        height: scale(380),
         alignItems: 'center',
         justifyContent: 'center',
+        borderRadius: scale(12),
+        overflow: 'hidden',
+        backgroundColor: '#FFFFFF',
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
     },
     previewInner: {
         width: '100%',
@@ -567,130 +687,109 @@ const styles = StyleSheet.create({
 
     handle: {
         position: 'absolute',
-        width: 34,
-        height: 34,
-        borderRadius: 17,
+        width: 24,
+        height: 24,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'transparent',
+        opacity: 0,
     },
     handleDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: 'rgba(255,255,255,0.95)',
+        width: 12,
+        height: 12,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#FFFFFF',
     },
-    handleTL: { left: -17, top: -17 },
-    handleTR: { right: -17, top: -17 },
-    handleBL: { left: -17, bottom: -17 },
-    handleBR: { right: -17, bottom: -17 },
+    handleTL: { left: -12, top: -12 },
+    handleTR: { right: -12, top: -12 },
+    handleBL: { left: -12, bottom: -12 },
+    handleBR: { right: -12, bottom: -12 },
 
     rotateRow: {
         width: '100%',
-        maxWidth: scale(520),
+        maxWidth: scale(550),
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: scale(14),
-        marginBottom: scale(6),
-        paddingHorizontal: scale(48),
+        paddingHorizontal: scale(16),
+        marginTop: scale(12),
+        marginBottom: scale(12),
     },
-    rotateBtn: {
+    rotateBtnLeft: {
         width: scale(48),
-        height: scale(40),
+        height: scale(48),
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    rotateBtnRight: {
+        width: scale(48),
+        height: scale(48),
         alignItems: 'center',
         justifyContent: 'center',
     },
     rotateIcon: {
         width: scale(28),
         height: scale(28),
+        tintColor: '#1F2937',
     },
     rotateRight: {
         transform: [{ scaleX: -1 }],
     },
 
     recentWrap: {
-        marginTop: scale(10),
-        height: scale(78),
+        width: '100%',
+        maxWidth: scale(550),
+        height: scale(90),
         alignItems: 'center',
         justifyContent: 'center',
+        marginBottom: scale(8),
     },
     recentRow: {
         alignItems: 'center',
         justifyContent: 'center',
-        gap: scale(12),
-        paddingHorizontal: scale(8),
+        gap: scale(16),
+        paddingHorizontal: scale(16),
     },
     thumbBtn: {
-        borderRadius: scale(12),
-        borderWidth: 2,
-        borderColor: 'transparent',
+        borderRadius: scale(14),
+        borderWidth: 3,
+        borderColor: '#E5E7EB',
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
     },
     thumbBtnActive: {
         borderColor: '#5E82FF',
+        shadowColor: '#5E82FF',
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
     },
     thumb: {
-        width: scale(64),
-        height: scale(64),
-        borderRadius: scale(10),
+        width: scale(70),
+        height: scale(70),
+        borderRadius: scale(11),
     },
 
     fab: {
         position: 'absolute',
-        right: scale(24),
-        bottom: scale(24),
-        width: scale(120),
-        height: scale(120),
-        borderRadius: scale(24),
-        backgroundColor: '#5E82FF',
-        alignItems: 'center',
-        justifyContent: 'center',
+        right: scale(28),
+        bottom: scale(28),
+        width: scale(128),
+        height: scale(128),
+        borderRadius: 0,
         zIndex: 10,
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOpacity: 0.12,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 6 },
+        elevation: 5,
+        shadowColor: '#5E82FF',
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
     },
-    fabCircle: {
-        width: scale(64),
-        height: scale(64),
-        borderRadius: scale(32),
-        borderWidth: 4,
-        borderColor: '#FFFFFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: scale(10),
-    },
-
-    checkWrap: {
-        width: scale(34),
-        height: scale(24),
-        position: 'relative',
-        transform: [{ rotate: '-45deg' }],
-    },
-    checkShort: {
-        position: 'absolute',
-        left: scale(6),
-        top: scale(8),
-        width: scale(4),
-        height: scale(10),
-        borderRadius: scale(2),
-        backgroundColor: '#FFFFFF',
-    },
-    checkLong: {
-        position: 'absolute',
-        left: scale(10),
-        top: scale(14),
-        width: scale(22),
-        height: scale(4),
-        borderRadius: scale(2),
-        backgroundColor: '#FFFFFF',
-    },
-
-    fabText: {
-        color: '#FFFFFF',
-        fontSize: fontScale(14),
-        fontWeight: '900',
+    fabImage: {
+        width: '100%',
+        height: '100%',
     },
 });
