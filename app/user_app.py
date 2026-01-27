@@ -149,6 +149,23 @@ async def kakao_login_mobile(code: str = None, request: Request = None):
         code = form_data.get("code")
     
     if not code:
+        # GET 요청이고 웹 브라우저에서 온 경우 (Accept: text/html)
+        if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="UTF-8"><title>로그인 중...</title></head>
+                <body>
+                    <p>로그인 처리 중 오류가 발생했습니다.</p>
+                    <script>
+                        if (window.opener) {
+                            window.opener.postMessage({type: 'oauth-error', error: '인가 코드가 없습니다'}, '*');
+                            window.close();
+                        }
+                    </script>
+                </body>
+                </html>
+            """)
         return JSONResponse(
             status_code=400,
             content={"error": "인가 코드가 없습니다"}
@@ -172,6 +189,23 @@ async def kakao_login_mobile(code: str = None, request: Request = None):
     access_token = token_res.get("access_token")
 
     if not access_token:
+        # GET 요청이고 웹 브라우저에서 온 경우
+        if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="UTF-8"><title>로그인 중...</title></head>
+                <body>
+                    <p>토큰 발급에 실패했습니다.</p>
+                    <script>
+                        if (window.opener) {
+                            window.opener.postMessage({type: 'oauth-error', error: '토큰 발급 실패'}, '*');
+                            window.close();
+                        }
+                    </script>
+                </body>
+                </html>
+            """)
         return JSONResponse(
             status_code=400,
             content={"error": "토큰 발급 실패", "details": token_res}
@@ -198,49 +232,118 @@ async def kakao_login_mobile(code: str = None, request: Request = None):
         user_row = cur.fetchone()
 
         if user_row is None:
-            # 신규 유저 - 자동으로 임시 닉네임 생성
-            temp_nickname = f"사용자{social_id[-6:]}"
+            # 신규 유저 - 닉네임 없이 등록
             cur.execute("""
                 INSERT INTO users (social_id, email, nickname) 
-                VALUES (?, ?, ?)
-            """, (social_id, user_email, temp_nickname))
+                VALUES (?, ?, NULL)
+            """, (social_id, user_email))
             conn.commit()
             
-            # 바로 로그인 성공 처리
-            token = create_jwt_token(user_email, social_id)
-            return JSONResponse(content={
-                "status": "success",
-                "token": token,
+            # 닉네임 설정 필요
+            result = {
+                "status": "nickname_required",
                 "email": user_email,
-                "nickname": temp_nickname,
-                "message": "로그인 성공"
-            })
+                "social_id": social_id,
+                "message": "닉네임 설정이 필요합니다"
+            }
+            
+            # GET 요청이고 웹 브라우저에서 온 경우 HTML 반환
+            if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+                import json
+                result_json = json.dumps(result)
+                return HTMLResponse(f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head><meta charset="UTF-8"><title>닉네임 설정 필요</title></head>
+                    <body>
+                        <p>로그인 중...</p>
+                        <script>
+                            const result = {result_json};
+                            if (window.opener) {{
+                                window.opener.postMessage({{
+                                    type: 'oauth-success',
+                                    data: result
+                                }}, '*');
+                                window.close();
+                            }}
+                        </script>
+                    </body>
+                    </html>
+                """)
+            
+            return JSONResponse(content=result)
 
         elif not user_row[0]:
-            # 닉네임이 NULL인 경우도 자동 생성
-            temp_nickname = f"사용자{social_id[-6:]}"
-            cur.execute("UPDATE users SET nickname = ? WHERE social_id = ?", (temp_nickname, social_id))
-            conn.commit()
-            
-            token = create_jwt_token(user_email, social_id)
-            return JSONResponse(content={
-                "status": "success",
-                "token": token,
+            # 닉네임이 NULL인 경우 - 닉네임 설정 필요
+            result = {
+                "status": "nickname_required",
                 "email": user_email,
-                "nickname": temp_nickname,
-                "message": "로그인 성공"
-            })
+                "social_id": social_id,
+                "message": "닉네임 설정이 필요합니다"
+            }
+            
+            # GET 요청이고 웹 브라우저에서 온 경우 HTML 반환
+            if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+                import json
+                result_json = json.dumps(result)
+                return HTMLResponse(f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head><meta charset="UTF-8"><title>닉네임 설정 필요</title></head>
+                    <body>
+                        <p>로그인 중...</p>
+                        <script>
+                            const result = {result_json};
+                            if (window.opener) {{
+                                window.opener.postMessage({{
+                                    type: 'oauth-success',
+                                    data: result
+                                }}, '*');
+                                window.close();
+                            }}
+                        </script>
+                    </body>
+                    </html>
+                """)
+            
+            return JSONResponse(content=result)
 
         else:
             # 정상 유저 - JWT 토큰 발급
             token = create_jwt_token(user_email, social_id)
-            return JSONResponse(content={
+            result = {
                 "status": "success",
                 "token": token,
                 "email": user_email,
                 "nickname": user_row[0],
                 "message": "로그인 성공"
-            })
+            }
+            
+            # GET 요청이고 웹 브라우저에서 온 경우 HTML 반환
+            if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+                import json
+                result_json = json.dumps(result)
+                return HTMLResponse(f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head><meta charset="UTF-8"><title>로그인 성공</title></head>
+                    <body>
+                        <p>로그인 중...</p>
+                        <script>
+                            const result = {result_json};
+                            if (window.opener) {{
+                                window.opener.postMessage({{
+                                    type: 'oauth-success',
+                                    data: result
+                                }}, '*');
+                                window.close();
+                            }}
+                        </script>
+                    </body>
+                    </html>
+                """)
+            
+            return JSONResponse(content=result)
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -305,37 +408,28 @@ async def naver_login_mobile(code: str = None, request: Request = None):
         user_row = cur.fetchone()
 
         if user_row is None:
-            # 신규 유저 - 자동으로 임시 닉네임 생성
-            temp_nickname = f"사용자{social_id[-6:]}"
+            # 신규 유저 - 닉네임 없이 등록
             cur.execute("""
                 INSERT INTO users (social_id, email, nickname) 
-                VALUES (?, ?, ?)
-            """, (social_id, user_email, temp_nickname))
+                VALUES (?, ?, NULL)
+            """, (social_id, user_email))
             conn.commit()
             
-            # 바로 로그인 성공 처리
-            token = create_jwt_token(user_email, social_id)
+            # 닉네임 설정 필요
             return JSONResponse(content={
-                "status": "success",
-                "token": token,
+                "status": "nickname_required",
                 "email": user_email,
-                "nickname": temp_nickname,
-                "message": "로그인 성공"
+                "social_id": social_id,
+                "message": "닉네임 설정이 필요합니다"
             })
 
         elif not user_row[0]:
-            # 닉네임이 NULL인 경우도 자동 생성
-            temp_nickname = f"사용자{social_id[-6:]}"
-            cur.execute("UPDATE users SET nickname = ? WHERE social_id = ?", (temp_nickname, social_id))
-            conn.commit()
-            
-            token = create_jwt_token(user_email, social_id)
+            # 닉네임이 NULL인 경우 - 닉네임 설정 필요
             return JSONResponse(content={
-                "status": "success",
-                "token": token,
+                "status": "nickname_required",
                 "email": user_email,
-                "nickname": temp_nickname,
-                "message": "로그인 성공"
+                "social_id": social_id,
+                "message": "닉네임 설정이 필요합니다"
             })
 
         else:
@@ -355,7 +449,7 @@ async def naver_login_mobile(code: str = None, request: Request = None):
         conn.close()
 
 
-@app.post("/set-nickname-mobile")
+@app.post("/auth/set-nickname-mobile")
 async def set_nickname_mobile(email: str = Form(...), nickname: str = Form(...)):
     """모바일 앱에서 닉네임 설정 후 JWT 토큰 반환"""
     conn = get_db()
@@ -407,13 +501,14 @@ async def verify_token(token: str = Form(...)):
         return JSONResponse(status_code=401, content={"error": "유효하지 않은 토큰입니다"})
 
 
-@app.get("/user-info")
+@app.get("/auth/user-info")
 async def get_user_info(token: str):
     """토큰으로 사용자 정보 조회 (계정 연결 상태 포함)"""
     try:
         secret_key = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
         payload = jwt.decode(token, secret_key, algorithms=["HS256"])
-        email = payload.get("email")
+        user_email = payload.get("email")
+        user_social_id = payload.get("social_id")
         
         conn = get_db()
         cur = conn.cursor()
@@ -421,18 +516,29 @@ async def get_user_info(token: str):
             cur.execute("""
                 SELECT email, nickname, kakao_id, naver_id 
                 FROM users WHERE email = ?
-            """, (email,))
+            """, (user_email,))
             user_row = cur.fetchone()
             
             if user_row:
+                # 현재 로그인한 계정 확인 (email 패턴 기준)
+                kakao_email = None
+                naver_email = None
+                
+                # 이메일에 kakao가 포함되어 있으면 카카오 계정
+                if user_email and 'kakao' in user_email:
+                    kakao_email = user_email
+                # 이메일에 naver가 포함되어 있으면 네이버 계정
+                elif user_email and 'naver' in user_email:
+                    naver_email = user_email
+                
                 return JSONResponse(content={
                     "status": "success",
                     "email": user_row[0],
                     "nickname": user_row[1],
-                    "kakao_connected": user_row[2] is not None,
-                    "naver_connected": user_row[3] is not None,
-                    "kakao_email": user_row[2] if user_row[2] else None,
-                    "naver_email": user_row[3] if user_row[3] else None
+                    "kakao_connected": kakao_email is not None or user_row[2] is not None,
+                    "naver_connected": naver_email is not None or user_row[3] is not None,
+                    "kakao_email": kakao_email or user_row[2],
+                    "naver_email": naver_email or user_row[3]
                 })
             else:
                 return JSONResponse(status_code=404, content={"error": "사용자를 찾을 수 없습니다"})

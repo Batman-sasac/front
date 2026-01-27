@@ -12,7 +12,7 @@ app = APIRouter(tags=["OCR"])
 
 # GPT 서비스 초기화
 API_KEY = os.getenv("OPENAI_API_KEY")
-clova_service = CLOVAOCRService(API_KEY)
+clova_service = CLOVAOCRService(API_KEY) if API_KEY else None
 
 
 # JSON 요청을 위한 모델
@@ -26,6 +26,9 @@ class QuizSaveRequest(BaseModel):
 @app.post("/ocr")
 async def run_ocr_endpoint(file: UploadFile = File(...)):
     try:
+        if not clova_service:
+            return {"status": "error", "message": "OCR 서비스가 설정되지 않았습니다. OPENAI_API_KEY를 .env 파일에 설정해주세요."}
+        
         file_bytes = await file.read()
 
         # 1. 네이버 OCR로 텍스트 추출

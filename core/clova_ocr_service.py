@@ -11,9 +11,13 @@ from pdf2image import convert_from_bytes
 class CLOVAOCRService:
     def __init__(self, api_key):
         self.api_key = api_key
-        # OpenAI 클라이언트 초기화
-        self.gpt_client = OpenAI(api_key=api_key) 
-        self.model = "gpt-4o" 
+        # OpenAI 클라이언트 초기화 (api_key가 있을 때만)
+        if api_key:
+            self.gpt_client = OpenAI(api_key=api_key) 
+            self.model = "gpt-4o" 
+        else:
+            self.gpt_client = None
+            self.model = None
         
         # 네이버 클로바 설정 (환경변수)
         self.clova_url = os.getenv("CLOVA_OCR_URL")
