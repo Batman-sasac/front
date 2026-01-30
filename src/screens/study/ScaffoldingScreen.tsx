@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -12,11 +12,16 @@ import {
     Platform,
     Alert,
     Modal,
+    ActivityIndicator,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { saveTest } from '../../api/ocr';
+import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type Step = '1-1' | '1-2' | '1-3';
+const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl || 'http://localhost:8000';
+
+type Step = '1-1' | '1-2' | '1-3' | '2-1' | '2-2' | '2-3' | '3-1' | '3-2' | '3-3';
 type GradeState = 'idle' | 'correct' | 'wrong';
 
 export type BlankItem = {
@@ -41,6 +46,8 @@ type Props = {
     error: string | null;
     onRetry: () => void;
     onSave?: (answers: string[]) => Promise<void>;
+    initialRound?: Step; // 초기 라운드 설정 (복습용)
+    reviewQuizId?: number | null; // 복습할 quiz ID
 };
 
 const BG = '#F6F7FB';
@@ -54,16 +61,26 @@ const WRONG_BG = '#FF9CAD';
 
 export default function ScaffoldingScreen({
     onBack,
+    sources,
+    selectedIndex,
     payload,
     loading,
     error,
     onRetry,
     onSave,
+    initialRound = '1-1', // 기본값은 1라운드
+    reviewQuizId = null, // 복습 quiz ID
 }: Props) {
+    const [step, setStep] = useState<Step>(initialRound);
+
+    // 복습 모드는 별도 로드 없이 initialRound만 사용
+    // (실제 데이터는 이미 학습 완료된 상태이므로 payload 재사용)
+
     /** 로딩/에러 */
     if (loading) {
         return (
             <View style={[styles.root, styles.center]}>
+                <ActivityIndicator size="large" color="#5E82FF" />
                 <Text style={styles.loadingText}>OCR 결과를 불러오는 중입니다…</Text>
             </View>
         );
@@ -74,9 +91,11 @@ export default function ScaffoldingScreen({
                 <Text style={styles.errorTitle}>데이터를 불러오지 못했습니다.</Text>
                 {!!error && <Text style={styles.errorDesc}>{error}</Text>}
 
-                <Pressable style={styles.retryBtn} onPress={onRetry}>
-                    <Text style={styles.retryBtnText}>다시 시도</Text>
-                </Pressable>
+                {!reviewQuizId && (
+                    <Pressable style={styles.retryBtn} onPress={onRetry}>
+                        <Text style={styles.retryBtnText}>다시 시도</Text>
+                    </Pressable>
+                )}
 
                 <Pressable style={styles.backOnlyBtn} onPress={onBack}>
                     <Text style={styles.backOnlyBtnText}>뒤로가기</Text>
@@ -84,8 +103,6 @@ export default function ScaffoldingScreen({
             </View>
         );
     }
-
-    const [step, setStep] = useState<Step>('1-1');
 
     const title = payload.title ?? '';
     const extractedText = payload.extractedText ?? '';
@@ -126,8 +143,27 @@ export default function ScaffoldingScreen({
     const [activeBlankId, setActiveBlankId] = useState<number | null>(null);
     const [answers, setAnswers] = useState<Record<number, string>>({});
     const [graded, setGraded] = useState<Record<number, GradeState>>({});
+    /** 라운드별로 틀린 문제 추적 (누적) */
+    const [wrongInstances, setWrongInstances] = useState<Set<number>>(new Set());
 
     const totalBars = 20;
+    const round1Count = 5;
+    const round2Count = 12;
+    const round3Count = 20;
+
+    const currentRound = useMemo(() => {
+        if (step.startsWith('1-')) return 1;
+        if (step.startsWith('2-')) return 2;
+        if (step.startsWith('3-')) return 3;
+        return 1;
+    }, [step]);
+
+    const activeWordCount = useMemo(() => {
+        if (currentRound === 1) return round1Count;
+        if (currentRound === 2) return round2Count;
+        return round3Count;
+    }, [currentRound]);
+
     const correctCount = useMemo(
         () => Object.values(graded).filter((g) => g === 'correct').length,
         [graded]
@@ -135,22 +171,30 @@ export default function ScaffoldingScreen({
 
     const barStates: GradeState[] = useMemo(() => {
         const arr: GradeState[] = Array.from({ length: totalBars }, () => 'idle');
-        if (step !== '1-3') return arr;
+        const isFinalStep = step.endsWith('-3');
+        if (!isFinalStep) return arr;
+
         keywordInstances.slice(0, totalBars).forEach((ins, idx) => {
             arr[idx] = graded[ins.instanceId] ?? 'idle';
         });
         return arr;
     }, [keywordInstances, graded, step]);
 
-    const roundLabel =
-        step === '1-1' ? 'Round 1 - 단어 확인' : step === '1-2' ? 'Round 1 - 빈칸 학습' : 'Round 1 - 학습 채점';
+    const roundLabel = useMemo(() => {
+        const [round, substep] = step.split('-');
+        const roundNum = round;
+        const label = substep === '1' ? '단어 확인' : substep === '2' ? '빈칸 학습' : '학습 채점';
+        return `Round ${roundNum} - ${label}`;
+    }, [step]);
 
     const onReselectWords = () => {
         Alert.alert('단어 재선정', '추후 백엔드/AI 단어 재선정 API로 교체할 예정입니다.');
     };
     const onStartLearning = () => {
         setSelectedWord(null);
-        setStep('1-2');
+        if (step === '1-1') setStep('1-2');
+        else if (step === '2-1') setStep('2-2');
+        else if (step === '3-1') setStep('3-2');
     };
     const onLongPressBlank = () => {
         Alert.alert('힌트', '추후 기능입니다. (롱프레스 로직만 구현됨)');
@@ -160,18 +204,38 @@ export default function ScaffoldingScreen({
         requestAnimationFrame(() => inputRefs.current[instanceId]?.focus());
     };
     const onGrade = () => {
-        const next: Record<number, GradeState> = {};
-        keywordInstances.forEach((ins) => {
+        const next: Record<number, GradeState> = { ...graded };
+        const newWrong = new Set(wrongInstances);
+
+        keywordInstances.slice(0, activeWordCount).forEach((ins) => {
+            // 이미 이전 라운드에서 맞췄으면 그대로 유지
+            if (next[ins.instanceId] === 'correct') return;
+
             const user = (answers[ins.instanceId] ?? '').trim();
-            next[ins.instanceId] = normalize(user) === normalize(ins.word) ? 'correct' : 'wrong';
+            const isCorrect = normalize(user) === normalize(ins.word);
+
+            if (isCorrect) {
+                next[ins.instanceId] = 'correct';
+                newWrong.delete(ins.instanceId);
+            } else {
+                next[ins.instanceId] = 'wrong';
+                newWrong.add(ins.instanceId);
+            }
         });
+
         setGraded(next);
-        setStep('1-3');
+        setWrongInstances(newWrong);
+
+        if (step === '1-2') setStep('1-3');
+        else if (step === '2-2') setStep('2-3');
+        else if (step === '3-2') setStep('3-3');
     };
 
     /** 왼쪽 설명 카드(상/하 색 분리) */
     const HelpChip = () => {
-        if (step === '1-2') {
+        const substep = step.split('-')[1];
+
+        if (substep === '2') {
             return (
                 <>
                     <View style={styles.helpBox}>
@@ -198,9 +262,9 @@ export default function ScaffoldingScreen({
             );
         }
 
-        const titleText = step === '1-1' ? '단어 터치하기' : '결과 확인';
-        const descTop = step === '1-1' ? '단어를 터치하면' : '단어를 터치하면';
-        const descBottom = step === '1-1' ? '의미를 확인할 수 있어요!' : '의미를 다시 확인할 수 있어요.';
+        const titleText = substep === '1' ? '단어 터치하기' : '결과 확인';
+        const descTop = '단어를 터치하면';
+        const descBottom = substep === '1' ? '의미를 확인할 수 있어요!' : '의미를 다시 확인할 수 있어요.';
 
         return (
             <View style={styles.helpBox}>
@@ -251,15 +315,17 @@ export default function ScaffoldingScreen({
                 <View style={styles.leftCard}>
                     <HelpChip />
 
-                    {step === '1-1' && (
+                    {(step === '1-1' || step === '2-1' || step === '3-1') && (
                         <View style={styles.buttonGroup}>
-                            <Pressable style={styles.imgBtnWrap} onPress={onReselectWords}>
-                                <Image
-                                    source={require('../../../assets/study/re-selection-button.png')}
-                                    style={styles.reselectImg}
-                                    resizeMode="contain"
-                                />
-                            </Pressable>
+                            {step === '1-1' && (
+                                <Pressable style={styles.imgBtnWrap} onPress={onReselectWords}>
+                                    <Image
+                                        source={require('../../../assets/study/re-selection-button.png')}
+                                        style={styles.reselectImg}
+                                        resizeMode="contain"
+                                    />
+                                </Pressable>
+                            )}
                             <Pressable style={styles.imgBtnWrap} onPress={onStartLearning}>
                                 <Image
                                     source={require('../../../assets/study/start-study-button.png')}
@@ -270,7 +336,7 @@ export default function ScaffoldingScreen({
                         </View>
                     )}
 
-                    {step === '1-2' && (
+                    {(step === '1-2' || step === '2-2' || step === '3-2') && (
                         <View style={styles.buttonGroup}>
                             <Pressable style={styles.imgBtnWrap} onPress={onGrade}>
                                 <Image
@@ -284,7 +350,39 @@ export default function ScaffoldingScreen({
 
                     {step === '1-3' && (
                         <Pressable
-                            style={styles.primaryRectBtn}
+                            style={styles.imgBtnWrap}
+                            onPress={() => {
+                                setAnswers({});
+                                setStep('2-1');
+                            }}
+                        >
+                            <Image
+                                source={require('../../../assets/study/Round2.png')}
+                                style={styles.startImg}
+                                resizeMode="contain"
+                            />
+                        </Pressable>
+                    )}
+
+                    {step === '2-3' && (
+                        <Pressable
+                            style={styles.imgBtnWrap}
+                            onPress={() => {
+                                setAnswers({});
+                                setStep('3-1');
+                            }}
+                        >
+                            <Image
+                                source={require('../../../assets/study/Round3.png')}
+                                style={styles.startImg}
+                                resizeMode="contain"
+                            />
+                        </Pressable>
+                    )}
+
+                    {step === '3-3' && (
+                        <Pressable
+                            style={styles.imgBtnWrap}
                             onPress={async () => {
                                 if (onSave) {
                                     try {
@@ -292,16 +390,18 @@ export default function ScaffoldingScreen({
                                             answers[ins.instanceId] ?? ''
                                         );
                                         await onSave(answerList);
-                                        Alert.alert('저장 완료', '학습 데이터가 저장되었습니다.');
                                     } catch (e: any) {
                                         Alert.alert('저장 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
                                     }
-                                } else {
-                                    Alert.alert('Round 2', '2단계는 다음 작업에서 연결하겠습니다.');
                                 }
+                                onBack();
                             }}
                         >
-                            <Text style={styles.primaryRectBtnText}>Round 2</Text>
+                            <Image
+                                source={require('../../../assets/study/finish_study.png')}
+                                style={styles.startImg}
+                                resizeMode="contain"
+                            />
                         </Pressable>
                     )}
                 </View>
@@ -319,8 +419,15 @@ export default function ScaffoldingScreen({
                                 const instanceId = t.instanceId;
                                 const grade = graded[instanceId] ?? 'idle';
                                 const userValue = answers[instanceId] ?? '';
+                                const substep = step.split('-')[1];
 
-                                if (step === '1-1') {
+                                // 현재 라운드 범위 밖의 단어는 일반 텍스트로 표시
+                                const instanceIdx = keywordInstances.findIndex(ki => ki.instanceId === instanceId);
+                                if (instanceIdx >= activeWordCount) {
+                                    return <Text key={idx} style={styles.bodyText}>{t.value}</Text>;
+                                }
+
+                                if (substep === '1') {
                                     return (
                                         <Pressable
                                             key={idx}
@@ -332,7 +439,7 @@ export default function ScaffoldingScreen({
                                     );
                                 }
 
-                                if (step === '1-2') {
+                                if (substep === '2') {
                                     const isActive = activeBlankId === instanceId;
                                     return (
                                         <Pressable

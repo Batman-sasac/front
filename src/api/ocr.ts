@@ -15,7 +15,7 @@ export type OcrResponse =
     | { status: 'success'; original_text: string; keywords: string[] }
     | { status: 'error'; message: string };
 
- const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
 export async function runOcr(fileUri: string): Promise<ScaffoldingPayload> {
     console.log('🔵 OCR 요청 시작 - fileUri:', fileUri);
@@ -120,9 +120,15 @@ export type MonthlyStatsResponse = {
 };
 
 export async function getWeeklyGrowth(): Promise<WeeklyGrowthResponse> {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
     const res = await fetch(`${API_BASE}/cycle/stats/weekly-growth`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
     });
 
     if (!res.ok) throw new Error(`Weekly Stats HTTP ${res.status}`);
@@ -130,9 +136,15 @@ export async function getWeeklyGrowth(): Promise<WeeklyGrowthResponse> {
 }
 
 export async function getMonthlyStats(): Promise<MonthlyStatsResponse> {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
     const res = await fetch(`${API_BASE}/cycle/learning-stats`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
     });
 
     if (!res.ok) throw new Error(`Monthly Stats HTTP ${res.status}`);

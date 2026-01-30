@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
 import { scale, fontScale } from '../lib/layout';
 
-type Screen = 'home' | 'takePicture' | 'brushup' | 'league' | 'mypage';
+export type Screen = 'home' | 'takePicture' | 'brushup' | 'league' | 'mypage';
+
 
 type Props = {
     activeScreen: Screen;

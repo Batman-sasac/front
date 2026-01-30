@@ -5,7 +5,8 @@
     "jsx": "react-native",
     "strict": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": []
   },
   "extends": "expo/tsconfig.base"
 }

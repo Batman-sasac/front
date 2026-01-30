@@ -18,6 +18,8 @@ export default function OAuthWebView({ visible, provider, oauthUrl, onCode, onCl
     useEffect(() => {
         if (!visible || Platform.OS !== 'web') return;
 
+        console.log('[OAuthWebView] 팝업 열기 시작:', oauthUrl);
+
         // 웹 환경: 새 창으로 OAuth 페이지 열기
         const width = 500;
         const height = 600;
@@ -30,32 +32,42 @@ export default function OAuthWebView({ visible, provider, oauthUrl, onCode, onCl
             `width=${width},height=${height},left=${left},top=${top}`
         );
 
-        // 팝업에서 리다이렉트 감지
-        const interval = setInterval(() => {
-            try {
-                if (popup && popup.location.href.includes('/auth/') && popup.location.href.includes('/mobile')) {
-                    const urlParams = new URLSearchParams(popup.location.search);
-                    const code = urlParams.get('code');
+        if (!popup) {
+            console.error('[OAuthWebView] 팝업 차단됨');
+            alert('팝업이 차단되었습니다. 팝업 차단을 해제해주세요.');
+            onClose();
+            return;
+        }
 
-                    if (code) {
-                        onCode(code);
-                        popup.close();
-                        onClose();
-                        clearInterval(interval);
-                    }
+        console.log('[OAuthWebView] 팝업 열림 성공');
+
+        // postMessage 이벤트 리스너
+        const handleMessage = (event: MessageEvent) => {
+            console.log('[OAuthWebView] postMessage 수신:', event.data);
+            if (event.data && event.data.type === 'OAUTH_CODE' && event.data.code) {
+                console.log('[OAuthWebView] code 추출 성공:', event.data.code);
+                onCode(event.data.code);
+                if (popup && !popup.closed) {
+                    popup.close();
                 }
-            } catch (e) {
-                // Cross-origin 에러는 무시 (다른 도메인에 있을 때)
+                onClose();
             }
+        };
 
-            // 팝업이 닫혔는지 확인
+        window.addEventListener('message', handleMessage);
+
+        // 팝업이 닫혔는지 확인하는 interval (fallback)
+        const interval = setInterval(() => {
             if (popup && popup.closed) {
+                console.log('[OAuthWebView] 팝업이 닫혔습니다');
                 clearInterval(interval);
                 onClose();
             }
         }, 500);
 
         return () => {
+            console.log('[OAuthWebView] cleanup');
+            window.removeEventListener('message', handleMessage);
             clearInterval(interval);
             if (popup && !popup.closed) {
                 popup.close();
@@ -89,8 +101,20 @@ export default function OAuthWebView({ visible, provider, oauthUrl, onCode, onCl
     const handleNavigationStateChange = (navState: any) => {
         const { url } = navState;
 
-        // redirect_uri로 돌아왔을 때 code 추출
-        if (url.includes('/auth/') && url.includes('/mobile')) {
+        // custom scheme으로 돌아왔을 때 code 추출
+        if (url.startsWith('bat://oauth-callback')) {
+            const urlParams = new URLSearchParams(url.split('?')[1]);
+            const code = urlParams.get('code');
+
+            if (code) {
+                onCode(code);
+                onClose();
+            }
+            return false; // 네비게이션 중단
+        }
+
+        // 백엔드 redirect_uri로 돌아왔을 때도 code 추출 (fallback)
+        if (url.includes('/auth/') && url.includes('/mobile') && url.includes('code=')) {
             const urlParams = new URLSearchParams(url.split('?')[1]);
             const code = urlParams.get('code');
 
