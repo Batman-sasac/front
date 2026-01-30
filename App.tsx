@@ -18,6 +18,7 @@ import SelectPicture from './src/screens/input_data/SelectPicture';
 import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
+import type { Screen as SidebarScreen } from './src/components/Sidebar';
 import { runOcr, ScaffoldingPayload, saveTest, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
 import { getToken, getUserInfo, saveAuthData } from './src/lib/storage';
 
@@ -53,6 +54,8 @@ export default function App() {
   const [monthlyGoal, setMonthlyGoal] = useState<number | null>(null);
   const [streak, setStreak] = useState(0);                 // 연속 학습 일수
   const [lastAttendanceDate, setLastAttendanceDate] = useState<string | null>(null);
+  const [isReviewMode, setIsReviewMode] = useState(false); // 복습 모드 여부
+  const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습할 quiz ID
   const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
   const [rewardState, setRewardState] = useState({
     baseXP: 0,
@@ -78,11 +81,11 @@ export default function App() {
           return;
         }
       }
-      // 토큰 없으면 목표 설정 화면으로
-      setTimeout(() => setStep('goal'), 2000);
+      // 토큰 없으면 로그인 화면으로
+      setTimeout(() => setStep('login'), 2000);
     } catch (error) {
       console.error('자동 로그인 확인 오류:', error);
-      setTimeout(() => setStep('goal'), 2000);
+      setTimeout(() => setStep('login'), 2000);
     }
   };
 
@@ -110,7 +113,7 @@ export default function App() {
   const handleLoginSuccess = async (email: string, userNickname: string) => {
     setUserEmail(email);
     setNickname(userNickname);
-    
+
     // 바로 홈 화면으로 이동
     setStep('home');
   };
@@ -408,12 +411,18 @@ export default function App() {
 
       {step === 'scaffolding' && (
         <ScaffoldingScreen
-          onBack={() => setStep('talkingStudy')}
+          onBack={() => {
+            setIsReviewMode(false);
+            setReviewQuizId(null);
+            setStep('talkingStudy');
+          }}
           sources={capturedSources}
           selectedIndex={selectedSourceIndex}
           payload={scaffoldingPayload}
           loading={scaffoldingLoading}
           error={scaffoldingError}
+          initialRound={isReviewMode ? '3-1' : '1-1'} // 복습 모드면 3라운드로 시작
+          reviewQuizId={reviewQuizId} // 복습할 quiz ID 전달
           onRetry={async () => {
             const first = capturedSources[0] as any;
             const uri = first?.uri as string | undefined;
@@ -448,8 +457,17 @@ export default function App() {
       {step === 'brushup' && (
         <BrushUPScreen
           onBack={() => setStep('home')}
+          // 🔧 수정
+          onNavigate={(screen: SidebarScreen) => setStep(screen)}
+          onCardPress={(card) => {
+            setIsReviewMode(true);
+            setReviewQuizId(card.quiz_id || null);
+            setStep('scaffolding');
+          }}
         />
       )}
+
+
 
 
     </View>

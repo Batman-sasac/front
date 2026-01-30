@@ -25,10 +25,10 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
 
       // 백엔드에 인가 코드 전송
       const response = await loginWithOAuth(oauthProvider, code);
-      
+
       console.log('OAuth 응답:', response);
 
-      if (response.status === 'nickname_required') {
+      if (response.status === 'NICKNAME_REQUIRED' || response.status === 'nickname_required') {
         // 닉네임 설정 필요
         console.log('닉네임 설정 필요:', response.email, response.social_id);
         onNicknameRequired(response.email, response.social_id!);

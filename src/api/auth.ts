@@ -2,12 +2,12 @@
 const API_BASE_URL = 'http://127.0.0.1:8000';
 
 export interface LoginResponse {
-    status: 'success' | 'nickname_required';
+    status: 'success' | 'nickname_required' | 'NICKNAME_REQUIRED';
     token?: string;
     email: string;
     nickname?: string;
     social_id?: string;
-    message: string;
+    message?: string;
 }
 
 export interface SetNicknameResponse {
