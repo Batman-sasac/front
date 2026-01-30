@@ -44,21 +44,18 @@ export async function loginWithOAuth(
 }
 
 /**
- * 닉네임 설정
+ * 닉네임 설정 (닉네임만 JSON으로 전송)
  */
 export async function setNickname(
-    email: string,
     nickname: string
 ): Promise<SetNicknameResponse> {
-    const endpoint = `${API_BASE_URL}/auth/set-nickname-mobile`;
-
-    const formData = new FormData();
-    formData.append('email', email);
-    formData.append('nickname', nickname);
-
+    const endpoint = `${API_BASE_URL}/auth/set-nickname`;
     const response = await fetch(endpoint, {
         method: 'POST',
-        body: formData,
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ nickname }),
     });
 
     if (!response.ok) {
