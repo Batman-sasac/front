@@ -43,9 +43,7 @@ export async function loginWithOAuth(
     return await response.json();
 }
 
-/**
- * 닉네임 설정 (닉네임만 JSON으로 전송)
- */
+
 export async function setNickname(
     nickname: string
 ): Promise<SetNicknameResponse> {
