@@ -3,9 +3,15 @@ const API_BASE_URL = 'http://localhost:8000';
 
 export const fetchWeeklyGrowth = async (): Promise<{ labels: string[]; data: number[] } | null> => {
     try {
+        const { getToken } = await import('../lib/storage');
+        const token = await getToken();
+
         const response = await fetch(`${API_BASE_URL}/cycle/stats/weekly-growth`, {
             method: 'GET',
-            credentials: 'include', // 쿠키 포함
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token || ''}`,
+            },
         });
 
         if (!response.ok) {
@@ -39,9 +45,15 @@ export const fetchLearningStats = async (): Promise<{
     remaining_count: number;
 } | null> => {
     try {
+        const { getToken } = await import('../lib/storage');
+        const token = await getToken();
+
         const response = await fetch(`${API_BASE_URL}/cycle/learning-stats`, {
             method: 'GET',
-            credentials: 'include', // 쿠키 포함
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token || ''}`,
+            },
         });
 
         if (!response.ok) {

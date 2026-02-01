@@ -90,11 +90,16 @@ export type SaveTestRequest = {
 };
 
 export async function saveTest(payload: SaveTestRequest) {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
     const res = await fetch(`${API_BASE}/ocr/save-test`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
         body: JSON.stringify(payload),
-        // 쿠키 기반이면 web에선 credentials 필요하지만, 현재 user_email은 Optional이라 우선 없이 진행 가능
     });
 
     if (!res.ok) throw new Error(`SAVE HTTP ${res.status}`);
@@ -132,6 +137,56 @@ export async function getWeeklyGrowth(): Promise<WeeklyGrowthResponse> {
     });
 
     if (!res.ok) throw new Error(`Weekly Stats HTTP ${res.status}`);
+    return res.json();
+}
+
+// 복습 완료 시 리워드 제공 & 사용자 답변 저장
+export type ReviewStudyRequest = {
+    quiz_id: number;
+    user_answers: string[];
+};
+
+export async function submitReviewStudy(payload: ReviewStudyRequest) {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const res = await fetch(`${API_BASE}/review-study`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) throw new Error(`Review Study HTTP ${res.status}`);
+    return res.json();
+}
+
+// 힌트 가져오기
+export type HintResponse = {
+    status: string;
+    quiz_id: number;
+    data: Array<{
+        h1: string; // 초성
+        h2: string; // 첫 글자
+        h3: string; // 마지막 글자
+    }>;
+};
+
+export async function getHint(quizId: number): Promise<HintResponse> {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const res = await fetch(`${API_BASE}/study/hint/${quizId}`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
+    });
+
+    if (!res.ok) throw new Error(`Hint HTTP ${res.status}`);
     return res.json();
 }
 

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Image, Modal, ActivityIn
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
 import Constants from 'expo-constants';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getToken } from '../../lib/storage';
 import type { Screen } from '../../components/Sidebar';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl || 'http://localhost:8000';
@@ -111,7 +111,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
     const loadReviewCards = async () => {
         try {
             setLoading(true);
-            const token = await AsyncStorage.getItem('accessToken');
+            const token = await getToken();
 
             // 기존 /ocr/list 엔드포인트 사용 (모든 학습 데이터 가져오기)
             const response = await fetch(`${API_BASE_URL}/ocr/list?page=1&size=100`, {
