@@ -207,15 +207,17 @@ export default function MyPageScreen({
             const token = await getToken();
             if (!token) {
                 Alert.alert('오류', '로그인이 필요합니다');
-                return;
+                return false;
             }
 
             await apiUpdateNickname(token, newNickname);
             setCurrentNickname(newNickname);
             onNicknameChange?.(newNickname);
             Alert.alert('성공', '닉네임이 변경되었습니다');
+            return true;
         } catch (error: any) {
             Alert.alert('오류', error.message || '닉네임 변경 실패');
+            return false;
         }
     };
 
@@ -479,8 +481,10 @@ export default function MyPageScreen({
                             <Pressable
                                 style={[styles.modalButton, styles.modalPrimaryButton]}
                                 onPress={async () => {
-                                    await handleNicknameChange(tempNickname);
-                                    setShowNicknameModal(false);
+                                    const success = await handleNicknameChange(tempNickname);
+                                    if (success) {
+                                        setShowNicknameModal(false);
+                                    }
                                 }}
                             >
                                 <Text style={styles.modalPrimaryText}>확인</Text>
