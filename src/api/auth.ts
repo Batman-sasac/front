@@ -125,10 +125,14 @@ export async function getUserInfo(token: string): Promise<{
     kakao_email: string | null;
     naver_email: string | null;
 }> {
-    const endpoint = `${API_BASE_URL}/auth/user-info?token=${encodeURIComponent(token)}`;
+    const endpoint = `${API_BASE_URL}/auth/user-info`;
 
     const response = await fetch(endpoint, {
         method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
     });
 
     if (!response.ok) {
@@ -259,11 +263,13 @@ export async function updateNickname(
     const endpoint = `${API_BASE_URL}/auth/update-nickname`;
 
     const formData = new FormData();
-    formData.append('token', token);
     formData.append('nickname', nickname);
 
     const response = await fetch(endpoint, {
         method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
         body: formData,
     });
 

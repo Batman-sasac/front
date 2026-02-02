@@ -63,6 +63,28 @@ export default function App() {
     showBase: false,
     showBonus: false,
   });
+  
+  // 학습 통계 상태
+  const [totalStudyCount, setTotalStudyCount] = useState(0);
+  const [continuousDays, setContinuousDays] = useState(0);
+
+  // 학습 통계 불러오기
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const stats = await getMonthlyStats();
+        setTotalStudyCount(stats.total_study_count || 0);
+        setContinuousDays(stats.continuous_days || 0);
+      } catch (error) {
+        console.error('학습 통계 불러오기 실패:', error);
+      }
+    };
+
+    if (step === 'mypage') {
+      loadStats();
+    }
+  }, [step]);
+
   useEffect(() => {
     // 앱 시작시 자동 로그인 체크
     checkAutoLogin();
@@ -363,11 +385,12 @@ export default function App() {
           nickname={nickname}
           typeLabel={typeLabel}
           level={level}
-          totalStudyCount={105}   // 우선 더미 값
-          continuousDays={100}    // 우선 더미 값
+          totalStudyCount={totalStudyCount}
+          continuousDays={continuousDays}
           monthlyGoal={monthlyGoal}
           onNavigate={(screen) => setStep(screen)}
           onMonthlyGoalChange={(goal) => setMonthlyGoal(goal)}
+          onNicknameChange={(newNickname) => setNickname(newNickname)}
         />
       )}
 
@@ -407,15 +430,17 @@ export default function App() {
 
             try {
               const payload = await runOcr(uri);
+              console.log('✅ OCR 성공, payload:', payload);
               setScaffoldingPayload(payload);
+              setStep('scaffolding'); // OCR 성공 시 scaffolding으로 이동
             } catch (e: any) {
+              console.error('❌ OCR 실패:', e);
               setScaffoldingPayload(null);
               setScaffoldingError(e?.message ?? 'OCR 호출에 실패했습니다.');
+              setStep('talkingStudy'); // OCR 실패 시에만 talkingStudy로
             } finally {
               setScaffoldingLoading(false);
             }
-
-            setStep('talkingStudy');
           }}
         />
       )}
