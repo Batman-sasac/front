@@ -18,9 +18,9 @@ import SelectPicture from './src/screens/input_data/SelectPicture';
 import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
-import type { Screen as SidebarScreen } from './src/components/Sidebar';
+import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
 import { runOcr, ScaffoldingPayload, saveTest, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
-import { getToken, getUserInfo, saveAuthData } from './src/lib/storage';
+import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 
 type SocialProvider = 'kakao' | 'naver';
 type Step =
@@ -86,6 +86,23 @@ export default function App() {
     } catch (error) {
       console.error('자동 로그인 확인 오류:', error);
       setTimeout(() => setStep('login'), 2000);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      console.log('로그아웃 시작...');
+      await clearAuthData();
+      console.log('✅ 로그아웃 완료');
+      // 상태 초기화
+      setUserEmail('');
+      setNickname('');
+      setUserSocialId('');
+      setTypeResult(null);
+      // 로그인 화면으로 이동
+      setStep('login');
+    } catch (error) {
+      console.error('❌ 로그아웃 오류:', error);
     }
   };
 
@@ -319,6 +336,7 @@ export default function App() {
           monthlyStats={monthlyStats}
           monthlyGoal={monthlyGoal}
           onNavigate={(screen) => setStep(screen)}
+          onLogout={handleLogout}
         />
       )}
 

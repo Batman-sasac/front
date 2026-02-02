@@ -31,6 +31,13 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
       if (response.status === 'NICKNAME_REQUIRED' || response.status === 'nickname_required') {
         // 닉네임 설정 필요
         console.log('닉네임 설정 필요:', response.email, response.social_id);
+
+        // 토큰이 반환되면 임시로 저장 (닉네임 설정 API에서 사용할 수 있도록)
+        if (response.token) {
+          console.log('✅ 임시 토큰 저장:', response.token.substring(0, 20) + '...');
+          await saveAuthData(response.token, response.email, 'pending');
+        }
+
         onNicknameRequired(response.email, response.social_id!);
       } else if (response.status === 'success') {
         // 로그인 성공 - 토큰 저장

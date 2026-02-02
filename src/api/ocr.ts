@@ -46,11 +46,16 @@ export async function runOcr(fileUri: string): Promise<ScaffoldingPayload> {
         } as any);
     }
 
+    // 토큰 가져오기
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
     const res = await fetch(`${API_BASE}/ocr`, {
         method: 'POST',
         body: form,
         headers: {
             'Accept': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
         },
     });
 
