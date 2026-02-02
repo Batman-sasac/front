@@ -9,13 +9,19 @@ const USER_NICKNAME_KEY = '@bat_user_nickname';
  */
 export async function saveAuthData(token: string, email: string, nickname: string) {
     try {
+        console.log('토큰 저장 시작:', { token: token?.substring(0, 20) + '...', email, nickname });
+
         await AsyncStorage.multiSet([
             [TOKEN_KEY, token],
             [USER_EMAIL_KEY, email],
             [USER_NICKNAME_KEY, nickname],
         ]);
+
+        // 저장 후 검증
+        const savedToken = await AsyncStorage.getItem(TOKEN_KEY);
+        console.log('✅ 토큰 저장 완료 (검증):', savedToken ? '저장됨' : '실패');
     } catch (error) {
-        console.error('인증 정보 저장 실패:', error);
+        console.error('❌ 인증 정보 저장 실패:', error);
         throw error;
     }
 }
@@ -25,9 +31,15 @@ export async function saveAuthData(token: string, email: string, nickname: strin
  */
 export async function getToken(): Promise<string | null> {
     try {
-        return await AsyncStorage.getItem(TOKEN_KEY);
+        const token = await AsyncStorage.getItem(TOKEN_KEY);
+        if (!token) {
+            console.log('⚠️ 저장된 토큰 없음');
+        } else {
+            console.log('🔐 토큰 조회 성공:', token.substring(0, 20) + '...');
+        }
+        return token;
     } catch (error) {
-        console.error('토큰 가져오기 실패:', error);
+        console.error('❌ 토큰 가져오기 실패:', error);
         return null;
     }
 }

@@ -25,9 +25,6 @@ export default function NicknameScreen({ email, socialId, onNicknameSet }: Props
     const [errorText, setErrorText] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // 🔧 임시: 백엔드 없이 테스트 (나중에 삭제)
-    const MOCK_MODE = true;
-
     const trimmed = nickname.trim();
     const isValid = trimmed.length >= 2 && trimmed.length <= 10 && !errorText;
 
@@ -42,15 +39,8 @@ export default function NicknameScreen({ email, socialId, onNicknameSet }: Props
         try {
             setLoading(true);
 
-            // 🔧 임시: Mock 데이터로 테스트
-            if (MOCK_MODE) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                onNicknameSet(email, trimmed);
-                return;
-            }
-
             // 백엔드에 닉네임 설정 요청
-            const response = await setNickname(email, trimmed);
+            const response = await setNickname(trimmed, email, socialId);
 
             // 토큰 저장
             await saveAuthData(response.token, response.email, response.nickname);

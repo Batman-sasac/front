@@ -45,7 +45,9 @@ export async function loginWithOAuth(
 
 
 export async function setNickname(
-    nickname: string
+    nickname: string,
+    email: string,
+    socialId: string
 ): Promise<SetNicknameResponse> {
     const endpoint = `${API_BASE_URL}/auth/set-nickname`;
     const response = await fetch(endpoint, {
@@ -53,12 +55,16 @@ export async function setNickname(
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ nickname }),
+        body: JSON.stringify({
+            nickname,
+            email,
+            social_id: socialId,
+        }),
     });
 
     if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || '닉네임 설정 실패');
+        throw new Error(error.message || error.error || '닉네임 설정 실패');
     }
 
     return await response.json();
