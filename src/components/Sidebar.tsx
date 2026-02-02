@@ -114,7 +114,18 @@ export default function Sidebar({ activeScreen, onNavigate, onLogout }: Props) {
 
             {/* 하단 로그아웃 */}
             <View style={styles.bottomMenuGroup}>
-                <Pressable style={styles.menuButton} onPress={onLogout}>
+                <Pressable
+                    style={styles.menuButton}
+                    onPress={() => {
+                        console.log('🚪 로그아웃 버튼 클릭됨');
+                        if (onLogout) {
+                            console.log('✅ onLogout 함수 호출');
+                            onLogout();
+                        } else {
+                            console.error('❌ onLogout이 undefined입니다');
+                        }
+                    }}
+                >
                     <Image
                         source={require('../../assets/homebutton/logout.png')}
                         style={styles.menuIcon}
