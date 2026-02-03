@@ -19,7 +19,7 @@ import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, saveTest, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
+import { runOcr, ScaffoldingPayload, saveTest, getQuizForReview, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 
 type SocialProvider = 'kakao' | 'naver';
@@ -147,6 +147,28 @@ export default function App() {
       })();
     }
   }, [step]);
+
+  // 복습 진입 시 DB에서 퀴즈 데이터 가져오기 (저장된 pages/quiz 형태 그대로 사용)
+  useEffect(() => {
+    if (step !== 'scaffolding' || reviewQuizId == null) return;
+    let cancelled = false;
+    setScaffoldingLoading(true);
+    setScaffoldingError(null);
+    getQuizForReview(reviewQuizId)
+      .then((payload) => {
+        if (!cancelled) setScaffoldingPayload(payload);
+      })
+      .catch((e: any) => {
+        if (!cancelled) {
+          setScaffoldingPayload(null);
+          setScaffoldingError(e?.message ?? '복습 데이터를 불러오지 못했습니다.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setScaffoldingLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [step, reviewQuizId]);
 
   // 로그인 성공 핸들러
   const handleLoginSuccess = async (email: string, userNickname: string) => {
@@ -483,14 +505,21 @@ export default function App() {
               setScaffoldingLoading(false);
             }
           }}
-          onSave={async (answers) => {
+          onSave={async (userAnswers) => {
             if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
+
+            const blanks = scaffoldingPayload.blanks ?? [];
+            const keywords = blanks.map((b) => b.word);
 
             await saveTest({
               subject_name: scaffoldingPayload.title,
+              study_name: scaffoldingPayload.title,
               original: scaffoldingPayload.extractedText,
-              quiz: scaffoldingPayload.extractedText, // 임시: 원본과 동일하게 설정
-              answers: answers.filter((a) => a.trim() !== ''),
+              answers: keywords,
+              pages: [{ original_text: scaffoldingPayload.extractedText, keywords }],
+              blanks: blanks.map((b, i) => ({ blank_index: i, word: b.word, page_index: 0 })),
+              user_answers: userAnswers,
+              quiz: scaffoldingPayload.extractedText,
             });
           }}
         />
