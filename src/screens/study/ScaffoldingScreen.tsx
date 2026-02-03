@@ -134,7 +134,7 @@ export default function ScaffoldingScreen({
             .map((t) => ({
                 instanceId: t.instanceId,
                 word: t.value,
-                base: baseInfoByWord.get(t.value) ?? null,
+                base: baseInfoByWord.get(t.baseWord) ?? null,
             }));
     }, [tokens, baseInfoByWord]);
 
@@ -146,10 +146,11 @@ export default function ScaffoldingScreen({
     /** 라운드별로 틀린 문제 추적 (누적) */
     const [wrongInstances, setWrongInstances] = useState<Set<number>>(new Set());
 
-    const totalBars = 20;
-    const round1Count = 5;
-    const round2Count = 12;
-    const round3Count = 20;
+    const totalKeywordCount = keywordInstances.length;
+    const totalBars = Math.max(20, totalKeywordCount);
+    const round1Count = Math.min(5, totalKeywordCount);
+    const round2Count = Math.min(12, totalKeywordCount);
+    const round3Count = totalKeywordCount;
 
     const currentRound = useMemo(() => {
         if (step.startsWith('1-')) return 1;
@@ -415,17 +416,13 @@ export default function ScaffoldingScreen({
                                 if (t.type === 'space') return <Text key={idx}>{t.value}</Text>;
                                 if (t.type === 'text') return <Text key={idx} style={styles.bodyText}>{t.value}</Text>;
 
-                                const base = baseInfoByWord.get(t.value) ?? null;
+                                const base = baseInfoByWord.get(t.baseWord) ?? null;
                                 const instanceId = t.instanceId;
                                 const grade = graded[instanceId] ?? 'idle';
                                 const userValue = answers[instanceId] ?? '';
                                 const substep = step.split('-')[1];
-
-                                // 현재 라운드 범위 밖의 단어는 일반 텍스트로 표시
                                 const instanceIdx = keywordInstances.findIndex(ki => ki.instanceId === instanceId);
-                                if (instanceIdx >= activeWordCount) {
-                                    return <Text key={idx} style={styles.bodyText}>{t.value}</Text>;
-                                }
+                                const isInActiveRange = instanceIdx < activeWordCount;
 
                                 if (substep === '1') {
                                     return (
@@ -440,6 +437,13 @@ export default function ScaffoldingScreen({
                                 }
 
                                 if (substep === '2') {
+                                    if (!isInActiveRange) {
+                                        return (
+                                            <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}>
+                                                <Text style={styles.wordText}>{t.value}</Text>
+                                            </Pressable>
+                                        );
+                                    }
                                     const isActive = activeBlankId === instanceId;
                                     return (
                                         <Pressable
@@ -464,6 +468,13 @@ export default function ScaffoldingScreen({
                                     );
                                 }
 
+                                if (!isInActiveRange) {
+                                    return (
+                                        <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}>
+                                            <Text style={styles.wordText}>{t.value}</Text>
+                                        </Pressable>
+                                    );
+                                }
                                 const bg =
                                     grade === 'correct' ? CORRECT_BG : grade === 'wrong' ? WRONG_BG : HIGHLIGHT_BG;
 
@@ -504,12 +515,42 @@ type Token =
     | { type: 'text'; value: string }
     | { type: 'space'; value: string }
     | { type: 'newline'; value: '\n' }
-    | { type: 'keyword'; value: string; occ: number };
+    | { type: 'keyword'; value: string; occ: number; baseWord: string };
 
-type KeywordTokenWithId = { type: 'keyword'; value: string; occ: number; instanceId: number };
+type KeywordTokenWithId = { type: 'keyword'; value: string; occ: number; instanceId: number; baseWord: string };
+
+/**
+ * 키워드가 text의 pos 위치에서 시작하는지 확인.
+ * OCR이 단어 안에 공백을 넣은 경우("단 어")도 매칭되도록, 텍스트 쪽 공백은 건너뛰고 비교.
+ * 반환: 매칭되면 원문 기준 길이(공백 포함), 아니면 0.
+ */
+function matchKeywordAllowingSpaces(
+    text: string,
+    textLower: string,
+    pos: number,
+    keyword: string
+): number {
+    const kwLower = keyword.toLowerCase();
+    let ti = pos;
+    let ki = 0;
+    while (ki < kwLower.length && ti < text.length) {
+        if (text[ti] === ' ' || text[ti] === '\t') {
+            ti++;
+            continue;
+        }
+        if (textLower[ti] !== kwLower[ki]) return 0;
+        ti++;
+        ki++;
+    }
+    return ki === kwLower.length ? ti - pos : 0;
+}
 
 function tokenizeWithKeywords(text: string, keywords: string[]): Token[] {
-    const sorted = [...keywords].filter(Boolean).sort((a, b) => b.length - a.length);
+    const normalized = [...keywords]
+        .map((k) => (k && typeof k === 'string' ? k.trim() : ''))
+        .filter(Boolean);
+    const sorted = [...normalized].sort((a, b) => b.length - a.length);
+    const textLower = text.toLowerCase();
     const out: Token[] = [];
     const occMap = new Map<string, number>();
     let i = 0;
@@ -532,19 +573,24 @@ function tokenizeWithKeywords(text: string, keywords: string[]): Token[] {
         }
 
         let matched: string | null = null;
+        let matchedLen = 0;
         for (const kw of sorted) {
-            if (kw && text.startsWith(kw, i)) {
+            if (!kw) continue;
+            const len = matchKeywordAllowingSpaces(text, textLower, i, kw);
+            if (len > 0) {
                 matched = kw;
+                matchedLen = len;
                 break;
             }
         }
 
-        if (matched) {
+        if (matched !== null && matchedLen > 0) {
+            const sliceFromText = text.slice(i, i + matchedLen);
             const prev = occMap.get(matched) ?? 0;
             const nextOcc = prev + 1;
             occMap.set(matched, nextOcc);
-            out.push({ type: 'keyword', value: matched, occ: nextOcc });
-            i += matched.length;
+            out.push({ type: 'keyword', value: sliceFromText, occ: nextOcc, baseWord: matched });
+            i += matchedLen;
             continue;
         }
 
@@ -554,7 +600,7 @@ function tokenizeWithKeywords(text: string, keywords: string[]): Token[] {
 
             let willBreak = false;
             for (const kw of sorted) {
-                if (kw && text.startsWith(kw, j)) {
+                if (kw && matchKeywordAllowingSpaces(text, textLower, j, kw) > 0) {
                     willBreak = true;
                     break;
                 }

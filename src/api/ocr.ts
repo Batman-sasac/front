@@ -66,12 +66,33 @@ export async function runOcr(fileUri: string): Promise<ScaffoldingPayload> {
         console.error('🔴 OCR 오류 응답:', errorText);
         throw new Error(`OCR HTTP ${res.status}: ${errorText}`);
     }
-    const data = (await res.json()) as OcrResponse;
+    const data = (await res.json()) as any;
 
     if (data.status === 'error') throw new Error(data.message);
 
-    // 백엔드 응답을 ScaffoldingPayload로 변환
-    const blanks = data.keywords.map((word, idx) => ({
+    const inner = data.data ?? data;
+
+    let originalText: string;
+    let keywords: string[];
+
+    // 백엔드가 pages 배열 반환 (PDF/다중 이미지)
+    if (Array.isArray(inner.pages) && inner.pages.length > 0) {
+        originalText = inner.pages
+            .map((p: { original_text?: string }) => p?.original_text ?? '')
+            .join('\n\n');
+        const kwSet = new Set<string>();
+        for (const p of inner.pages) {
+            const kws = Array.isArray(p.keywords) ? p.keywords : [];
+            kws.forEach((w: string) => kwSet.add(String(w).trim()));
+        }
+        keywords = Array.from(kwSet).filter(Boolean);
+    } else {
+        // 하위 호환: 단일 original_text, keywords
+        originalText = inner.original_text ?? '';
+        keywords = Array.isArray(inner.keywords) ? inner.keywords : [];
+    }
+
+    const blanks = keywords.map((word, idx) => ({
         id: idx,
         word: word,
         meaningLong: `${word}의 뜻 (AI 생성 예정)`,
@@ -79,19 +100,38 @@ export async function runOcr(fileUri: string): Promise<ScaffoldingPayload> {
 
     return {
         title: '학습 자료',
-        extractedText: data.original_text,
+        extractedText: originalText,
         blanks: blanks,
     };
 }
 
 
 
-// ocr_app.py의 /ocr/save-test 스펙에 맞춤
+// ocr_app.py의 /ocr/save-test 스펙: 페이지·빈칸·사용자 답변 모두 JSON
+export type PageItem = {
+    original_text: string;
+    keywords: string[];
+};
+
+export type BlankItemSave = {
+    blank_index: number;
+    word: string;
+    page_index: number;
+};
+
 export type SaveTestRequest = {
     subject_name: string;
-    original: string;
-    quiz: string;
-    answers: string[];
+    study_name?: string;
+    /** 단일 페이지 호환 */
+    original?: string;
+    answers?: string[];
+    /** 페이지별 원문·키워드 (페이징 시 사용) */
+    pages?: PageItem[];
+    /** 빈칸 정의 (blank_index 순서 = user_answers 인덱스) */
+    blanks?: BlankItemSave[];
+    /** 사용자 작성 답변 (빈칸 순서대로) */
+    user_answers?: string[];
+    quiz?: string;
 };
 
 export async function saveTest(payload: SaveTestRequest) {
@@ -109,6 +149,43 @@ export async function saveTest(payload: SaveTestRequest) {
 
     if (!res.ok) throw new Error(`SAVE HTTP ${res.status}`);
     return res.json();
+}
+
+/** 복습 시 DB에 저장된 퀴즈를 ScaffoldingPayload 형태로 가져오기 */
+export type QuizForReviewResponse = {
+    status: string;
+    data?: {
+        quiz_id: number;
+        title: string;
+        extractedText: string;
+        blanks: BlankItem[];
+        user_answers?: string[];
+    };
+    message?: string;
+};
+
+export async function getQuizForReview(quizId: number): Promise<ScaffoldingPayload> {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const res = await fetch(`${API_BASE}/ocr/quiz/${quizId}`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
+    });
+
+    if (!res.ok) throw new Error(`퀴즈 조회 HTTP ${res.status}`);
+    const json = (await res.json()) as QuizForReviewResponse;
+    if (json.status !== 'success' || !json.data) throw new Error(json.message ?? '퀴즈를 불러올 수 없습니다.');
+
+    const d = json.data;
+    return {
+        title: d.title,
+        extractedText: d.extractedText,
+        blanks: d.blanks ?? [],
+    };
 }
 
 // 홈화면 주간/월간 데이터
