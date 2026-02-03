@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
+import Svg, { Polyline, Circle, Defs, LinearGradient, Stop, G, Text as SvgText } from 'react-native-svg';
 
 // 학습 유형 텍스트에 따라 캐릭터 이미지를 매핑
 const getCharacterSourceByType = (typeLabel: string) => {
@@ -201,38 +202,80 @@ export default function HomeScreen({
             {/* 아래 성장 카드 */}
             <View style={styles.bottomCard}>
               {/* 요약 메시지 */}
-              {monthlyStats && monthlyStats.diff !== undefined && (
+              {weeklyGrowth && weeklyGrowth.data && weeklyGrowth.data.length >= 2 && (
                 <Text style={styles.smallTitle}>
-                  {monthlyStats.diff >= 0
-                    ? `이번 달은 지난달보다 ${monthlyStats.diff}회 더 공부하셨네요! 멋져요! 🔥`
-                    : `학습량이 지난달보다 줄어들었어요. 조금만 더 힘내볼까요? ✊`}
+                  {(() => {
+                    const thisWeek = weeklyGrowth.data[weeklyGrowth.data.length - 1] || 0;
+                    const lastWeek = weeklyGrowth.data[weeklyGrowth.data.length - 2] || 0;
+                    const growthPercent = lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : 0;
+                    return growthPercent >= 0
+                      ? ` 이번주, 지난주보다 ${growthPercent}% 성장했어요!`
+                      : ` 이번주 지난주보다 ${Math.abs(growthPercent)}% 감소했어요. 조금만 더 힘내요! ✊`;
+                  })()}
                 </Text>
               )}
 
-              {/* 막대 그래프 */}
+              {/* 선 그래프 */}
               <View style={styles.lineGraphContainer}>
                 {weeklyGrowth && weeklyGrowth.labels && weeklyGrowth.data ? (
-                  <View style={styles.barChartContainer}>
-                    {weeklyGrowth.labels.map((label, idx) => {
-                      const value = weeklyGrowth.data[idx] || 0;
-                      const maxValue = Math.max(...weeklyGrowth.data, 1);
-                      const heightPercent = (value / maxValue) * 100;
+                  <View style={styles.lineChartWrapper}>
+                    <View style={styles.lineChartContainer}>
+                      {/* 그라데이션 배경 영역 */}
+                      <View style={styles.graphBackground} />
+                      {/* 선과 점 */}
+                      <Svg width="100%" height={scale(200)} style={styles.svgOverlay}>
+                        {weeklyGrowth?.data && weeklyGrowth.data.length > 0 && (() => {
+                          const data = weeklyGrowth.data;
+                          const maxValue = Math.max(...data, 1);
+                          const padding = 20;
+                          const svgWidth = 360;
+                          const svgHeight = 160;
+                          const chartWidth = svgWidth - padding * 2;
+                          const chartHeight = svgHeight - padding * 2;
+                          const pointSpacing = chartWidth / Math.max(data.length - 1, 1);
 
-                      return (
-                        <View key={idx} style={styles.barItem}>
-                          <View style={styles.barWrapper}>
-                            <View
-                              style={[
-                                styles.bar,
-                                { height: `${heightPercent}%` }
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.barLabel}>{label}</Text>
-                          <Text style={styles.barValue}>{Math.round(value)}</Text>
-                        </View>
-                      );
-                    })}
+                          const points = data.map((val: number, idx: number) => ({
+                            x: padding + idx * pointSpacing,
+                            y: svgHeight - padding - (val / maxValue) * chartHeight,
+                            val,
+                          }));
+
+                          const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ');
+
+                          return [
+                            <Polyline key="line" points={pointsStr} fill="none" stroke="#5E82FF" strokeWidth={2} />,
+                            ...points.map((p, idx) => (
+                              <G key={`point-${idx}`}>
+                                <Circle cx={p.x} cy={p.y} r={4} fill="#5E82FF" />
+                                <SvgText
+                                  x={p.x}
+                                  y={p.y - 10}
+                                  fontSize="12"
+                                  fontWeight="600"
+                                  fill="#5E82FF"
+                                  textAnchor="middle"
+                                >
+                                  {p.val}
+                                </SvgText>
+                              </G>
+                            )),
+                          ];
+                        })()}
+                      </Svg>
+                    </View>
+
+                    {/* 통계 정보: 좌측 하단 텍스트만 */}
+                    {monthlyStats && weeklyGrowth?.data && (
+                      <View style={styles.graphStatsTextContainer}>
+                        <Text style={styles.graphStatsLabel}>
+                          정답률*출석률: {Math.round(
+                            ((monthlyStats.this_month_count || 0) *
+                              (weeklyGrowth.data[weeklyGrowth.data.length - 1] || 0) *
+                              0.01) * 100
+                          ) / 100}%
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 ) : (
                   <Text style={styles.graphPlaceholder}>
@@ -240,37 +283,6 @@ export default function HomeScreen({
                   </Text>
                 )}
               </View>
-
-              {/* 월간 비교 통계 */}
-              {monthlyStats && (
-                <View style={styles.comparisonBox}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>{monthlyStats.last_month_name || '전월'}</Text>
-                    <Text style={styles.statValue}>{monthlyStats.last_month_count}회</Text>
-                  </View>
-
-                  <View style={styles.divider} />
-
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>{monthlyStats.this_month_name || '당월'}</Text>
-                    <Text style={styles.statValue}>{monthlyStats.this_month_count}회</Text>
-                  </View>
-
-                  <View style={styles.divider} />
-
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>변화</Text>
-                    <Text
-                      style={[
-                        styles.statValue,
-                        { color: monthlyStats.diff >= 0 ? '#D63031' : '#00B894' }
-                      ]}
-                    >
-                      {monthlyStats.diff >= 0 ? '+' : ''}{monthlyStats.diff}회
-                    </Text>
-                  </View>
-                </View>
-              )}
             </View>
           </View>
 
@@ -507,7 +519,8 @@ const styles = StyleSheet.create({
   bottomCard: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    paddingVertical: 20,
+    paddingTop: scale(20),
+    paddingBottom: scale(6),
     paddingHorizontal: 14,
     elevation: 2,
   },
@@ -516,7 +529,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  smallTitle: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
+  smallTitle: { fontSize: 25, fontWeight: '500', marginBottom: 4 },
   smallBody: { fontSize: 12, color: '#4B5563' },
 
   /* 레벨/경험치 */
@@ -766,9 +779,72 @@ const styles = StyleSheet.create({
   },
   lineGraphContainer: {
     minHeight: scale(120),
-    marginVertical: scale(12),
-    justifyContent: 'center',
+    marginTop: scale(8),
+    marginBottom: scale(4),
+    justifyContent: 'flex-start',
     alignItems: 'center',
+  },
+  lineChartWrapper: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  lineChartContainer: {
+    width: '100%',
+    height: scale(210),
+    position: 'relative',
+    marginBottom: 0,
+  },
+  graphBackground: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'transparent',
+  } as any,
+  svgOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  } as any,
+  xAxisLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    paddingHorizontal: scale(20),
+    marginTop: scale(8),
+  },
+  xAxisLabel: {
+    fontSize: fontScale(11),
+    color: '#6B7280',
+  },
+  graphStatsBox: {
+    alignItems: 'center',
+    marginTop: scale(16),
+    paddingVertical: scale(12),
+    paddingHorizontal: scale(16),
+    backgroundColor: '#F0F4FF',
+    borderRadius: scale(8),
+  },
+  graphStatsTextContainer: {
+    alignItems: 'flex-start',
+    marginTop: -scale(80),
+    paddingLeft: scale(20),
+    width: '100%',
+    includeFontPadding: false
+  },
+  graphStatsLabel: {
+    fontSize: fontScale(11),
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  graphStatsText: {
+    fontSize: fontScale(12),
+    color: '#6B7280',
+    marginBottom: scale(4),
+  },
+  graphStatsValue: {
+    fontSize: fontScale(20),
+    fontWeight: '800',
+    color: '#5E82FF',
   },
   barChartContainer: {
     flexDirection: 'row',

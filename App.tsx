@@ -57,13 +57,15 @@ export default function App() {
   const [isReviewMode, setIsReviewMode] = useState(false); // 복습 모드 여부
   const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습할 quiz ID
   const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
+  const [subjectName, setSubjectName] = useState('');
+  const [cropInfo, setCropInfo] = useState<{ px: number; py: number; pw: number; ph: number } | null>(null);
   const [rewardState, setRewardState] = useState({
     baseXP: 0,
     bonusXP: 0,
     showBase: false,
     showBonus: false,
   });
-  
+
   // 학습 통계 상태
   const [totalStudyCount, setTotalStudyCount] = useState(0);
   const [continuousDays, setContinuousDays] = useState(0);
@@ -73,8 +75,8 @@ export default function App() {
     const loadStats = async () => {
       try {
         const stats = await getMonthlyStats();
-        setTotalStudyCount(stats.total_study_count || 0);
-        setContinuousDays(stats.continuous_days || 0);
+        setTotalStudyCount(stats.compare?.this_month_count || 0);
+        setContinuousDays(stats.compare?.diff || 0);
       } catch (error) {
         console.error('학습 통계 불러오기 실패:', error);
       }
@@ -433,8 +435,10 @@ export default function App() {
         <SelectPicture
           sources={capturedSources}
           onBack={() => setStep('takePicture')}
-          onStartLearning={async (finalSources, isOcrNeeded) => {
+          onStartLearning={async (finalSources, isOcrNeeded, subject, cropInfo) => {
             setCapturedSources(finalSources);
+            if (subject) setSubjectName(subject);
+            if (cropInfo) setCropInfo(cropInfo);
 
             // 1) OCR 요청 (필요할 때만)
             const first = finalSources[0] as any;
@@ -451,15 +455,17 @@ export default function App() {
             setScaffoldingError(null);
 
             try {
-              const payload = await runOcr(uri);
+              const payload = await runOcr(uri, cropInfo);
               console.log('✅ OCR 성공, payload:', payload);
               setScaffoldingPayload(payload);
-              setStep('scaffolding'); // OCR 성공 시 scaffolding으로 이동
+              // 음성학습 스킵하고 바로 scaffolding으로
+              setStep('scaffolding');
             } catch (e: any) {
               console.error('❌ OCR 실패:', e);
               setScaffoldingPayload(null);
               setScaffoldingError(e?.message ?? 'OCR 호출에 실패했습니다.');
-              setStep('talkingStudy'); // OCR 실패 시에만 talkingStudy로
+              // OCR 실패 시 홈으로 돌아가기
+              setStep('home');
             } finally {
               setScaffoldingLoading(false);
             }
@@ -477,9 +483,20 @@ export default function App() {
       {step === 'scaffolding' && (
         <ScaffoldingScreen
           onBack={() => {
+            // 복습 모드에서는 복습 화면으로
+            if (isReviewMode) {
+              setIsReviewMode(false);
+              setReviewQuizId(null);
+              setStep('brushup');
+            } else {
+              setStep('talkingStudy');
+            }
+          }}
+          onBackFromCompletion={() => {
+            // 학습 완료 후 홈으로
             setIsReviewMode(false);
             setReviewQuizId(null);
-            setStep('talkingStudy');
+            setStep('home');
           }}
           sources={capturedSources}
           selectedIndex={selectedSourceIndex}
@@ -488,6 +505,7 @@ export default function App() {
           error={scaffoldingError}
           initialRound={isReviewMode ? '3-1' : '1-1'} // 복습 모드면 3라운드로 시작
           reviewQuizId={reviewQuizId} // 복습할 quiz ID 전달
+          subjectName={subjectName} // 과목명 전달
           onRetry={async () => {
             const first = capturedSources[0] as any;
             const uri = first?.uri as string | undefined;
@@ -506,6 +524,14 @@ export default function App() {
             }
           }}
           onSave={async (userAnswers) => {
+            // 복습 모드에서는 저장하지 않음
+            if (isReviewMode) {
+              setIsReviewMode(false);
+              setReviewQuizId(null);
+              setStep('home');
+              return;
+            }
+
             if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
 
             const blanks = scaffoldingPayload.blanks ?? [];

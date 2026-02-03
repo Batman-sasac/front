@@ -28,7 +28,7 @@ export default function TypeTestScreen({ onFinish }: Props) {
 
     const current = questions[index];
 
-    const handleAnswer = (answer: 'yes' | 'no') => {
+    const handleAnswer = (answer: 'a' | 'b') => {
         const nextScore = applyAnswer(score, index, answer);
 
         const isLast = index === total - 1;
@@ -82,19 +82,25 @@ export default function TypeTestScreen({ onFinish }: Props) {
                     <Text style={styles.questionText}>{current.text}</Text>
 
                     <View style={styles.buttonRow}>
-                        <Pressable
-                            style={[styles.choiceButton, styles.yesButton]}
-                            onPress={() => handleAnswer('yes')}
-                        >
-                            <Text style={[styles.choiceLabel, styles.choiceLabelYes]}>O</Text>
-                        </Pressable>
+                        <View style={styles.choiceCol}>
+                            <Pressable
+                                style={[styles.choiceButton, styles.yesButton]}
+                                onPress={() => handleAnswer('a')}
+                            >
+                                <Text style={[styles.choiceLabel, styles.choiceLabelYes]}>A</Text>
+                            </Pressable>
+                            <Text style={styles.choiceText}>{current.aText}</Text>
+                        </View>
 
-                        <Pressable
-                            style={[styles.choiceButton, styles.noButton]}
-                            onPress={() => handleAnswer('no')}
-                        >
-                            <Text style={[styles.choiceLabel, styles.choiceLabelNo]}>X</Text>
-                        </Pressable>
+                        <View style={styles.choiceCol}>
+                            <Pressable
+                                style={[styles.choiceButton, styles.noButton]}
+                                onPress={() => handleAnswer('b')}
+                            >
+                                <Text style={[styles.choiceLabel, styles.choiceLabelNo]}>B</Text>
+                            </Pressable>
+                            <Text style={styles.choiceText}>{current.bText}</Text>
+                        </View>
                     </View>
                 </View>
             </View>
@@ -188,6 +194,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: scale(16),
     },
+    choiceCol: {
+        alignItems: 'center',
+        width: scale(130),
+    },
 
     choiceButton: {
         width: scale(96),
@@ -212,5 +222,12 @@ const styles = StyleSheet.create({
     },
     choiceLabelNo: {
         color: '#F97373',
+    },
+    choiceText: {
+        marginTop: scale(8),
+        fontSize: fontScale(12),
+        color: '#374151',
+        textAlign: 'center',
+        lineHeight: fontScale(16),
     },
 });

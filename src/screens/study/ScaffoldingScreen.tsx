@@ -38,6 +38,7 @@ export type ScaffoldingPayload = {
 
 type Props = {
     onBack: () => void;
+    onBackFromCompletion?: () => void; // 학습 완료 후 뒤로가기
     sources: ImageSourcePropType[];
     selectedIndex: number;
 
@@ -48,6 +49,7 @@ type Props = {
     onSave?: (answers: string[]) => Promise<void>;
     initialRound?: Step; // 초기 라운드 설정 (복습용)
     reviewQuizId?: number | null; // 복습할 quiz ID
+    subjectName?: string; // 과목명
 };
 
 const BG = '#F6F7FB';
@@ -61,6 +63,7 @@ const WRONG_BG = '#FF9CAD';
 
 export default function ScaffoldingScreen({
     onBack,
+    onBackFromCompletion,
     sources,
     selectedIndex,
     payload,
@@ -76,7 +79,102 @@ export default function ScaffoldingScreen({
     // 복습 모드는 별도 로드 없이 initialRound만 사용
     // (실제 데이터는 이미 학습 완료된 상태이므로 payload 재사용)
 
-    /** 로딩/에러 */
+    // ✅ Hook은 반드시 조건부 로직 BEFORE 호출되어야 함
+    // 아래 모든 hook들을 먼저 정의
+    const [selectedWord, setSelectedWord] = useState<BlankItem | null>(null);
+    const [activeBlankId, setActiveBlankId] = useState<number | null>(null);
+    const [answers, setAnswers] = useState<Record<number, string>>({}); // instanceId 기반
+    const [graded, setGraded] = useState<Record<number, GradeState>>({}); // blankId 기반
+    const [wrongInstances, setWrongInstances] = useState<Set<number>>(new Set());
+    const [hintWord, setHintWord] = useState<number | null>(null);
+    const [hintType, setHintType] = useState<'first' | 'last' | 'chosung' | null>(null); // 선택된 힌트 타입
+
+    const inputRefs = useRef<Record<number, TextInput | null>>({});
+    const blankRefs = useRef<Record<number, View | null>>({}); // blankBox 위치 추적
+
+    // 안전한 값들 (payload가 없어도 안전)
+    const title = payload?.title ?? '';
+    const extractedText = payload?.extractedText ?? '';
+    const blankDefs = payload?.blanks ?? [];
+
+    /** 키워드 목록 */
+    const keywordList = useMemo(() => blankDefs.map((b) => b.word), [blankDefs]);
+    const baseInfoByWord = useMemo(() => {
+        const m = new Map<string, BlankItem>();
+        blankDefs.forEach((b) => {
+            if (!m.has(b.word)) m.set(b.word, b);
+        });
+        return m;
+    }, [blankDefs]);
+
+    /** ✅ 핵심: 중복 단어도 등장마다 instanceId를 부여해서 “각 칸이 독립 입력” 되게 함 */
+    const tokens = useMemo(() => {
+        const raw = tokenizeWithKeywords(extractedText, keywordList);
+        let seq = 1;
+        return raw.map((t) => (t.type === 'keyword' ? { ...t, instanceId: seq++ } : t));
+    }, [extractedText, keywordList]);
+
+    const keywordInstances = useMemo(() => {
+        const instances = tokens
+            .filter((t): t is KeywordTokenWithId => t.type === 'keyword')
+            .map((t, idx) => {
+                // blank.id 또는 배열 인덱스로 blank 식별
+                const blankItem = blankDefs[idx] ?? null;
+                return {
+                    instanceId: t.instanceId,  // UI 렌더링용 시퀀스
+                    blankId: blankItem?.id ?? idx,  // 데이터 저장/전송용 (blank_index)
+                    word: t.value,
+                    base: baseInfoByWord.get(t.baseWord) ?? null,
+                };
+            });
+        // 최대 20개로 제한
+        return instances.slice(0, 20);
+    }, [tokens, baseInfoByWord, blankDefs]);
+
+    // 전체 단어를 20개로 제한
+    const totalKeywordCount = Math.min(20, keywordInstances.length);
+    const totalBars = 20;
+    const round1Count = Math.min(5, totalKeywordCount);
+    const round2Count = Math.min(12, totalKeywordCount);
+    const round3Count = Math.min(20, totalKeywordCount);
+
+    const currentRound = useMemo(() => {
+        if (step.startsWith('1-')) return 1;
+        if (step.startsWith('2-')) return 2;
+        if (step.startsWith('3-')) return 3;
+        return 1;
+    }, [step]);
+
+    const activeWordCount = useMemo(() => {
+        if (currentRound === 1) return round1Count;
+        if (currentRound === 2) return round2Count;
+        return round3Count;
+    }, [currentRound]);
+
+    const correctCount = useMemo(
+        () => Object.values(graded).filter((g) => g === 'correct').length,
+        [graded]
+    );
+
+    const barStates: GradeState[] = useMemo(() => {
+        const arr: GradeState[] = Array.from({ length: totalBars }, () => 'idle');
+        const isFinalStep = step.endsWith('-3');
+        if (!isFinalStep) return arr;
+
+        keywordInstances.slice(0, totalBars).forEach((ins, idx) => {
+            arr[idx] = graded[ins.blankId] ?? 'idle';
+        });
+        return arr;
+    }, [keywordInstances, graded, step]);
+
+    const roundLabel = useMemo(() => {
+        const [round, substep] = step.split('-');
+        const roundNum = round;
+        const label = substep === '1' ? '단어 확인' : substep === '2' ? '빈칸 학습' : '학습 채점';
+        return `Round ${roundNum} - ${label}`;
+    }, [step]);
+
+    /** 로딩/에러 (모든 Hook 호출 이후) */
     if (loading) {
         return (
             <View style={[styles.root, styles.center]}>
@@ -104,92 +202,11 @@ export default function ScaffoldingScreen({
         );
     }
 
-    const title = payload.title ?? '';
-    const extractedText = payload.extractedText ?? '';
-    const blankDefs = payload.blanks ?? [];
-
-    /** 뜻(지금은 meaningLong만) 모달 */
-    const [selectedWord, setSelectedWord] = useState<BlankItem | null>(null);
-
-    /** 키워드 목록 */
-    const keywordList = useMemo(() => blankDefs.map((b) => b.word), [blankDefs]);
-    const baseInfoByWord = useMemo(() => {
-        const m = new Map<string, BlankItem>();
-        blankDefs.forEach((b) => {
-            if (!m.has(b.word)) m.set(b.word, b);
-        });
-        return m;
-    }, [blankDefs]);
-
-    /** ✅ 핵심: 중복 단어도 등장마다 instanceId를 부여해서 “각 칸이 독립 입력” 되게 함 */
-    const tokens = useMemo(() => {
-        const raw = tokenizeWithKeywords(extractedText, keywordList);
-        let seq = 1;
-        return raw.map((t) => (t.type === 'keyword' ? { ...t, instanceId: seq++ } : t));
-    }, [extractedText, keywordList]);
-
-    const keywordInstances = useMemo(() => {
-        return tokens
-            .filter((t): t is KeywordTokenWithId => t.type === 'keyword')
-            .map((t) => ({
-                instanceId: t.instanceId,
-                word: t.value,
-                base: baseInfoByWord.get(t.baseWord) ?? null,
-            }));
-    }, [tokens, baseInfoByWord]);
-
-    /** 입력/채점 상태: instanceId 기준 */
-    const inputRefs = useRef<Record<number, TextInput | null>>({});
-    const [activeBlankId, setActiveBlankId] = useState<number | null>(null);
-    const [answers, setAnswers] = useState<Record<number, string>>({});
-    const [graded, setGraded] = useState<Record<number, GradeState>>({});
-    /** 라운드별로 틀린 문제 추적 (누적) */
-    const [wrongInstances, setWrongInstances] = useState<Set<number>>(new Set());
-
-    const totalKeywordCount = keywordInstances.length;
-    const totalBars = Math.max(20, totalKeywordCount);
-    const round1Count = Math.min(5, totalKeywordCount);
-    const round2Count = Math.min(12, totalKeywordCount);
-    const round3Count = totalKeywordCount;
-
-    const currentRound = useMemo(() => {
-        if (step.startsWith('1-')) return 1;
-        if (step.startsWith('2-')) return 2;
-        if (step.startsWith('3-')) return 3;
-        return 1;
-    }, [step]);
-
-    const activeWordCount = useMemo(() => {
-        if (currentRound === 1) return round1Count;
-        if (currentRound === 2) return round2Count;
-        return round3Count;
-    }, [currentRound]);
-
-    const correctCount = useMemo(
-        () => Object.values(graded).filter((g) => g === 'correct').length,
-        [graded]
-    );
-
-    const barStates: GradeState[] = useMemo(() => {
-        const arr: GradeState[] = Array.from({ length: totalBars }, () => 'idle');
-        const isFinalStep = step.endsWith('-3');
-        if (!isFinalStep) return arr;
-
-        keywordInstances.slice(0, totalBars).forEach((ins, idx) => {
-            arr[idx] = graded[ins.instanceId] ?? 'idle';
-        });
-        return arr;
-    }, [keywordInstances, graded, step]);
-
-    const roundLabel = useMemo(() => {
-        const [round, substep] = step.split('-');
-        const roundNum = round;
-        const label = substep === '1' ? '단어 확인' : substep === '2' ? '빈칸 학습' : '학습 채점';
-        return `Round ${roundNum} - ${label}`;
-    }, [step]);
-
     const onReselectWords = () => {
-        Alert.alert('단어 재선정', '추후 백엔드/AI 단어 재선정 API로 교체할 예정입니다.');
+        // 현재 라운드의 -1 단계로 돌아가기
+        if (step === '1-2') setStep('1-1');
+        else if (step === '2-2') setStep('2-1');
+        else if (step === '3-2') setStep('3-1');
     };
     const onStartLearning = () => {
         setSelectedWord(null);
@@ -197,30 +214,72 @@ export default function ScaffoldingScreen({
         else if (step === '2-1') setStep('2-2');
         else if (step === '3-1') setStep('3-2');
     };
-    const onLongPressBlank = () => {
-        Alert.alert('힌트', '추후 기능입니다. (롱프레스 로직만 구현됨)');
+    const onLongPressBlank = (instanceId: number) => {
+        setHintWord(instanceId);
     };
     const onPressBlank = (instanceId: number) => {
         setActiveBlankId(instanceId);
         requestAnimationFrame(() => inputRefs.current[instanceId]?.focus());
     };
+
+    // 한글 초성 추출 함수 (정확한 유니코드 계산)
+    const getChosung = (char: string): string => {
+        const code = char.charCodeAt(0);
+
+        // 한글 범위: AC00(가) ~ D7A3(힣)
+        if (code < 0xac00 || code > 0xd7a3) {
+            return ''; // 한글이 아니면 빈 문자열 반환
+        }
+
+        // 초성 리스트 (19개)
+        const chosungList = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+
+        // 한글 음절 = 초성 * 588 + 중성 * 28 + 종성
+        const temp = code - 0xac00;
+        const chosungIndex = Math.floor(temp / 588);
+
+        return chosungList[chosungIndex] || '';
+    };
+
+    // 힌트 함수들
+    const getFirstLetter = (word: string): string => word[0] || '';
+    const getLastLetter = (word: string): string => word[word.length - 1] || '';
+    const getChosungText = (word: string): string => {
+        let result = '';
+        for (const char of word) {
+            const chosung = getChosung(char);
+            if (chosung) result += chosung;
+        }
+        return result;
+    };
+
+    const applyHint = (type: 'first' | 'last' | 'chosung', word: string, instanceId: number) => {
+        let hint = '';
+        if (type === 'first') hint = getFirstLetter(word);
+        else if (type === 'last') hint = getLastLetter(word);
+        else hint = getChosungText(word);
+
+        setAnswers(prev => ({ ...prev, [instanceId]: hint }));
+        setHintType(type); // 선택된 타입만 표시, 말풍선 유지
+    };
+
     const onGrade = () => {
         const next: Record<number, GradeState> = { ...graded };
         const newWrong = new Set(wrongInstances);
 
         keywordInstances.slice(0, activeWordCount).forEach((ins) => {
             // 이미 이전 라운드에서 맞췄으면 그대로 유지
-            if (next[ins.instanceId] === 'correct') return;
+            if (next[ins.blankId] === 'correct') return;
 
             const user = (answers[ins.instanceId] ?? '').trim();
             const isCorrect = normalize(user) === normalize(ins.word);
 
             if (isCorrect) {
-                next[ins.instanceId] = 'correct';
-                newWrong.delete(ins.instanceId);
+                next[ins.blankId] = 'correct';
+                newWrong.delete(ins.blankId);
             } else {
-                next[ins.instanceId] = 'wrong';
-                newWrong.add(ins.instanceId);
+                next[ins.blankId] = 'wrong';
+                newWrong.add(ins.blankId);
             }
         });
 
@@ -318,7 +377,7 @@ export default function ScaffoldingScreen({
 
                     {(step === '1-1' || step === '2-1' || step === '3-1') && (
                         <View style={styles.buttonGroup}>
-                            {step === '1-1' && (
+                            {(step === '1-1' || step === '2-1' || step === '3-1') && (
                                 <Pressable style={styles.imgBtnWrap} onPress={onReselectWords}>
                                     <Image
                                         source={require('../../../assets/study/re-selection-button.png')}
@@ -382,28 +441,37 @@ export default function ScaffoldingScreen({
                     )}
 
                     {step === '3-3' && (
-                        <Pressable
-                            style={styles.imgBtnWrap}
-                            onPress={async () => {
-                                if (onSave) {
-                                    try {
-                                        const answerList = keywordInstances.map((ins) =>
-                                            answers[ins.instanceId] ?? ''
-                                        );
-                                        await onSave(answerList);
-                                    } catch (e: any) {
-                                        Alert.alert('저장 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
+                        <View style={styles.buttonGroup}>
+                            <Pressable
+                                style={styles.imgBtnWrap}
+                                onPress={async () => {
+                                    if (onSave) {
+                                        try {
+                                            // blankDefs(blank_index) 순서로 답변 정렬
+                                            const answerList = blankDefs.map((blank) => {
+                                                const instance = keywordInstances.find((ki) => ki.blankId === blank.id);
+                                                return instance ? (answers[instance.instanceId] ?? '') : '';
+                                            });
+                                            await onSave(answerList);
+                                        } catch (e: any) {
+                                            Alert.alert('저장 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
+                                        }
                                     }
-                                }
-                                onBack();
-                            }}
-                        >
-                            <Image
-                                source={require('../../../assets/study/finish_study.png')}
-                                style={styles.startImg}
-                                resizeMode="contain"
-                            />
-                        </Pressable>
+                                    // 학습 완료 후 콜백 실행
+                                    if (onBackFromCompletion) {
+                                        onBackFromCompletion();
+                                    } else {
+                                        onBack();
+                                    }
+                                }}
+                            >
+                                <Image
+                                    source={require('../../../assets/study/finish_study.png')}
+                                    style={styles.startImg}
+                                    resizeMode="contain"
+                                />
+                            </Pressable>
+                        </View>
                     )}
                 </View>
 
@@ -418,7 +486,7 @@ export default function ScaffoldingScreen({
 
                                 const base = baseInfoByWord.get(t.baseWord) ?? null;
                                 const instanceId = t.instanceId;
-                                const grade = graded[instanceId] ?? 'idle';
+                                const grade = graded[t.blankId] ?? 'idle';
                                 const userValue = answers[instanceId] ?? '';
                                 const substep = step.split('-')[1];
                                 const instanceIdx = keywordInstances.findIndex(ki => ki.instanceId === instanceId);
@@ -449,7 +517,7 @@ export default function ScaffoldingScreen({
                                         <Pressable
                                             key={idx}
                                             onPress={() => onPressBlank(instanceId)}
-                                            onLongPress={onLongPressBlank}
+                                            onLongPress={() => onLongPressBlank(instanceId)}
                                             delayLongPress={450}
                                             style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
                                         >
@@ -506,6 +574,49 @@ export default function ScaffoldingScreen({
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            {/* 힌트 말풍선 - Absolute positioning으로 단어 위에 표시 */}
+            {hintWord !== null && (
+                (() => {
+                    const hintInstance = keywordInstances.find(ki => ki.instanceId === hintWord);  // instanceId로 찾음
+                    return (
+                        <Modal visible={true} transparent onRequestClose={() => { setHintWord(null); setHintType(null); }}>
+                            <Pressable
+                                style={styles.hintModalOverlay}
+                                onPress={() => { setHintWord(null); setHintType(null); }}
+                            >
+                                {/* 말풍선 박스 */}
+                                <View style={styles.hintBalloonContainer}>
+                                    <View style={styles.hintBalloon}>
+                                        <View style={styles.hintContent}>
+                                            <Pressable
+                                                style={[styles.hintButton, hintType === 'first' && styles.hintButtonActive, hintType !== 'first' && styles.hintButtonInactive]}
+                                                onPress={() => hintInstance && applyHint('first', hintInstance.word, hintWord)}
+                                            >
+                                                <Text style={[styles.hintButtonText, hintType === 'first' && styles.hintButtonTextActive, hintType !== 'first' && styles.hintButtonTextInactive]}>H1</Text>
+                                            </Pressable>
+                                            <Pressable
+                                                style={[styles.hintButton, hintType === 'last' && styles.hintButtonActive, hintType !== 'last' && styles.hintButtonInactive]}
+                                                onPress={() => hintInstance && applyHint('last', hintInstance.word, hintWord)}
+                                            >
+                                                <Text style={[styles.hintButtonText, hintType === 'last' && styles.hintButtonTextActive, hintType !== 'last' && styles.hintButtonTextInactive]}>H2</Text>
+                                            </Pressable>
+                                            <Pressable
+                                                style={[styles.hintButton, hintType === 'chosung' && styles.hintButtonActive, hintType !== 'chosung' && styles.hintButtonInactive]}
+                                                onPress={() => hintInstance && applyHint('chosung', hintInstance.word, hintWord)}
+                                            >
+                                                <Text style={[styles.hintButtonText, hintType === 'chosung' && styles.hintButtonTextActive, hintType !== 'chosung' && styles.hintButtonTextInactive]}>H3</Text>
+                                            </Pressable>
+                                        </View>
+                                        {/* 말풍선 꼬리 - 아래쪽 */}
+                                        <View style={styles.hintArrow} />
+                                    </View>
+                                </View>
+                            </Pressable>
+                        </Modal>
+                    );
+                })()
+            )}
         </KeyboardAvoidingView>
     );
 }
@@ -756,9 +867,22 @@ const styles = StyleSheet.create({
     blankInput: { padding: 0, margin: 0, fontSize: fontScale(13), fontWeight: '600', color: '#111827', lineHeight: fontScale(20) },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(18) },
+    hintModalOverlay: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(18) },
     modalCard: { width: '100%', maxWidth: scale(430), backgroundColor: '#FFFFFF', borderRadius: scale(16), paddingHorizontal: scale(18), paddingTop: scale(18), paddingBottom: scale(16) },
     modalClose: { position: 'absolute', right: scale(12), top: scale(10), width: scale(32), height: scale(32), borderRadius: scale(16), alignItems: 'center', justifyContent: 'center' },
     modalCloseText: { fontSize: fontScale(22), fontWeight: '900', color: '#9CA3AF' },
     modalWord: { fontSize: fontScale(20), fontWeight: '900', color: '#111827', marginBottom: scale(8) },
     modalLong: { fontSize: fontScale(12), fontWeight: '700', color: '#111827', lineHeight: fontScale(18) },
+
+    hintModalOverlay: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(18) },
+    hintBalloonContainer: { alignItems: 'center', justifyContent: 'center' },
+    hintBalloon: { backgroundColor: '#FFFFFF', borderRadius: scale(12), paddingHorizontal: scale(12), paddingVertical: scale(8), shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+    hintContent: { flexDirection: 'row', gap: scale(8), justifyContent: 'center' },
+    hintButton: { paddingHorizontal: scale(12), paddingVertical: scale(6), borderRadius: scale(6), minWidth: scale(48), alignItems: 'center', justifyContent: 'center' },
+    hintButtonActive: { backgroundColor: '#5E82FF' },
+    hintButtonInactive: { backgroundColor: '#E5E7EB' },
+    hintButtonText: { fontSize: fontScale(13), fontWeight: '700' },
+    hintButtonTextActive: { color: '#FFFFFF' },
+    hintButtonTextInactive: { color: '#9CA3AF' },
+    hintArrow: { width: 0, height: 0, borderLeftWidth: scale(8), borderRightWidth: scale(8), borderBottomWidth: scale(8), borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#FFFFFF', alignSelf: 'center', marginTop: scale(0) } as any,
 });
