@@ -88,6 +88,7 @@ export default function ScaffoldingScreen({
     const [wrongInstances, setWrongInstances] = useState<Set<number>>(new Set());
     const [hintWord, setHintWord] = useState<number | null>(null);
     const [hintType, setHintType] = useState<'first' | 'last' | 'chosung' | null>(null); // 선택된 힌트 타입
+    const [hintPosition, setHintPosition] = useState<{ x: number; y: number } | null>(null); // 힌트 모달 위치
 
     const inputRefs = useRef<Record<number, TextInput | null>>({});
     const blankRefs = useRef<Record<number, View | null>>({}); // blankBox 위치 추적
@@ -174,6 +175,25 @@ export default function ScaffoldingScreen({
         return `Round ${roundNum} - ${label}`;
     }, [step]);
 
+    // 힌트 모달이 닫힐 때 (hintWord가 null이 될 때) 힌트 입력값 지우기
+    useEffect(() => {
+        if (hintWord === null && hintType !== null) {
+            // 모달이 닫혔을 때 모든 힌트 입력값 지우기
+            setAnswers((prev) => {
+                const newAnswers = { ...prev };
+                Object.keys(newAnswers).forEach((keyStr) => {
+                    const key = parseInt(keyStr, 10);
+                    const val = newAnswers[key];
+                    // 힌트만 입력된 경우 (첫글자, 마지막글자, 초성) 지우기
+                    if (val && (val.length === 1 || /^[ㄱ-ㅎ]+$/.test(val))) {
+                        delete newAnswers[key];
+                    }
+                });
+                return newAnswers;
+            });
+        }
+    }, [hintWord]);
+
     /** 로딩/에러 (모든 Hook 호출 이후) */
     if (loading) {
         return (
@@ -216,9 +236,24 @@ export default function ScaffoldingScreen({
     };
     const onLongPressBlank = (instanceId: number) => {
         setHintWord(instanceId);
+        setHintType(null);
+
+        // 빈칸 좌표 추적
+        const blankRef = blankRefs.current[instanceId];
+        if (blankRef) {
+            blankRef.measure((fx, fy, width, height, px, py) => {
+                setHintPosition({
+                    x: px + width / 2,
+                    y: py - 80, // 빈칸 상단에 표시 (모달 높이만큼 위로)
+                });
+            });
+        }
     };
     const onPressBlank = (instanceId: number) => {
         setActiveBlankId(instanceId);
+        setHintWord(null);
+        setHintType(null);
+        setHintPosition(null);
         requestAnimationFrame(() => inputRefs.current[instanceId]?.focus());
     };
 
@@ -255,9 +290,13 @@ export default function ScaffoldingScreen({
 
     const applyHint = (type: 'first' | 'last' | 'chosung', word: string, instanceId: number) => {
         let hint = '';
-        if (type === 'first') hint = getFirstLetter(word);
-        else if (type === 'last') hint = getLastLetter(word);
-        else hint = getChosungText(word);
+        if (type === 'first') {
+            hint = getFirstLetter(word); // 첫 글자만
+        } else if (type === 'last') {
+            hint = getLastLetter(word); // 마지막 글자만
+        } else {
+            hint = getChosungText(word); // 초성
+        }
 
         setAnswers(prev => ({ ...prev, [instanceId]: hint }));
         setHintType(type); // 선택된 타입만 표시, 말풍선 유지
@@ -486,7 +525,8 @@ export default function ScaffoldingScreen({
 
                                 const base = baseInfoByWord.get(t.baseWord) ?? null;
                                 const instanceId = t.instanceId;
-                                const grade = graded[t.blankId] ?? 'idle';
+                                const instanceInfo = keywordInstances.find(ki => ki.instanceId === instanceId);
+                                const grade = instanceInfo ? (graded[instanceInfo.blankId] ?? 'idle') : 'idle';
                                 const userValue = answers[instanceId] ?? '';
                                 const substep = step.split('-')[1];
                                 const instanceIdx = keywordInstances.findIndex(ki => ki.instanceId === instanceId);
@@ -513,26 +553,33 @@ export default function ScaffoldingScreen({
                                         );
                                     }
                                     const isActive = activeBlankId === instanceId;
+                                    const hintInstance = keywordInstances.find(ki => ki.instanceId === instanceId);
+                                    const currentHintType = hintWord === instanceId ? hintType : null;
+                                    const textAlign = currentHintType === 'last' ? 'right' : 'left';
                                     return (
-                                        <Pressable
+                                        <View
                                             key={idx}
-                                            onPress={() => onPressBlank(instanceId)}
-                                            onLongPress={() => onLongPressBlank(instanceId)}
-                                            delayLongPress={450}
-                                            style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
+                                            ref={(r) => { if (r) blankRefs.current[instanceId] = r; }}
                                         >
-                                            <View style={{ position: 'relative' }}>
-                                                <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
-                                                <TextInput
-                                                    ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
-                                                    value={userValue}
-                                                    onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
-                                                    style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
-                                                    blurOnSubmit
-                                                    onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
-                                                />
-                                            </View>
-                                        </Pressable>
+                                            <Pressable
+                                                onPress={() => onPressBlank(instanceId)}
+                                                onLongPress={() => onLongPressBlank(instanceId)}
+                                                delayLongPress={450}
+                                                style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
+                                            >
+                                                <View style={{ position: 'relative' }}>
+                                                    <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
+                                                    <TextInput
+                                                        ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
+                                                        value={userValue}
+                                                        onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
+                                                        style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
+                                                        blurOnSubmit
+                                                        onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
+                                                    />
+                                                </View>
+                                            </Pressable>
+                                        </View>
                                     );
                                 }
 
@@ -580,13 +627,31 @@ export default function ScaffoldingScreen({
                 (() => {
                     const hintInstance = keywordInstances.find(ki => ki.instanceId === hintWord);  // instanceId로 찾음
                     return (
-                        <Modal visible={true} transparent onRequestClose={() => { setHintWord(null); setHintType(null); }}>
+                        <Modal visible={true} transparent onRequestClose={() => {
+                            setHintWord(null);
+                            setHintType(null);
+                            setHintPosition(null);
+                        }}>
                             <Pressable
                                 style={styles.hintModalOverlay}
-                                onPress={() => { setHintWord(null); setHintType(null); }}
+                                onPress={() => {
+                                    setHintWord(null);
+                                    setHintType(null);
+                                    setHintPosition(null);
+                                }}
                             >
                                 {/* 말풍선 박스 */}
-                                <View style={styles.hintBalloonContainer}>
+                                <View
+                                    style={[
+                                        styles.hintBalloonContainer,
+                                        hintPosition && {
+                                            position: 'absolute' as const,
+                                            top: hintPosition.y,
+                                            left: hintPosition.x,
+                                            transform: [{ translateX: -60 }],
+                                        },
+                                    ]}
+                                >
                                     <View style={styles.hintBalloon}>
                                         <View style={styles.hintContent}>
                                             <Pressable
@@ -867,14 +932,13 @@ const styles = StyleSheet.create({
     blankInput: { padding: 0, margin: 0, fontSize: fontScale(13), fontWeight: '600', color: '#111827', lineHeight: fontScale(20) },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(18) },
-    hintModalOverlay: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(18) },
     modalCard: { width: '100%', maxWidth: scale(430), backgroundColor: '#FFFFFF', borderRadius: scale(16), paddingHorizontal: scale(18), paddingTop: scale(18), paddingBottom: scale(16) },
     modalClose: { position: 'absolute', right: scale(12), top: scale(10), width: scale(32), height: scale(32), borderRadius: scale(16), alignItems: 'center', justifyContent: 'center' },
     modalCloseText: { fontSize: fontScale(22), fontWeight: '900', color: '#9CA3AF' },
     modalWord: { fontSize: fontScale(20), fontWeight: '900', color: '#111827', marginBottom: scale(8) },
     modalLong: { fontSize: fontScale(12), fontWeight: '700', color: '#111827', lineHeight: fontScale(18) },
 
-    hintModalOverlay: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(18) },
+    hintModalOverlay: { flex: 1, backgroundColor: 'transparent', paddingHorizontal: scale(18) },
     hintBalloonContainer: { alignItems: 'center', justifyContent: 'center' },
     hintBalloon: { backgroundColor: '#FFFFFF', borderRadius: scale(12), paddingHorizontal: scale(12), paddingVertical: scale(8), shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
     hintContent: { flexDirection: 'row', gap: scale(8), justifyContent: 'center' },
