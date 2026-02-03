@@ -1,6 +1,8 @@
 // API Base URL - 실제 백엔드 서버 주소로 변경 필요
 const API_BASE_URL = 'http://127.0.0.1:8000';
 
+import { getToken } from '../lib/storage';
+
 export interface LoginResponse {
     status: 'success' | 'nickname_required' | 'NICKNAME_REQUIRED';
     token?: string;
@@ -49,11 +51,16 @@ export async function setNickname(
     email: string,
     socialId: string
 ): Promise<SetNicknameResponse> {
+    const token = await getToken();
+    if (!token) {
+        throw new Error('로그인이 필요합니다. 토큰이 없습니다.');
+    }
     const endpoint = `${API_BASE_URL}/auth/set-nickname`;
     const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
             nickname,
