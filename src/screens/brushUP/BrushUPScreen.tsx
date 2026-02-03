@@ -173,11 +173,31 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
         setDeleteModalVisible(true);
     };
 
-    const handleConfirmDelete = () => {
-        // TODO: 실제 삭제 로직 구현
-        console.log('카드 삭제:', cardToDelete?.id);
-        setDeleteModalVisible(false);
-        setCardToDelete(null);
+    const handleConfirmDelete = async () => {
+        if (!cardToDelete) return;
+
+        try {
+            const token = await getToken();
+            const response = await fetch(`${API_BASE_URL}/ocr/ocr-data/delete/${cardToDelete.quiz_id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+
+            if (response.ok) {
+                // 카드 목록에서 제거
+                setCards(prevCards => prevCards.filter(c => c.id !== cardToDelete.id));
+                setDeleteModalVisible(false);
+                setCardToDelete(null);
+            } else {
+                console.error('삭제 실패:', await response.text());
+                alert('삭제에 실패했습니다.');
+            }
+        } catch (error) {
+            console.error('삭제 에러:', error);
+            alert('삭제 중 오류가 발생했습니다.');
+        }
     };
 
     const handleCancelDelete = () => {
@@ -274,22 +294,22 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
                                 <Pressable
                                     style={styles.closeBtn}
                                     hitSlop={10}
-                                    onPress={() => handleDeletePress(card)}
+                                    onPress={(e) => {
+                                        e.stopPropagation(); // 카드 클릭 이벤트 차단
+                                        handleDeletePress(card);
+                                    }}
                                 >
                                     <Text style={styles.closeText}>×</Text>
                                 </Pressable>
 
                                 {/* 제목 + 과목 아이콘 */}
                                 <View style={styles.cardHeader}>
-                                    <Text style={styles.cardTitle}>{card.title}</Text>
                                     <Text style={styles.cardSubjectIcon}>{getSubjectIcon(card.subject)}</Text>
+                                    <Text style={styles.cardTitle}>{card.title}</Text>
                                 </View>
 
-                                {/* 과목명 */}
-                                <Text style={styles.cardSubject}>{card.subject}</Text>
-
                                 {/* 설명 */}
-                                <Text style={styles.cardDesc}>{card.description}</Text>
+                                <Text style={styles.cardDesc} numberOfLines={2}>{card.description}</Text>
 
                                 {/* 정답률 + 기간 */}
                                 <View style={styles.cardFooter}>
@@ -539,17 +559,20 @@ const styles = StyleSheet.create({
         color: '#5E82FF',
         fontWeight: '700',
     },
-    // 카드 목록
+    // 카드 목록 (한 줄에 2개씩)
     cardList: {
         paddingHorizontal: scale(20),
         paddingTop: scale(4),
         paddingBottom: scale(24),
         gap: scale(14),
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
     },
     card: {
         backgroundColor: '#FFFFFF',
         borderRadius: scale(16),
-        padding: scale(20),
+        padding: scale(16),
         borderWidth: 1,
         borderColor: '#E5E7EB',
         position: 'relative',
@@ -558,6 +581,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 2,
         elevation: 1,
+        width: '48%',
     },
     closeBtn: {
         position: 'absolute',
@@ -578,46 +602,46 @@ const styles = StyleSheet.create({
     cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: scale(10),
+        marginBottom: scale(6),
+        gap: scale(6),
     },
     cardTitle: {
-        fontSize: fontScale(18),
+        fontSize: fontScale(15),
         fontWeight: '800',
         color: '#111827',
         flex: 1,
     },
     cardSubjectIcon: {
-        fontSize: fontScale(20),
-        marginLeft: scale(8),
+        fontSize: fontScale(18),
     },
     cardSubject: {
-        fontSize: fontScale(13),
+        fontSize: fontScale(11),
         fontWeight: '600',
         color: '#9CA3AF',
-        marginBottom: scale(10),
+        marginBottom: scale(6),
     },
     cardDesc: {
-        fontSize: fontScale(14),
+        fontSize: fontScale(12),
         fontWeight: '500',
         color: '#374151',
-        lineHeight: fontScale(21),
-        marginBottom: scale(14),
+        lineHeight: fontScale(18),
+        marginBottom: scale(10),
     },
     cardFooter: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingTop: scale(12),
+        paddingTop: scale(8),
         borderTopWidth: 1,
         borderTopColor: '#F3F4F6',
     },
     cardProgress: {
-        fontSize: fontScale(13),
+        fontSize: fontScale(11),
         fontWeight: '700',
         color: '#5E82FF',
     },
     cardDays: {
-        fontSize: fontScale(12),
+        fontSize: fontScale(10),
         fontWeight: '600',
         color: '#9CA3AF',
     },

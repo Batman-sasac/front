@@ -17,8 +17,8 @@ export type OcrResponse =
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
 
-export async function runOcr(fileUri: string): Promise<ScaffoldingPayload> {
-    console.log('🔵 OCR 요청 시작 - fileUri:', fileUri);
+export async function runOcr(fileUri: string, cropInfo?: { px: number; py: number; pw: number; ph: number }): Promise<ScaffoldingPayload> {
+    console.log('🔵 OCR 요청 시작 - fileUri:', fileUri, 'cropInfo:', cropInfo);
 
     const form = new FormData();
 
@@ -44,6 +44,15 @@ export async function runOcr(fileUri: string): Promise<ScaffoldingPayload> {
             name: `photo.${fileExtension}`,
             type: mimeType,
         } as any);
+    }
+
+    // crop 정보가 있으면 form에 추가
+    if (cropInfo) {
+        form.append('crop_x', String(cropInfo.px));
+        form.append('crop_y', String(cropInfo.py));
+        form.append('crop_width', String(cropInfo.pw));
+        form.append('crop_height', String(cropInfo.ph));
+        console.log('🔵 Crop 정보 추가:', cropInfo);
     }
 
     // 토큰 가져오기

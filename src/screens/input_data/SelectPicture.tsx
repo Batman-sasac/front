@@ -9,13 +9,15 @@ import {
     ImageSourcePropType,
     PanResponder,
     PanResponderInstance,
+    TextInput,
+    ActivityIndicator,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 
 type Props = {
     sources: ImageSourcePropType[];
     onBack: () => void;
-    onStartLearning: (finalSources: ImageSourcePropType[], ocrLoading?: boolean) => void;
+    onStartLearning: (finalSources: ImageSourcePropType[], ocrLoading?: boolean, subjectName?: string, cropInfo?: { px: number; py: number; pw: number; ph: number }) => void;
 };
 
 const BG = '#F6F7FB';
@@ -44,6 +46,7 @@ function getDisplayRect(cw: number, ch: number, iw: number, ih: number): Display
 export default function SelectPicture({ sources, onBack, onStartLearning }: Props) {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [rotation, setRotation] = useState(0);
+    const [subjectName, setSubjectName] = useState('');  // 과목명 추가
 
     const selectedSource = useMemo(() => {
         if (!sources || sources.length === 0) return null;
@@ -76,6 +79,17 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         startY: 0,
         startCrop: { x: 0, y: 0, w: 0, h: 0 },
     });
+
+    // 핸들 마우스 다운 이벤트 (웹)
+    const handleHandleMouseDown = (corner: 'tl' | 'tr' | 'bl' | 'br') => (e: any) => {
+        if (e.preventDefault) e.preventDefault();
+        dragStateRef.current = {
+            type: corner,
+            startX: e.clientX || e.pageX || 0,
+            startY: e.clientY || e.pageY || 0,
+            startCrop: { ...cropRef.current },
+        };
+    };
 
     useEffect(() => {
         cropRef.current = crop;
@@ -158,24 +172,43 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         return { px, py, pw, ph, imageW: iw, imageH: ih };
     };
 
-    const handleStart = () => {
+    const [isCropping, setIsCropping] = useState(false);
+
+    const cropImage = async () => {
         if (!selectedSource) return;
 
         const pixelCrop = getPixelCrop();
-        console.log('SelectedSource:', selectedSource);
-        console.log('CropPixelRect:', pixelCrop);
+        if (!pixelCrop) {
+            console.error('픽셀 crop 정보 없음');
+            return;
+        }
 
-        // 실제 이미지 파일이면 OCR 호출, 임시 더미 이미지면 스킵
         const anySrc: any = selectedSource;
         const uri = typeof anySrc?.uri === 'string' ? (anySrc.uri as string) : null;
 
-        if (uri && uri.startsWith('file://')) {
-            // 실제 이미지 -> OCR 호출
-            onStartLearning(sources, true);
-        } else {
-            // 더미 이미지 (임시 테스트용)
-            onStartLearning(sources, false);
+        if (!uri || !uri.startsWith('file://')) {
+            // 더미 이미지는 그대로 진행
+            onStartLearning(sources, false, subjectName);
+            return;
         }
+
+        try {
+            setIsCropping(true);
+            console.log('Crop 좌표:', pixelCrop);
+
+            // crop 정보를 onStartLearning에 함께 전달
+            onStartLearning(sources, true, subjectName, pixelCrop);
+        } catch (error) {
+            console.error('Crop 에러:', error);
+            alert('사진 자르기에 실패했습니다.');
+        } finally {
+            setIsCropping(false);
+        }
+    };
+
+    const handleStart = () => {
+        if (!selectedSource) return;
+        cropImage();
     };
 
     const handleRotateLeft = () => {
@@ -417,6 +450,14 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             <View style={styles.centerWrap}>
                 <Text style={styles.guide}>원하는 개념 한 가지만 포함되도록 잘라주세요.</Text>
 
+                <TextInput
+                    style={styles.subjectInput}
+                    placeholder="과목명 입력 (예: 수학, 영어)"
+                    placeholderTextColor="#999"
+                    value={subjectName}
+                    onChangeText={setSubjectName}
+                />
+
                 <View style={styles.previewWrap}>
                     {selectedSource ? (
                         <View
@@ -435,24 +476,40 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                                 <View style={[styles.maskLeft, overlayStyles.left]} pointerEvents="none" />
                                 <View style={[styles.maskRight, overlayStyles.right]} pointerEvents="none" />
 
-                                <View style={[styles.cropFrame, overlayStyles.frame]} {...moveResponder.panHandlers} pointerEvents="box-only">
+                                <View style={[styles.cropFrame, overlayStyles.frame]} {...moveResponder.panHandlers} onMouseDown={handleMouseDown('move')} pointerEvents="box-only">
                                     <View style={styles.cropCornerTL} pointerEvents="none" />
                                     <View style={styles.cropCornerTR} pointerEvents="none" />
                                     <View style={styles.cropCornerBL} pointerEvents="none" />
                                     <View style={styles.cropCornerBR} pointerEvents="none" />
 
-                                    <Pressable style={[styles.handle, styles.handleTL]} {...tlResponder.panHandlers} onPressIn={handleMouseDown('tl')}>
-                                        <View style={styles.handleDot} />
-                                    </Pressable>
-                                    <Pressable style={[styles.handle, styles.handleTR]} {...trResponder.panHandlers} onPressIn={handleMouseDown('tr')}>
-                                        <View style={styles.handleDot} />
-                                    </Pressable>
-                                    <Pressable style={[styles.handle, styles.handleBL]} {...blResponder.panHandlers} onPressIn={handleMouseDown('bl')}>
-                                        <View style={styles.handleDot} />
-                                    </Pressable>
-                                    <Pressable style={[styles.handle, styles.handleBR]} {...brResponder.panHandlers} onPressIn={handleMouseDown('br')}>
-                                        <View style={styles.handleDot} />
-                                    </Pressable>
+                                    <View
+                                        style={[styles.handle, styles.handleTL]}
+                                        pointerEvents="auto"
+                                        onMouseDown={handleHandleMouseDown('tl')}
+                                    >
+                                        <View style={styles.handleDot} pointerEvents="none" />
+                                    </View>
+                                    <View
+                                        style={[styles.handle, styles.handleTR]}
+                                        pointerEvents="auto"
+                                        onMouseDown={handleHandleMouseDown('tr')}
+                                    >
+                                        <View style={styles.handleDot} pointerEvents="none" />
+                                    </View>
+                                    <View
+                                        style={[styles.handle, styles.handleBL]}
+                                        pointerEvents="auto"
+                                        onMouseDown={handleHandleMouseDown('bl')}
+                                    >
+                                        <View style={styles.handleDot} pointerEvents="none" />
+                                    </View>
+                                    <View
+                                        style={[styles.handle, styles.handleBR]}
+                                        pointerEvents="auto"
+                                        onMouseDown={handleHandleMouseDown('br')}
+                                    >
+                                        <View style={styles.handleDot} pointerEvents="none" />
+                                    </View>
                                 </View>
                             </View>
                         </View>
@@ -505,15 +562,19 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             </View>
 
             <Pressable
-                style={[styles.fab, (!sources || sources.length === 0) && { opacity: 0.5 }]}
+                style={[styles.fab, (!sources || sources.length === 0 || isCropping) && { opacity: 0.5 }]}
                 onPress={handleStart}
-                disabled={!sources || sources.length === 0}
+                disabled={!sources || sources.length === 0 || isCropping}
             >
-                <Image
-                    source={require('../../../assets/study/start-study-button.png')}
-                    style={styles.fabImage}
-                    resizeMode="contain"
-                />
+                {isCropping ? (
+                    <ActivityIndicator size="large" color="#FFFFFF" />
+                ) : (
+                    <Image
+                        source={require('../../../assets/study/start-study-button.png')}
+                        style={styles.fabImage}
+                        resizeMode="contain"
+                    />
+                )}
             </Pressable>
         </View>
     );
@@ -562,8 +623,22 @@ const styles = StyleSheet.create({
         fontSize: fontScale(18),
         fontWeight: '800',
         color: '#111827',
-        marginBottom: scale(24),
+        marginBottom: scale(12),
         lineHeight: fontScale(26),
+    },
+
+    subjectInput: {
+        width: '100%',
+        maxWidth: scale(350),
+        paddingHorizontal: scale(12),
+        paddingVertical: scale(10),
+        marginBottom: scale(20),
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: scale(8),
+        fontSize: fontScale(14),
+        color: '#111827',
+        backgroundColor: '#FFFFFF',
     },
 
     previewWrap: {
@@ -692,19 +767,21 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'transparent',
-        opacity: 0,
-    },
+        opacity: 1,
+        cursor: 'pointer',
+    } as any,
     handleDot: {
         width: 12,
         height: 12,
         backgroundColor: '#FFFFFF',
         borderWidth: 1,
         borderColor: '#FFFFFF',
-    },
-    handleTL: { left: -12, top: -12 },
-    handleTR: { right: -12, top: -12 },
-    handleBL: { left: -12, bottom: -12 },
-    handleBR: { right: -12, bottom: -12 },
+        cursor: 'pointer',
+    } as any,
+    handleTL: { left: -12, top: -12, cursor: 'nwse-resize' } as any,
+    handleTR: { right: -12, top: -12, cursor: 'nesw-resize' } as any,
+    handleBL: { left: -12, bottom: -12, cursor: 'nesw-resize' } as any,
+    handleBR: { right: -12, bottom: -12, cursor: 'nwse-resize' } as any,
 
     rotateRow: {
         width: '100%',

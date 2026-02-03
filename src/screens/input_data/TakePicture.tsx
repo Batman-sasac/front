@@ -67,7 +67,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
         if (hasMediaPermission !== true) return;
 
         const res = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ImagePicker.MediaTypeOptions.All,
             quality: 1,
             allowsMultipleSelection: true,
             selectionLimit: 10,
@@ -212,49 +212,75 @@ export default function TakePicture({ onBack, onDone }: Props) {
                 )}
 
                 <View style={styles.rightButtons}>
-                    <Pressable style={styles.iconBtn} onPress={toggleTimer}>
-                        <Text style={styles.iconText}>⏱</Text>
-                        <Text style={styles.iconSub}>{timer === 0 ? 'OFF' : `${timer}s`}</Text>
-                    </Pressable>
+                    {/* 타이머 버튼 */}
+                    <View style={styles.timerBtnGroup}>
+                        <Pressable style={styles.iconBtn} onPress={toggleTimer}>
+                            <Image
+                                source={require('../../../assets/take-picture/timer.png')}
+                                style={styles.icon}
+                                resizeMode="contain"
+                            />
+                        </Pressable>
+                        <Text style={styles.timerLabel}>{timer === 0 ? 'OFF' : `${timer}s`}</Text>
+                    </View>
 
+                    {/* 플래시 버튼 */}
                     <Pressable style={styles.iconBtn} onPress={toggleFlash}>
-                        <Text style={styles.iconText}>⚡</Text>
-                        <Text style={styles.iconSub}>{flash.toUpperCase()}</Text>
+                        <Image
+                            source={require('../../../assets/take-picture/flash.png')}
+                            style={styles.icon}
+                            resizeMode="contain"
+                        />
                     </Pressable>
 
+                    {/* 전환 버튼 */}
                     <Pressable style={styles.iconBtn} onPress={toggleFacing}>
-                        <Text style={styles.iconText}>🔄</Text>
+                        <Image
+                            source={require('../../../assets/take-picture/turn.png')}
+                            style={styles.icon}
+                            resizeMode="contain"
+                        />
                     </Pressable>
 
+                    {/* 촬영 버튼 (중앙) */}
                     <Pressable style={[styles.shutterOuter, !canShoot && { opacity: 0.5 }]} onPress={handleShutter}>
-                        <View style={styles.shutterInner} />
+                        <Image
+                            source={require('../../../assets/take-picture/take_picture.png')}
+                            style={styles.shutterImage}
+                            resizeMode="contain"
+                        />
                     </Pressable>
 
+                    {/* 최신 사진 썸네일 */}
+                    {shots.length > 0 && (
+                        <View style={styles.thumbnailContainer}>
+                            <Image source={shots[0]} style={styles.thumbnailImage} />
+                        </View>
+                    )}
+
+                    {/* 갤러리 선택 버튼 */}
                     <Pressable style={styles.iconBtn} onPress={handlePickFromGallery}>
-                        <Text style={styles.iconText}>🖼</Text>
+                        <Image
+                            source={require('../../../assets/take-picture/select_folder.png')}
+                            style={styles.icon}
+                            resizeMode="contain"
+                        />
                     </Pressable>
 
-                    <Pressable style={styles.iconBtn} onPress={() => { }}>
-                        <Text style={styles.iconText}>📁</Text>
-                    </Pressable>
 
+                    {/* 촬영 완료 버튼 */}
                     <Pressable
-                        style={[styles.doneBtn, shots.length === 0 && { opacity: 0.5 }]}
+                        style={[styles.finishBtn, shots.length === 0 && { opacity: 0.5 }]}
                         onPress={handleDone}
                         disabled={shots.length === 0}
                     >
-                        <Text style={styles.doneText}>촬영 완료</Text>
+                        <Image
+                            source={require('../../../assets/take-picture/finish_takePicture.png')}
+                            style={styles.finishImage}
+                            resizeMode="contain"
+                        />
                     </Pressable>
                 </View>
-
-                {shots.length > 0 && (
-                    <View style={styles.bottomThumbs}>
-                        {shots.slice(0, 5).map((src, idx) => (
-                            <Image key={String(idx)} source={src} style={styles.thumb} />
-                        ))}
-                        {shots.length > 5 && <Text style={styles.moreText}>+{shots.length - 5}</Text>}
-                    </View>
-                )}
             </View>
         </View>
     );
@@ -300,47 +326,82 @@ const styles = StyleSheet.create({
 
     rightButtons: {
         position: 'absolute',
-        right: scale(14),
+        right: scale(16),
         top: scale(80),
-        bottom: scale(90),
+        bottom: scale(160),
         alignItems: 'center',
         justifyContent: 'center',
-        gap: scale(14),
+        gap: scale(10),
         zIndex: 5,
     },
-    iconBtn: { width: scale(44), alignItems: 'center', gap: scale(2) },
-    iconText: { color: '#fff', fontSize: fontScale(18) },
-    iconSub: { color: '#fff', fontSize: fontScale(10), opacity: 0.85 },
-
-    shutterOuter: {
-        width: scale(58),
-        height: scale(58),
-        borderRadius: scale(29),
-        borderWidth: 3,
-        borderColor: '#fff',
+    timerBtnGroup: {
+        alignItems: 'center',
+        gap: scale(2),
+    },
+    iconBtn: {
+        width: scale(48),
+        height: scale(48),
         alignItems: 'center',
         justifyContent: 'center',
-        marginVertical: scale(6),
     },
-    shutterInner: { width: scale(44), height: scale(44), borderRadius: scale(22), backgroundColor: '#fff' },
+    icon: {
+        width: scale(40),
+        height: scale(40),
+    },
+    timerLabel: {
+        color: '#fff',
+        fontSize: fontScale(10),
+        fontWeight: '600',
+    },
 
-    doneBtn: {
-        marginTop: scale(10),
-        paddingHorizontal: scale(10),
-        paddingVertical: scale(8),
-        borderRadius: scale(14),
-        backgroundColor: '#5E82FF',
+    shutterOuter: {
+        width: scale(70),
+        height: scale(70),
+        borderRadius: scale(35),
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginVertical: scale(8),
     },
-    doneText: { color: '#fff', fontSize: fontScale(11), fontWeight: '800' },
+    shutterImage: {
+        width: scale(60),
+        height: scale(60),
+    },
+
+    finishBtn: {
+        width: scale(48),
+        height: scale(48),
+        borderRadius: scale(24),
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    finishImage: {
+        width: scale(60),
+        height: scale(60),
+    },
+
+    thumbnailContainer: {
+        width: scale(48),
+        height: scale(48),
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    thumbnailImage: {
+        width: scale(44),
+        height: scale(44),
+        borderRadius: scale(8),
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.35)',
+    },
 
     bottomThumbs: {
         position: 'absolute',
-        left: scale(16),
-        bottom: scale(18),
-        flexDirection: 'row',
+        right: scale(16),
+        top: '50%',
+        marginTop: scale(120),
         alignItems: 'center',
-        gap: scale(8),
-        zIndex: 5,
+        gap: scale(4),
+        zIndex: 4,
     },
     thumb: {
         width: scale(44),
