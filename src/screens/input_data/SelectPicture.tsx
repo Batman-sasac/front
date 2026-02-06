@@ -147,7 +147,11 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         const y = displayRect.dy + (displayRect.dh - h) / 2;
 
         setCrop({ x, y, w, h });
-    }, [displayRect.dx, displayRect.dy, displayRect.dw, displayRect.dh, selectedIndex]);
+
+        // containerRef도 함께 업데이트
+        containerRef.current = { w: containerW, h: containerH };
+        console.log('🖼️ Crop 초기화:', { x, y, w, h }, 'Container:', { w: containerW, h: containerH });
+    }, [displayRect.dx, displayRect.dy, displayRect.dw, displayRect.dh, selectedIndex, containerW, containerH]);
 
     const getPixelCrop = () => {
         const d = displayRef.current;
@@ -177,9 +181,17 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const cropImage = async () => {
         if (!selectedSource) return;
 
+        // containerRef 업데이트 보장
+        containerRef.current = { w: containerW, h: containerH };
+        imageRef.current = { w: imageW, h: imageH };
+        displayRef.current = displayRect;
+        cropRef.current = crop;
+
+        console.log('🖼️ cropImage 호출:', { containerW, containerH, imageW, imageH, displayRect, crop });
+
         const pixelCrop = getPixelCrop();
         if (!pixelCrop) {
-            console.error('픽셀 crop 정보 없음');
+            console.error('🖼️ 픽셀 crop 정보 없음', { displayRect, crop, containerW, containerH, imageW, imageH });
             return;
         }
 
@@ -471,44 +483,40 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                             <Image source={selectedSource} style={[styles.previewImage, { transform: [{ rotate: `${rotation}deg` }] }]} resizeMode="contain" />
 
                             <View style={styles.cropArea}>
-                                <View style={[styles.maskTop, overlayStyles.top]} pointerEvents="none" />
-                                <View style={[styles.maskBottom, overlayStyles.bottom]} pointerEvents="none" />
-                                <View style={[styles.maskLeft, overlayStyles.left]} pointerEvents="none" />
-                                <View style={[styles.maskRight, overlayStyles.right]} pointerEvents="none" />
+                                <View style={[styles.maskTop, overlayStyles.top, { pointerEvents: 'none' }]} />
+                                <View style={[styles.maskBottom, overlayStyles.bottom, { pointerEvents: 'none' }]} />
+                                <View style={[styles.maskLeft, overlayStyles.left, { pointerEvents: 'none' }]} />
+                                <View style={[styles.maskRight, overlayStyles.right, { pointerEvents: 'none' }]} />
 
-                                <View style={[styles.cropFrame, overlayStyles.frame]} {...moveResponder.panHandlers} onMouseDown={handleMouseDown('move')} pointerEvents="box-only">
-                                    <View style={styles.cropCornerTL} pointerEvents="none" />
-                                    <View style={styles.cropCornerTR} pointerEvents="none" />
-                                    <View style={styles.cropCornerBL} pointerEvents="none" />
-                                    <View style={styles.cropCornerBR} pointerEvents="none" />
+                                <View style={[styles.cropFrame, overlayStyles.frame, { pointerEvents: 'box-only' }]} {...moveResponder.panHandlers} onMouseDown={handleMouseDown('move')}>
+                                    <View style={[styles.cropCornerTL, { pointerEvents: 'none' }]} />
+                                    <View style={[styles.cropCornerTR, { pointerEvents: 'none' }]} />
+                                    <View style={[styles.cropCornerBL, { pointerEvents: 'none' }]} />
+                                    <View style={[styles.cropCornerBR, { pointerEvents: 'none' }]} />
 
                                     <View
-                                        style={[styles.handle, styles.handleTL]}
-                                        pointerEvents="auto"
+                                        style={[styles.handle, styles.handleTL, { pointerEvents: 'auto' }]}
                                         onMouseDown={handleHandleMouseDown('tl')}
                                     >
-                                        <View style={styles.handleDot} pointerEvents="none" />
+                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
                                     </View>
                                     <View
-                                        style={[styles.handle, styles.handleTR]}
-                                        pointerEvents="auto"
+                                        style={[styles.handle, styles.handleTR, { pointerEvents: 'auto' }]}
                                         onMouseDown={handleHandleMouseDown('tr')}
                                     >
-                                        <View style={styles.handleDot} pointerEvents="none" />
+                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
                                     </View>
                                     <View
-                                        style={[styles.handle, styles.handleBL]}
-                                        pointerEvents="auto"
+                                        style={[styles.handle, styles.handleBL, { pointerEvents: 'auto' }]}
                                         onMouseDown={handleHandleMouseDown('bl')}
                                     >
-                                        <View style={styles.handleDot} pointerEvents="none" />
+                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
                                     </View>
                                     <View
-                                        style={[styles.handle, styles.handleBR]}
-                                        pointerEvents="auto"
+                                        style={[styles.handle, styles.handleBR, { pointerEvents: 'auto' }]}
                                         onMouseDown={handleHandleMouseDown('br')}
                                     >
-                                        <View style={styles.handleDot} pointerEvents="none" />
+                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
                                     </View>
                                 </View>
                             </View>

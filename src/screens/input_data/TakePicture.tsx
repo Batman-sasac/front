@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, Platform, ImageSourcePropType } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { scale, fontScale } from '../../lib/layout';
 
 type Props = {
@@ -67,7 +68,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
         if (hasMediaPermission !== true) return;
 
         const res = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            mediaTypes: ['images', 'videos'] as const,
             quality: 1,
             allowsMultipleSelection: true,
             selectionLimit: 10,
@@ -75,8 +76,102 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
         if (res.canceled) return;
 
-        const sources = res.assets.map((a) => ({ uri: a.uri } as ImageSourcePropType));
-        setShots((prev) => [...prev, ...sources]);
+        const sources = res.assets.map((a) => {
+            console.log('🖼️ 갤러리 선택:', a.uri);
+            return { uri: a.uri } as ImageSourcePropType;
+        });
+        console.log('🖼️ 갤러리 선택 완료, 파일 수:', sources.length);
+        setShots((prev) => {
+            const updated = [...prev, ...sources];
+            console.log('🖼️ 업데이트 후 shots:', updated.length);
+            return updated;
+        });
+    };
+
+    const handlePickDocument = async () => {
+        try {
+            const isWeb = typeof window !== 'undefined' && !Platform.OS || Platform.OS === 'web';
+            console.log('📁 문서선택 시작, Platform.OS:', Platform.OS, 'isWeb:', isWeb);
+
+            if (isWeb) {
+                // 웹: HTML file input 사용 (이미지만)
+                console.log('📁 웹 환경에서 file input 사용');
+                const input = document.createElement('input') as HTMLInputElement;
+                input.type = 'file';
+                input.accept = 'image/*';  // 이미지만 허용
+                input.multiple = true;
+
+                input.onchange = async (e: any) => {
+                    const files = e.target.files;
+                    console.log('📁 선택된 파일 개수:', files.length);
+
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        console.log('📁 파일:', file.name, '타입:', file.type, '크기:', file.size);
+
+                        // PDF 파일 거부
+                        if (file.type === 'application/pdf') {
+                            console.error('❌ PDF 파일은 지원하지 않습니다:', file.name);
+                            alert('PDF 파일은 지원하지 않습니다.\n이미지 파일(JPG, PNG 등)만 선택해주세요.');
+                            continue;
+                        }
+
+                        // 이미지 파일만 허용
+                        if (!file.type.startsWith('image/')) {
+                            console.error('❌ 이미지가 아닌 파일:', file.name, file.type);
+                            alert('이미지 파일만 선택해주세요.');
+                            continue;
+                        }
+
+                        const reader = new FileReader();
+
+                        reader.onload = () => {
+                            const dataUrl = reader.result as string;
+                            console.log('📁 파일 읽기 완료:', file.name);
+                            setShots((prev) => {
+                                const updated = [...prev, { uri: dataUrl }];
+                                console.log('📁 업데이트 후 shots 길이:', updated.length);
+                                return updated;
+                            });
+                        };
+
+                        reader.onerror = () => {
+                            console.error('📁 파일 읽기 실패:', file.name);
+                        };
+
+                        reader.readAsDataURL(file);
+                    }
+                };
+
+                input.click();
+            } else {
+                // 네이티브: 갤러리에서 이미지만 선택
+                console.log('📁 네이티브 환경에서 이미지 선택');
+                if (hasMediaPermission !== true) return;
+
+                const res = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['images'] as const,
+                    quality: 1,
+                    allowsMultipleSelection: true,
+                    selectionLimit: 10,
+                });
+
+                if (res.canceled) return;
+
+                const sources = res.assets.map((a) => {
+                    console.log('📁 선택된 이미지:', a.uri);
+                    return { uri: a.uri } as ImageSourcePropType;
+                });
+
+                setShots((prev) => {
+                    const updated = [...prev, ...sources];
+                    console.log('📁 업데이트 후 shots 길이:', updated.length);
+                    return updated;
+                });
+            }
+        } catch (e) {
+            console.error('📁 파일 선택 실패:', e);
+        }
     };
 
     const shootNow = async () => {
@@ -123,7 +218,12 @@ export default function TakePicture({ onBack, onDone }: Props) {
     };
 
     const handleDone = () => {
-        if (shots.length === 0) return;
+        console.log('✅ 촬영 완료 클릭, shots 길이:', shots.length);
+        if (shots.length === 0) {
+            console.log('❌ shots이 비어있음');
+            return;
+        }
+        console.log('✅ onDone 호출, 소스 개수:', shots.length);
         onDone(shots);
     };
 
@@ -267,6 +367,11 @@ export default function TakePicture({ onBack, onDone }: Props) {
                         />
                     </Pressable>
 
+                    {/* 문서/PDF 선택 버튼 */}
+                    <Pressable style={styles.iconBtn} onPress={handlePickDocument}>
+                        <Text style={styles.documentIcon}>📁</Text>
+                    </Pressable>
+
 
                     {/* 촬영 완료 버튼 */}
                     <Pressable
@@ -392,6 +497,10 @@ const styles = StyleSheet.create({
         borderRadius: scale(8),
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.35)',
+    },
+
+    documentIcon: {
+        fontSize: fontScale(32),
     },
 
     bottomThumbs: {
