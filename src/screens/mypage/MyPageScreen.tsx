@@ -22,6 +22,7 @@ import {
     disconnectAccount,
     withdrawAccount,
     updateNickname as apiUpdateNickname,
+    getUserStats,
 } from '../../api/auth';
 
 type Screen = 'home' | 'league' | 'alarm' | 'mypage' | 'takePicture' | 'brushup';
@@ -36,6 +37,7 @@ type Props = {
     onNavigate: (screen: Screen) => void;
     onMonthlyGoalChange?: (goal: number) => void;
     onNicknameChange?: (nickname: string) => void;
+    onWithdraw?: () => void;
 };
 
 // 홈 화면에서 쓰는 것과 같은 유형별 캐릭터 매핑 함수
@@ -70,11 +72,17 @@ export default function MyPageScreen({
     onNavigate,
     onMonthlyGoalChange,
     onNicknameChange,
+    onWithdraw,
 }: Props) {
     const characterSource = getCharacterSourceByType(typeLabel);
 
     // 닉네임 상태 관리
     const [currentNickname, setCurrentNickname] = useState(nickname);
+
+    // 통계 상태 (서버 값 우선)
+    const [totalStudyCountState, setTotalStudyCountState] = useState(totalStudyCount);
+    const [continuousDaysState, setContinuousDaysState] = useState(continuousDays);
+    const [monthlyGoalState, setMonthlyGoalState] = useState<number | null>(monthlyGoal);
 
     // 계정 연결 상태
     const [kakaoEmail, setKakaoEmail] = useState<string | null>(null);
@@ -107,8 +115,14 @@ export default function MyPageScreen({
             }
 
             const userInfo = await getUserInfo(token);
-            setKakaoEmail(userInfo.kakao_email);
+            setKakaoEmail(userInfo.kakao_email ?? userInfo.email ?? null);
             setNaverEmail(userInfo.naver_email);
+
+            const stats = await getUserStats(token);
+            setTotalStudyCountState(stats.data.total_learning_count);
+            setContinuousDaysState(stats.data.consecutive_days);
+            setMonthlyGoalState(stats.data.monthly_goal);
+            setTempGoal(stats.data.monthly_goal ?? 20);
             setLoading(false);
         } catch (error) {
             console.error('계정 정보 로드 실패:', error);
@@ -194,9 +208,18 @@ export default function MyPageScreen({
             await withdrawAccount(token);
             await clearAuthData();
 
-            Alert.alert('성공', '회원 탈퇴가 완료되었습니다');
-            // 로그인 화면으로 이동하도록 onNavigate 호출
-            // onNavigate('login'); // 로그인 화면으로 이동하는 로직 필요
+            setShowWithdrawModal(false);
+            Alert.alert('완료', '회원 탈퇴가 완료되었습니다', [
+                {
+                    text: '확인',
+                    onPress: () => {
+                        // App.tsx의 초기화 로직 호출
+                        if (onWithdraw) {
+                            onWithdraw();
+                        }
+                    }
+                }
+            ]);
         } catch (error: any) {
             Alert.alert('오류', error.message || '회원 탈퇴 실패');
         }
@@ -282,7 +305,7 @@ export default function MyPageScreen({
                                     />
                                     <Text style={styles.statTitle}>총 학습 횟수</Text>
                                 </View>
-                                <Text style={styles.statValue}>{totalStudyCount}회</Text>
+                                <Text style={styles.statValue}>{totalStudyCountState}회</Text>
                             </View>
 
                             {/* 연속 학습일 */}
@@ -295,7 +318,7 @@ export default function MyPageScreen({
                                     />
                                     <Text style={styles.statTitle}>연속 학습일</Text>
                                 </View>
-                                <Text style={styles.statValue}>{continuousDays}일</Text>
+                                <Text style={styles.statValue}>{continuousDaysState}일</Text>
                             </View>
 
                             {/* 한달 목표 */}
@@ -311,7 +334,7 @@ export default function MyPageScreen({
                                     />
                                     <Text style={styles.statTitle}>한달 목표</Text>
                                 </View>
-                                <Text style={styles.statValue}>{monthlyGoal || 0}회</Text>
+                                <Text style={styles.statValue}>{monthlyGoalState || 0}회</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -522,6 +545,7 @@ export default function MyPageScreen({
                             style={styles.modalPrimaryButton}
                             onPress={() => {
                                 onMonthlyGoalChange?.(tempGoal);
+                                setMonthlyGoalState(tempGoal);
                                 setShowMonthlyGoalModal(false);
                             }}
                         >

@@ -20,6 +20,7 @@ import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
 import { runOcr, ScaffoldingPayload, saveTest, getQuizForReview, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
+import { getRewardSummary } from './src/api/reward';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 
 type SocialProvider = 'kakao' | 'naver';
@@ -246,6 +247,28 @@ export default function App() {
       showBonus: false,
     }));
   };
+
+  const applyStudyReward = async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const result = await getRewardSummary(token);
+      const totalReward = result.total_reward ?? 0;
+      const delta = Math.max(0, totalReward - exp);
+
+      setExp(totalReward);
+      if (delta > 0) {
+        setRewardState({
+          baseXP: delta,
+          bonusXP: 0,
+          showBase: true,
+          showBonus: false,
+        });
+      }
+    } catch (error) {
+      console.error('리워드 반영 실패:', error);
+    }
+  };
   const [weekAttendance, setWeekAttendance] = useState<boolean[]>( //이번 주 요일 별 출석
     [false, false, false, false, false, false, false],
   );
@@ -415,6 +438,28 @@ export default function App() {
           onNavigate={(screen) => setStep(screen)}
           onMonthlyGoalChange={(goal) => setMonthlyGoal(goal)}
           onNicknameChange={(newNickname) => setNickname(newNickname)}
+          onWithdraw={() => {
+            // 모든 상태 초기화
+            setNickname('');
+            setUserEmail('');
+            setUserSocialId('');
+            setTypeResult(null);
+            setTypeLabel('');
+            setLevel(1);
+            setExp(0);
+            setMonthlyGoal(null);
+            setStreak(0);
+            setLastAttendanceDate(null);
+            setCapturedSources([]);
+            setSelectedSourceIndex(0);
+            setSubjectName('');
+            setCropInfo(null);
+            setIsReviewMode(false);
+            setReviewQuizId(null);
+
+            // 로그인 화면으로 이동
+            setStep('login');
+          }}
         />
       )}
 
@@ -496,6 +541,7 @@ export default function App() {
             // 학습 완료 후 홈으로
             setIsReviewMode(false);
             setReviewQuizId(null);
+            applyStudyReward();
             setStep('home');
           }}
           sources={capturedSources}

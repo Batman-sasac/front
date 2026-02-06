@@ -86,12 +86,19 @@ export default function ScaffoldingScreen({
     const [answers, setAnswers] = useState<Record<number, string>>({}); // instanceId 기반
     const [graded, setGraded] = useState<Record<number, GradeState>>({}); // blankId 기반
     const [wrongInstances, setWrongInstances] = useState<Set<number>>(new Set());
+    const [selectedBlanks, setSelectedBlanks] = useState<number[]>([]); // 사용자가 선택한 빈칸 instanceId
+    const [selectionOrder, setSelectionOrder] = useState<Record<number, number>>({});
+    const [popupVisible, setPopupVisible] = useState(false);
+    const [popupTitle, setPopupTitle] = useState('');
+    const [popupMessage, setPopupMessage] = useState('');
+    const [popupOnConfirm, setPopupOnConfirm] = useState<(() => void) | null>(null);
     const [hintWord, setHintWord] = useState<number | null>(null);
     const [hintType, setHintType] = useState<'first' | 'last' | 'chosung' | null>(null); // 선택된 힌트 타입
     const [hintPosition, setHintPosition] = useState<{ x: number; y: number } | null>(null); // 힌트 모달 위치
 
     const inputRefs = useRef<Record<number, TextInput | null>>({});
     const blankRefs = useRef<Record<number, View | null>>({}); // blankBox 위치 추적
+    const selectionSeqRef = useRef(0);
 
     // 안전한 값들 (payload가 없어도 안전)
     const title = payload?.title ?? '';
@@ -128,9 +135,22 @@ export default function ScaffoldingScreen({
                     base: baseInfoByWord.get(t.baseWord) ?? null,
                 };
             });
-        // 최대 20개로 제한
-        return instances.slice(0, 20);
+        return instances;
     }, [tokens, baseInfoByWord, blankDefs]);
+
+    const orderedSelectedBlanks = useMemo(() => {
+        return [...selectedBlanks].sort((a, b) => {
+            const ao = selectionOrder[a] ?? 0;
+            const bo = selectionOrder[b] ?? 0;
+            return ao - bo;
+        });
+    }, [selectedBlanks, selectionOrder]);
+    const selectedBlankSet = useMemo(() => new Set(orderedSelectedBlanks), [orderedSelectedBlanks]);
+    const blankIdByInstance = useMemo(() => {
+        const m = new Map<number, number>();
+        keywordInstances.forEach((ki) => m.set(ki.instanceId, ki.blankId));
+        return m;
+    }, [keywordInstances]);
 
     // 전체 단어를 20개로 제한
     const totalKeywordCount = Math.min(20, keywordInstances.length);
@@ -146,27 +166,33 @@ export default function ScaffoldingScreen({
         return 1;
     }, [step]);
 
-    const activeWordCount = useMemo(() => {
-        if (currentRound === 1) return round1Count;
-        if (currentRound === 2) return round2Count;
-        return round3Count;
-    }, [currentRound]);
+    // 라운드별 필요 선택 개수
+    const requiredSelectCount = useMemo(() => {
+        if (currentRound === 1) return round1Count; // 1라운드: 5개
+        if (currentRound === 2) return 7; // 2라운드: 7개 추가
+        return 8; // 3라운드: 8개 추가
+    }, [currentRound, round1Count]);
 
-    const correctCount = useMemo(
-        () => Object.values(graded).filter((g) => g === 'correct').length,
-        [graded]
-    );
+    const correctCount = useMemo(() => {
+        return orderedSelectedBlanks.reduce((acc, instanceId) => {
+            const blankId = blankIdByInstance.get(instanceId);
+            if (blankId == null) return acc;
+            return graded[blankId] === 'correct' ? acc + 1 : acc;
+        }, 0);
+    }, [orderedSelectedBlanks, blankIdByInstance, graded]);
 
     const barStates: GradeState[] = useMemo(() => {
         const arr: GradeState[] = Array.from({ length: totalBars }, () => 'idle');
         const isFinalStep = step.endsWith('-3');
         if (!isFinalStep) return arr;
 
-        keywordInstances.slice(0, totalBars).forEach((ins, idx) => {
-            arr[idx] = graded[ins.blankId] ?? 'idle';
+        orderedSelectedBlanks.slice(0, totalBars).forEach((instanceId, idx) => {
+            const blankId = blankIdByInstance.get(instanceId);
+            if (blankId == null) return;
+            arr[idx] = graded[blankId] ?? 'idle';
         });
         return arr;
-    }, [keywordInstances, graded, step]);
+    }, [orderedSelectedBlanks, blankIdByInstance, graded, step]);
 
     const roundLabel = useMemo(() => {
         const [round, substep] = step.split('-');
@@ -228,12 +254,53 @@ export default function ScaffoldingScreen({
         else if (step === '2-2') setStep('2-1');
         else if (step === '3-2') setStep('3-1');
     };
+
+    // 단어 선택/취소 토글 (1-1, 2-1, 3-1 단계에서)
+    const onToggleBlankSelection = (instanceId: number) => {
+        setSelectedBlanks((prev) => {
+            const lockedCount = currentRound === 1 ? 0 : currentRound === 2 ? round1Count : round2Count;
+            const requiredTotal = currentRound === 1 ? round1Count : currentRound === 2 ? round2Count : round3Count;
+            const existsIndex = prev.indexOf(instanceId);
+
+            if (existsIndex >= 0) {
+                // 이전 라운드 선택은 취소 불가
+                if (existsIndex < lockedCount) return prev;
+                setSelectionOrder((orderPrev) => {
+                    const nextOrder = { ...orderPrev };
+                    delete nextOrder[instanceId];
+                    return nextOrder;
+                });
+                return prev.filter((id) => id !== instanceId);
+            }
+
+            // 선택 개수 초과 방지
+            if (prev.length >= requiredTotal) return prev;
+
+            setSelectionOrder((orderPrev) => {
+                if (orderPrev[instanceId] != null) return orderPrev;
+                return { ...orderPrev, [instanceId]: selectionSeqRef.current++ };
+            });
+
+            return [...prev, instanceId];
+        });
+    };
+
     const onStartLearning = () => {
+        const requiredTotal = currentRound === 1 ? round1Count : currentRound === 2 ? round2Count : round3Count;
+        if (orderedSelectedBlanks.length < requiredTotal) {
+            setPopupTitle('알림');
+            setPopupMessage(`${requiredTotal}개가 다 설정되지 않았어요!`);
+            setPopupOnConfirm(null);
+            setPopupVisible(true);
+            return;
+        }
+
         setSelectedWord(null);
         if (step === '1-1') setStep('1-2');
         else if (step === '2-1') setStep('2-2');
         else if (step === '3-1') setStep('3-2');
     };
+
     const onLongPressBlank = (instanceId: number) => {
         setHintWord(instanceId);
         setHintType(null);
@@ -255,6 +322,13 @@ export default function ScaffoldingScreen({
         setHintType(null);
         setHintPosition(null);
         requestAnimationFrame(() => inputRefs.current[instanceId]?.focus());
+    };
+
+    const handlePopupConfirm = () => {
+        setPopupVisible(false);
+        const cb = popupOnConfirm;
+        setPopupOnConfirm(null);
+        if (cb) cb();
     };
 
     // 한글 초성 추출 함수 (정확한 유니코드 계산)
@@ -306,7 +380,11 @@ export default function ScaffoldingScreen({
         const next: Record<number, GradeState> = { ...graded };
         const newWrong = new Set(wrongInstances);
 
-        keywordInstances.slice(0, activeWordCount).forEach((ins) => {
+        // 선택된 빈칸만 채점
+        orderedSelectedBlanks.forEach((instanceId) => {
+            const ins = keywordInstances.find(ki => ki.instanceId === instanceId);
+            if (!ins) return;
+
             // 이미 이전 라운드에서 맞췄으면 그대로 유지
             if (next[ins.blankId] === 'correct') return;
 
@@ -361,9 +439,38 @@ export default function ScaffoldingScreen({
             );
         }
 
-        const titleText = substep === '1' ? '단어 터치하기' : '결과 확인';
+        // substep === '1' (단어 선택 단계)
+        if (substep === '1') {
+            let titleText = '';
+            let descText = '';
+
+            if (currentRound === 1) {
+                titleText = '단어 터치하기';
+                descText = `${requiredSelectCount}개의 단어를 터치해서\n학습할 빈칸을 뚫을 수 있어요!`;
+            } else if (currentRound === 2) {
+                titleText = '단어 터치하기';
+                descText = `${requiredSelectCount}개의 단어를\n더 추가로 뚫어주세요!`;
+            } else {
+                titleText = '단어 터치하기';
+                descText = `${requiredSelectCount}개의 단어를\n추가로 뚫어주세요!`;
+            }
+
+            return (
+                <View style={styles.helpBox}>
+                    <View style={styles.helpHeader}>
+                        <Text style={styles.helpTitle}>{titleText}</Text>
+                    </View>
+                    <View style={styles.helpBody}>
+                        <Text style={[styles.helpDesc, { textAlign: 'center' }]}>{descText}</Text>
+                    </View>
+                </View>
+            );
+        }
+
+        // substep === '3' (결과 확인)
+        const titleText = '결과 확인';
         const descTop = '단어를 터치하면';
-        const descBottom = substep === '1' ? '의미를 확인할 수 있어요!' : '의미를 다시 확인할 수 있어요.';
+        const descBottom = '의미를 다시 확인할 수 있어요.';
 
         return (
             <View style={styles.helpBox}>
@@ -416,7 +523,8 @@ export default function ScaffoldingScreen({
 
                     {(step === '1-1' || step === '2-1' || step === '3-1') && (
                         <View style={styles.buttonGroup}>
-                            {(step === '1-1' || step === '2-1' || step === '3-1') && (
+                            {/* 복습 모드가 아닐 때만 재선정 버튼 표시 */}
+                            {!reviewQuizId && (step === '1-1' || step === '2-1' || step === '3-1') && (
                                 <Pressable style={styles.imgBtnWrap} onPress={onReselectWords}>
                                     <Image
                                         source={require('../../../assets/study/re-selection-button.png')}
@@ -448,35 +556,39 @@ export default function ScaffoldingScreen({
                     )}
 
                     {step === '1-3' && (
-                        <Pressable
-                            style={styles.imgBtnWrap}
-                            onPress={() => {
-                                setAnswers({});
-                                setStep('2-1');
-                            }}
-                        >
-                            <Image
-                                source={require('../../../assets/study/Round2.png')}
-                                style={styles.startImg}
-                                resizeMode="contain"
-                            />
-                        </Pressable>
+                        <View style={styles.buttonGroup}>
+                            <Pressable
+                                style={styles.imgBtnWrap}
+                                onPress={() => {
+                                    setAnswers({});
+                                    setStep('2-1');
+                                }}
+                            >
+                                <Image
+                                    source={require('../../../assets/study/Round2.png')}
+                                    style={styles.startImg}
+                                    resizeMode="contain"
+                                />
+                            </Pressable>
+                        </View>
                     )}
 
                     {step === '2-3' && (
-                        <Pressable
-                            style={styles.imgBtnWrap}
-                            onPress={() => {
-                                setAnswers({});
-                                setStep('3-1');
-                            }}
-                        >
-                            <Image
-                                source={require('../../../assets/study/Round3.png')}
-                                style={styles.startImg}
-                                resizeMode="contain"
-                            />
-                        </Pressable>
+                        <View style={styles.buttonGroup}>
+                            <Pressable
+                                style={styles.imgBtnWrap}
+                                onPress={() => {
+                                    setAnswers({});
+                                    setStep('3-1');
+                                }}
+                            >
+                                <Image
+                                    source={require('../../../assets/study/Round3.png')}
+                                    style={styles.startImg}
+                                    resizeMode="contain"
+                                />
+                            </Pressable>
+                        </View>
                     )}
 
                     {step === '3-3' && (
@@ -494,14 +606,20 @@ export default function ScaffoldingScreen({
                                             await onSave(answerList);
                                         } catch (e: any) {
                                             Alert.alert('저장 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
+                                            return;
                                         }
                                     }
-                                    // 학습 완료 후 콜백 실행
-                                    if (onBackFromCompletion) {
-                                        onBackFromCompletion();
-                                    } else {
-                                        onBack();
-                                    }
+                                    const earnedXp = correctCount * 2;
+                                    setPopupTitle('축하합니다!');
+                                    setPopupMessage(`학습을 완료해서 ${earnedXp}xp를 획득했어요!`);
+                                    setPopupOnConfirm(() => () => {
+                                        if (onBackFromCompletion) {
+                                            onBackFromCompletion();
+                                        } else {
+                                            onBack();
+                                        }
+                                    });
+                                    setPopupVisible(true);
                                 }}
                             >
                                 <Image
@@ -529,23 +647,40 @@ export default function ScaffoldingScreen({
                                 const grade = instanceInfo ? (graded[instanceInfo.blankId] ?? 'idle') : 'idle';
                                 const userValue = answers[instanceId] ?? '';
                                 const substep = step.split('-')[1];
-                                const instanceIdx = keywordInstances.findIndex(ki => ki.instanceId === instanceId);
-                                const isInActiveRange = instanceIdx < activeWordCount;
+                                const isSelected = selectedBlankSet.has(instanceId); // 사용자가 선택한 빈칸인지
 
                                 if (substep === '1') {
-                                    return (
-                                        <Pressable
-                                            key={idx}
-                                            onPress={() => base && setSelectedWord(base)}
-                                            style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}
-                                        >
-                                            <Text style={styles.wordText}>{t.value}</Text>
-                                        </Pressable>
-                                    );
+                                    // 단어 선택 단계: 클릭하면 빈칸으로 토글
+                                    if (isSelected) {
+                                        // 선택된 단어 = 빈칸으로 표시 (클릭하면 취소)
+                                        return (
+                                            <Pressable
+                                                key={idx}
+                                                onPress={() => onToggleBlankSelection(instanceId)}
+                                                style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}
+                                            >
+                                                <View style={{ position: 'relative' }}>
+                                                    <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
+                                                </View>
+                                            </Pressable>
+                                        );
+                                    } else {
+                                        // 선택되지 않은 단어 = 텍스트로 표시 (클릭하면 선택)
+                                        return (
+                                            <Pressable
+                                                key={idx}
+                                                onPress={() => onToggleBlankSelection(instanceId)}
+                                                style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}
+                                            >
+                                                <Text style={styles.wordText}>{t.value}</Text>
+                                            </Pressable>
+                                        );
+                                    }
                                 }
 
                                 if (substep === '2') {
-                                    if (!isInActiveRange) {
+                                    // 선택된 빈칸만 입력 가능, 나머지는 텍스트로 표시
+                                    if (!isSelected) {
                                         return (
                                             <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}>
                                                 <Text style={styles.wordText}>{t.value}</Text>
@@ -553,7 +688,6 @@ export default function ScaffoldingScreen({
                                         );
                                     }
                                     const isActive = activeBlankId === instanceId;
-                                    const hintInstance = keywordInstances.find(ki => ki.instanceId === instanceId);
                                     const currentHintType = hintWord === instanceId ? hintType : null;
                                     const textAlign = currentHintType === 'last' ? 'right' : 'left';
                                     return (
@@ -583,7 +717,9 @@ export default function ScaffoldingScreen({
                                     );
                                 }
 
-                                if (!isInActiveRange) {
+                                // substep === '3' (결과 확인 단계)
+                                // 선택되지 않은 단어는 텍스트로 표시
+                                if (!isSelected) {
                                     return (
                                         <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}>
                                             <Text style={styles.wordText}>{t.value}</Text>
@@ -681,6 +817,20 @@ export default function ScaffoldingScreen({
                         </Modal>
                     );
                 })()
+            )}
+            {/* 알림/보상 팝업 */}
+            {popupVisible && (
+                <View style={styles.popupOverlay}>
+                    <Pressable style={styles.popupBackdrop} onPress={handlePopupConfirm}>
+                        <View style={styles.popupCard}>
+                            <Text style={styles.popupTitle}>{popupTitle}</Text>
+                            <Text style={styles.popupMessage}>{popupMessage}</Text>
+                            <Pressable style={styles.popupConfirmBtn} onPress={handlePopupConfirm}>
+                                <Text style={styles.popupConfirmText}>확인</Text>
+                            </Pressable>
+                        </View>
+                    </Pressable>
+                </View>
             )}
         </KeyboardAvoidingView>
     );
@@ -939,6 +1089,56 @@ const styles = StyleSheet.create({
     modalLong: { fontSize: fontScale(12), fontWeight: '700', color: '#111827', lineHeight: fontScale(18) },
 
     hintModalOverlay: { flex: 1, backgroundColor: 'transparent', paddingHorizontal: scale(18) },
+
+    // 알림/보상 팝업 스타일
+    popupOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    popupBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(15, 23, 42, 0.25)',
+        paddingHorizontal: scale(18),
+    },
+    popupCard: {
+        width: scale(300),
+        borderRadius: scale(20),
+        backgroundColor: '#FFFFFF',
+        paddingVertical: scale(22),
+        paddingHorizontal: scale(18),
+        alignItems: 'center',
+        elevation: 6,
+    },
+    popupTitle: {
+        fontSize: fontScale(18),
+        fontWeight: '800',
+        color: '#111827',
+        marginBottom: scale(10),
+        textAlign: 'center',
+    },
+    popupMessage: {
+        fontSize: fontScale(14),
+        color: '#111827',
+        marginBottom: scale(16),
+        textAlign: 'center',
+        lineHeight: fontScale(20),
+    },
+    popupConfirmBtn: {
+        width: '100%',
+        height: scale(44),
+        borderRadius: scale(12),
+        backgroundColor: '#5E82FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    popupConfirmText: {
+        color: '#FFFFFF',
+        fontSize: fontScale(14),
+        fontWeight: '800',
+    },
     hintBalloonContainer: { alignItems: 'center', justifyContent: 'center' },
     hintBalloon: { backgroundColor: '#FFFFFF', borderRadius: scale(12), paddingHorizontal: scale(12), paddingVertical: scale(8), shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
     hintContent: { flexDirection: 'row', gap: scale(8), justifyContent: 'center' },

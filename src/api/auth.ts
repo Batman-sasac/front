@@ -220,17 +220,17 @@ export async function withdrawAccount(token: string): Promise<{
 }> {
     const endpoint = `${API_BASE_URL}/auth/withdraw`;
 
-    const formData = new FormData();
-    formData.append('token', token);
-
     const response = await fetch(endpoint, {
         method: 'POST',
-        body: formData,
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
     });
 
     if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || '회원 탈퇴 실패');
+        throw new Error(error.error || error.message || '회원 탈퇴 실패');
     }
 
     return await response.json();
@@ -267,7 +267,7 @@ export async function updateNickname(
     status: string;
     message: string;
 }> {
-    const endpoint = `${API_BASE_URL}/auth/update-nickname`;
+    const endpoint = `${API_BASE_URL}/auth/set-nickname`;
 
     const formData = new FormData();
     formData.append('nickname', nickname);
@@ -283,6 +283,35 @@ export async function updateNickname(
     if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || '닉네임 변경 실패');
+    }
+
+    return await response.json();
+}
+
+/**
+ * 사용자 통계 조회
+ */
+export async function getUserStats(token: string): Promise<{
+    status: string;
+    data: {
+        total_learning_count: number;
+        consecutive_days: number;
+        monthly_goal: number | null;
+    };
+}> {
+    const endpoint = `${API_BASE_URL}/user/stats`;
+
+    const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '사용자 통계 조회 실패');
     }
 
     return await response.json();

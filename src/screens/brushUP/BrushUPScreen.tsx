@@ -285,38 +285,41 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
                         </View>
                     ) : (
                         filteredCards.map((card) => (
-                            <Pressable
+                            <View
                                 key={card.id}
                                 style={styles.card}
-                                onPress={() => onCardPress?.(card)}
                             >
                                 {/* X 버튼 */}
                                 <Pressable
                                     style={styles.closeBtn}
                                     hitSlop={10}
-                                    onPress={(e) => {
-                                        e.stopPropagation(); // 카드 클릭 이벤트 차단
-                                        handleDeletePress(card);
-                                    }}
+                                    onPress={() => handleDeletePress(card)}
                                 >
                                     <Text style={styles.closeText}>×</Text>
                                 </Pressable>
 
-                                {/* 제목 + 과목 아이콘 */}
-                                <View style={styles.cardHeader}>
-                                    <Text style={styles.cardSubjectIcon}>{getSubjectIcon(card.subject)}</Text>
-                                    <Text style={styles.cardTitle}>{card.title}</Text>
-                                </View>
+                                {/* 카드 클릭 영역 */}
+                                <Pressable
+                                    style={styles.cardPressable}
+                                    onPress={() => onCardPress?.(card)}
+                                >
 
-                                {/* 설명 */}
-                                <Text style={styles.cardDesc} numberOfLines={2}>{card.description}</Text>
+                                    {/* 제목 + 과목 아이콘 */}
+                                    <View style={styles.cardHeader}>
+                                        <Text style={styles.cardSubjectIcon}>{getSubjectIcon(card.subject)}</Text>
+                                        <Text style={styles.cardTitle}>{card.title}</Text>
+                                    </View>
 
-                                {/* 정답률 + 기간 */}
-                                <View style={styles.cardFooter}>
-                                    <Text style={styles.cardProgress}>정답률: {card.progress}%</Text>
-                                    <Text style={styles.cardDays}>{card.daysAgo}일 전</Text>
-                                </View>
-                            </Pressable>
+                                    {/* 설명 */}
+                                    <Text style={styles.cardDesc} numberOfLines={2}>{card.description}</Text>
+
+                                    {/* 정답률 + 기간 */}
+                                    <View style={styles.cardFooter}>
+                                        <Text style={styles.cardProgress}>정답률: {card.progress}%</Text>
+                                        <Text style={styles.cardDays}>{card.daysAgo}일 전</Text>
+                                    </View>
+                                </Pressable>
+                            </View>
                         ))
                     )}
                 </ScrollView>
@@ -572,7 +575,6 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: '#FFFFFF',
         borderRadius: scale(16),
-        padding: scale(16),
         borderWidth: 1,
         borderColor: '#E5E7EB',
         position: 'relative',
@@ -582,6 +584,9 @@ const styles = StyleSheet.create({
         shadowRadius: 2,
         elevation: 1,
         width: '48%',
+    },
+    cardPressable: {
+        padding: scale(16),
     },
     closeBtn: {
         position: 'absolute',
