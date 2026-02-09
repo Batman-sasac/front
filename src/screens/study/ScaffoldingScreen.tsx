@@ -34,6 +34,7 @@ export type ScaffoldingPayload = {
     title: string;
     extractedText: string;
     blanks: BlankItem[];
+    user_answers?: string[]; // 이전 학습에서 작성한 답변 (복습용)
 };
 
 type Props = {
@@ -99,6 +100,7 @@ export default function ScaffoldingScreen({
     const inputRefs = useRef<Record<number, TextInput | null>>({});
     const blankRefs = useRef<Record<number, View | null>>({}); // blankBox 위치 추적
     const selectionSeqRef = useRef(0);
+    const reviewInitRef = useRef(false);
 
     // 안전한 값들 (payload가 없어도 안전)
     const title = payload?.title ?? '';
@@ -137,6 +139,38 @@ export default function ScaffoldingScreen({
             });
         return instances;
     }, [tokens, baseInfoByWord, blankDefs]);
+
+    useEffect(() => {
+        if (!reviewQuizId || reviewInitRef.current) return;
+        if (keywordInstances.length === 0) return;
+
+        // user_answers가 있는 빈칸만 선택 (이전 학습에서 작성한 빈칸들)
+        const userAnswers = payload?.user_answers || [];
+        let selected: number[] = [];
+
+        if (userAnswers.length > 0) {
+            // user_answers가 있는 인덱스(blankId)에 해당하는 instanceId들 찾기
+            const answeredBlankIds = new Set(
+                userAnswers.map((ans, idx) => (ans && ans.trim() !== '' ? idx : -1)).filter((id) => id >= 0)
+            );
+            selected = keywordInstances.filter((ki) => answeredBlankIds.has(ki.blankId)).map((ki) => ki.instanceId);
+        } else {
+            // user_answers가 없으면 기존 방식 (처음 20개)
+            const limit = Math.min(20, keywordInstances.length);
+            selected = keywordInstances.slice(0, limit).map((ki) => ki.instanceId);
+        }
+
+        setSelectedBlanks(selected);
+        setSelectionOrder(() => {
+            const next: Record<number, number> = {};
+            selected.forEach((id, idx) => {
+                next[id] = idx;
+            });
+            return next;
+        });
+        selectionSeqRef.current = selected.length;
+        reviewInitRef.current = true;
+    }, [reviewQuizId, keywordInstances, payload?.user_answers]);
 
     const orderedSelectedBlanks = useMemo(() => {
         return [...selectedBlanks].sort((a, b) => {
@@ -710,6 +744,7 @@ export default function ScaffoldingScreen({
                                                         style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
                                                         blurOnSubmit
                                                         onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
+                                                        maxFontSizeMultiplier={1.0}
                                                     />
                                                 </View>
                                             </Pressable>
@@ -1079,7 +1114,16 @@ const styles = StyleSheet.create({
 
     blankBox: { paddingHorizontal: 0, paddingVertical: 0, borderRadius: scale(4), marginVertical: 0, justifyContent: 'center' },
     blankBoxActive: { borderWidth: 2, borderColor: '#5E82FF' },
-    blankInput: { padding: 0, margin: 0, fontSize: fontScale(13), fontWeight: '600', color: '#111827', lineHeight: fontScale(20) },
+    blankInput: {
+        padding: 0,
+        margin: 0,
+        fontSize: fontScale(13),
+        fontWeight: '600',
+        color: '#111827',
+        lineHeight: fontScale(20),
+        borderWidth: 0,
+        ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', outlineWidth: 0 } as any) : {}),
+    },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(18) },
     modalCard: { width: '100%', maxWidth: scale(430), backgroundColor: '#FFFFFF', borderRadius: scale(16), paddingHorizontal: scale(18), paddingTop: scale(18), paddingBottom: scale(16) },

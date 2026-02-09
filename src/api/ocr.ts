@@ -15,6 +15,14 @@ export type OcrResponse =
     | { status: 'success'; original_text: string; keywords: string[] }
     | { status: 'error'; message: string };
 
+export type OcrUsageResponse = {
+    status: 'ok' | 'limit_reached' | 'error';
+    pages_used: number;
+    pages_limit: number;
+    remaining: number;
+    message?: string;
+};
+
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
 
 export async function runOcr(fileUri: string, cropInfo?: { px: number; py: number; pw: number; ph: number }): Promise<ScaffoldingPayload> {
@@ -77,6 +85,10 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
     }
     const data = (await res.json()) as any;
 
+    if (data.status === 'limit_reached') {
+        throw new Error(data.message || '이용가능한 무료 횟수를 다 사용하셨습니다');
+    }
+
     if (data.status === 'error') throw new Error(data.message);
 
     const inner = data.data ?? data;
@@ -112,6 +124,26 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
         extractedText: originalText,
         blanks: blanks,
     };
+}
+
+export async function getOcrUsage(): Promise<OcrUsageResponse> {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const res = await fetch(`${API_BASE}/ocr/usage`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
+    });
+
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`OCR Usage HTTP ${res.status}: ${errorText}`);
+    }
+
+    return res.json();
 }
 
 
@@ -173,7 +205,7 @@ export type QuizForReviewResponse = {
     message?: string;
 };
 
-export async function getQuizForReview(quizId: number): Promise<ScaffoldingPayload> {
+export async function getQuizForReview(quizId: number): Promise<ScaffoldingPayload & { user_answers?: string[] }> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
@@ -194,6 +226,7 @@ export async function getQuizForReview(quizId: number): Promise<ScaffoldingPaylo
         title: d.title,
         extractedText: d.extractedText,
         blanks: d.blanks ?? [],
+        user_answers: d.user_answers,
     };
 }
 
