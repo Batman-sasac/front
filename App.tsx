@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, ImageSourcePropType, Alert, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Splash from './src/components/Splash';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import NicknameScreen from './src/screens/auth/NicknameScreen';
@@ -73,6 +74,89 @@ export default function App() {
   // 학습 통계 상태
   const [totalStudyCount, setTotalStudyCount] = useState(0);
   const [continuousDays, setContinuousDays] = useState(0);
+  const [weekAttendance, setWeekAttendance] = useState<boolean[]>( //이번 주 요일 별 출석
+    [false, false, false, false, false, false, false],
+  );
+
+  const getWeekdayIndex = (date: Date) => {
+    const jsDay = date.getDay(); // 0(일)~6(토)
+    return (jsDay + 6) % 7;      // 월0, 화1, ... 일6
+  };
+  const [progressLoaded, setProgressLoaded] = useState(false);
+
+  const EXP_KEY = '@bat_exp';
+  const LEVEL_KEY = '@bat_level';
+  const LAST_ATTENDANCE_KEY = '@bat_last_attendance_date';
+  const STREAK_KEY = '@bat_streak';
+  const WEEK_ATTENDANCE_KEY = '@bat_week_attendance';
+  const MONTHLY_GOAL_KEY = '@bat_monthly_goal';
+
+  const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
+  const getLevelForExp = (value: number) => {
+    if (value >= LEVEL_THRESHOLDS[5]) return 5;
+    if (value >= LEVEL_THRESHOLDS[4]) return 4;
+    if (value >= LEVEL_THRESHOLDS[3]) return 3;
+    if (value >= LEVEL_THRESHOLDS[2]) return 2;
+    return 1;
+  };
+
+  const progressLoadedRef = useRef(false);
+
+  useEffect(() => {
+    const loadProgress = async () => {
+      try {
+        const [expRaw, levelRaw, lastAttendRaw, streakRaw, weekRaw, monthlyGoalRaw] = await AsyncStorage.multiGet([
+          EXP_KEY,
+          LEVEL_KEY,
+          LAST_ATTENDANCE_KEY,
+          STREAK_KEY,
+          WEEK_ATTENDANCE_KEY,
+          MONTHLY_GOAL_KEY,
+        ]);
+
+        const expValue = expRaw[1] ? Number(expRaw[1]) : 0;
+        const levelValue = levelRaw[1] ? Number(levelRaw[1]) : getLevelForExp(expValue);
+        const streakValue = streakRaw[1] ? Number(streakRaw[1]) : 0;
+        const weekValue = weekRaw[1] ? (JSON.parse(weekRaw[1]) as boolean[]) : [false, false, false, false, false, false, false];
+        const monthlyGoalValue = monthlyGoalRaw[1] ? Number(monthlyGoalRaw[1]) : null;
+
+        setExp(Number.isFinite(expValue) ? expValue : 0);
+        setLevel(Number.isFinite(levelValue) ? levelValue : 1);
+        setLastAttendanceDate(lastAttendRaw[1]);
+        setStreak(Number.isFinite(streakValue) ? streakValue : 0);
+        setWeekAttendance(Array.isArray(weekValue) ? weekValue : [false, false, false, false, false, false, false]);
+        if (monthlyGoalValue && Number.isFinite(monthlyGoalValue)) {
+          setMonthlyGoal(monthlyGoalValue);
+        }
+      } catch (error) {
+        console.error('출석/XP 로드 실패:', error);
+      } finally {
+        progressLoadedRef.current = true;
+        setProgressLoaded(true);
+      }
+    };
+
+    loadProgress();
+  }, []);
+
+  useEffect(() => {
+    if (!progressLoadedRef.current) return;
+
+    AsyncStorage.multiSet([
+      [EXP_KEY, String(exp)],
+      [LEVEL_KEY, String(level)],
+      [LAST_ATTENDANCE_KEY, lastAttendanceDate ?? ''],
+      [STREAK_KEY, String(streak)],
+      [WEEK_ATTENDANCE_KEY, JSON.stringify(weekAttendance)],
+      [MONTHLY_GOAL_KEY, monthlyGoal != null ? String(monthlyGoal) : ''],
+    ]).catch((error) => {
+      console.error('출석/XP 저장 실패:', error);
+    });
+  }, [exp, level, lastAttendanceDate, streak, weekAttendance, monthlyGoal]);
+
+  useEffect(() => {
+    setLevel(getLevelForExp(exp));
+  }, [exp]);
 
   // 학습 통계 불러오기
   useEffect(() => {
@@ -169,7 +253,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (step === 'home') {
+    if (step === 'home' && progressLoaded) {
       handleDailyCheckIn();   // 홈 들어오자마자 자동 출석
 
       // 통계 데이터 로드
@@ -181,6 +265,9 @@ export default function App() {
           ]);
           setWeeklyGrowth(weekly);
           setMonthlyStats(monthly.compare);
+          if (monthly.compare?.target_count > 0) {
+            setMonthlyGoal(monthly.compare.target_count);
+          }
         } catch (e) {
           console.error('통계 데이터 로드 실패:', e);
         }
@@ -207,7 +294,7 @@ export default function App() {
         }
       })();
     }
-  }, [step]);
+  }, [step, progressLoaded]);
 
   // 복습 진입 시 DB에서 퀴즈 데이터 가져오기 (저장된 pages/quiz 형태 그대로 사용)
   useEffect(() => {
@@ -306,18 +393,11 @@ export default function App() {
     }));
   };
 
-  const [weekAttendance, setWeekAttendance] = useState<boolean[]>( //이번 주 요일 별 출석
-    [false, false, false, false, false, false, false],
-  );
   const [currentLeagueTier] = useState<LeagueTier>('iron');  // 우선 아이언으로 시작
   const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
   const [leagueRemainingText] = useState<string>(
     '남은 시간: 3일 19시간 30분',
   );        // 예: "남은 시간: 3일 19시간 30분" (백엔드에서 제공하지 않음)
-  const getWeekdayIndex = (date: Date) => {
-    const jsDay = date.getDay(); // 0(일)~6(토)
-    return (jsDay + 6) % 7;      // 월0, 화1, ... 일6
-  };
   //촬영 결과 임시로 App으로 이동
   const [capturedSources, setCapturedSources] = useState<ImageSourcePropType[]>([]);
 

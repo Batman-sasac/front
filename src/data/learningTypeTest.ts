@@ -139,9 +139,9 @@ export const questions: Question[] = [
     },
     {
         id: 16,
-        text: '학습 자료를 볼 때 더 편한 것은?',
-        aText: '표, 도식 같이 구조가 명확한 자료',
-        bText: '상황, 예시 설명이 풍부한 이야기형 자료',
+        text: '문제를 풀 때, 어떻게 접근하나요?',
+        aText: '문제를 여러 번 검토하고 답안 작성',
+        bText: '먼저 생각나는 답을 적고 틀리면 수정',
         a: { field: 1 },
         b: { field: -1 },
     },
