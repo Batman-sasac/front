@@ -13,10 +13,9 @@ import {
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
 import OAuthWebView from '../../components/OAuthWebView';
-import { getToken, clearAuthData } from '../../lib/storage';
+import { getToken, clearAuthData, getUserInfo as getStoredUserInfo } from '../../lib/storage';
 import { confirmLogout } from '../../lib/auth';
 import {
-    getUserInfo,
     getOAuthUrl,
     connectAccount,
     disconnectAccount,
@@ -24,6 +23,7 @@ import {
     updateNickname as apiUpdateNickname,
     getUserStats,
 } from '../../api/auth';
+import { getMonthlyStats } from '../../api/ocr';
 
 type Screen = 'home' | 'league' | 'alarm' | 'mypage' | 'takePicture' | 'brushup';
 
@@ -114,15 +114,21 @@ export default function MyPageScreen({
                 return;
             }
 
-            const userInfo = await getUserInfo(token);
-            setKakaoEmail(userInfo.kakao_email ?? userInfo.email ?? null);
-            setNaverEmail(userInfo.naver_email);
+            const stored = await getStoredUserInfo();
+            setKakaoEmail(stored.email ?? null);
+            setNaverEmail(null);
 
-            const stats = await getUserStats(token);
+            const [stats, monthlyStats] = await Promise.all([
+                getUserStats(token),
+                getMonthlyStats(),
+            ]);
+            const monthlyGoalValue = monthlyStats?.compare?.target_count ?? stats.data.monthly_goal;
+            const fallbackGoal = typeof monthlyGoal === 'number' ? monthlyGoal : null;
+            const resolvedGoal = (monthlyGoalValue && monthlyGoalValue > 0) ? monthlyGoalValue : (fallbackGoal ?? monthlyGoalValue);
             setTotalStudyCountState(stats.data.total_learning_count);
             setContinuousDaysState(stats.data.consecutive_days);
-            setMonthlyGoalState(stats.data.monthly_goal);
-            setTempGoal(stats.data.monthly_goal ?? 20);
+            setMonthlyGoalState(resolvedGoal ?? 0);
+            setTempGoal(resolvedGoal ?? 20);
             setLoading(false);
         } catch (error) {
             console.error('계정 정보 로드 실패:', error);

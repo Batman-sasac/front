@@ -92,7 +92,19 @@ export default function HomeScreen({
   onLogout,
 }: Props) {
   const characterSource = getCharacterSourceByType(typeLabel);
-  const expProgress = Math.min(exp / 100, 1);
+  const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
+  const getLevelBounds = (currentLevel: number) => {
+    const idx = Math.min(Math.max(currentLevel, 1), 5) - 1;
+    const min = LEVEL_THRESHOLDS[idx];
+    const max = LEVEL_THRESHOLDS[Math.min(idx + 1, LEVEL_THRESHOLDS.length - 1)];
+    return { min, max };
+  };
+
+  const { min: levelMin, max: levelMax } = getLevelBounds(level);
+  const expClamped = Math.max(levelMin, Math.min(exp, levelMax));
+  const expInLevel = expClamped - levelMin;
+  const expNeeded = Math.max(levelMax - levelMin, 1);
+  const expProgress = levelMax === levelMin ? 1 : Math.min(expInLevel / expNeeded, 1);
   const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
   const todayIndex = (() => {
     const jsDay = new Date().getDay();
@@ -162,11 +174,11 @@ export default function HomeScreen({
                   <View
                     style={[
                       styles.progressBarFill,
-                      { width: `${Math.min(exp, 100)}%` },
+                      { width: `${Math.round(expProgress * 100)}%` },
                     ]}
                   />
                 </View>
-                <Text style={styles.expText}>{exp}/100</Text>
+                <Text style={styles.expText}>{expClamped}/{levelMax}</Text>
               </View>
 
               {/* 캐릭터 */}

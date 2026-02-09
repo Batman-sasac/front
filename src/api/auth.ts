@@ -1,7 +1,7 @@
 // API Base URL - 실제 백엔드 서버 주소로 변경 필요
 const API_BASE_URL = 'http://127.0.0.1:8000';
 
-import { getToken } from '../lib/storage';
+import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
 
 export interface LoginResponse {
     status: 'success' | 'nickname_required' | 'NICKNAME_REQUIRED';
@@ -143,8 +143,29 @@ export async function getUserInfo(token: string): Promise<{
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '사용자 정보 조회 실패');
+        if (response.status === 404) {
+            const stored = await getStoredUserInfo();
+            const email = stored.email ?? '';
+            const nickname = stored.nickname ?? '';
+            return {
+                status: 'success',
+                email,
+                nickname,
+                kakao_connected: !!email,
+                naver_connected: false,
+                kakao_email: email || null,
+                naver_email: null,
+            };
+        }
+
+        let message = '사용자 정보 조회 실패';
+        try {
+            const error = await response.json();
+            message = error.error || error.message || message;
+        } catch {
+            // ignore json parse error
+        }
+        throw new Error(message);
     }
 
     return await response.json();
@@ -162,24 +183,19 @@ export async function connectAccount(
     message: string;
     connected_email: string;
 }> {
-    const endpoint = `${API_BASE_URL}/auth/connect-account`;
+    void token;
+    // 백엔드에는 connect-account가 없어서 OAuth 로그인 엔드포인트를 그대로 사용
+    const result = await loginWithOAuth(provider, code);
 
-    const formData = new FormData();
-    formData.append('token', token);
-    formData.append('provider', provider);
-    formData.append('code', code);
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
-    });
-
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '계정 연동 실패');
+    if (result.status !== 'success') {
+        throw new Error(result.message || '계정 연동 실패');
     }
 
-    return await response.json();
+    return {
+        status: 'success',
+        message: '계정이 연동되었습니다.',
+        connected_email: result.email,
+    };
 }
 
 /**
@@ -192,23 +208,9 @@ export async function disconnectAccount(
     status: string;
     message: string;
 }> {
-    const endpoint = `${API_BASE_URL}/auth/disconnect-account`;
-
-    const formData = new FormData();
-    formData.append('token', token);
-    formData.append('provider', provider);
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
-    });
-
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '연동 해제 실패');
-    }
-
-    return await response.json();
+    void token;
+    void provider;
+    throw new Error('백엔드에서 연동 해제를 지원하지 않습니다.');
 }
 
 /**
@@ -218,22 +220,8 @@ export async function withdrawAccount(token: string): Promise<{
     status: string;
     message: string;
 }> {
-    const endpoint = `${API_BASE_URL}/auth/withdraw`;
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
-    });
-
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || error.message || '회원 탈퇴 실패');
-    }
-
-    return await response.json();
+    void token;
+    throw new Error('백엔드에 회원 탈퇴 API가 없습니다.');
 }
 
 /**
@@ -269,15 +257,13 @@ export async function updateNickname(
 }> {
     const endpoint = `${API_BASE_URL}/auth/set-nickname`;
 
-    const formData = new FormData();
-    formData.append('nickname', nickname);
-
     const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
         },
-        body: formData,
+        body: JSON.stringify({ nickname }),
     });
 
     if (!response.ok) {
@@ -299,7 +285,7 @@ export async function getUserStats(token: string): Promise<{
         monthly_goal: number | null;
     };
 }> {
-    const endpoint = `${API_BASE_URL}/user/stats`;
+    const endpoint = `${API_BASE_URL}/auth/user/stats`;
 
     const response = await fetch(endpoint, {
         method: 'GET',
