@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, ImageSourcePropType } from 'react-native';
+import { View, ImageSourcePropType, Alert, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import Splash from './src/components/Splash';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import NicknameScreen from './src/screens/auth/NicknameScreen';
@@ -20,7 +21,8 @@ import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
 import { runOcr, ScaffoldingPayload, saveTest, getQuizForReview, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
-import { getRewardSummary } from './src/api/reward';
+import { updateFcmToken } from './src/api/notification';
+import { getRewardLeaderboard } from './src/api/reward';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 
 type SocialProvider = 'kakao' | 'naver';
@@ -66,6 +68,7 @@ export default function App() {
     showBase: false,
     showBonus: false,
   });
+  const [pushTokenSynced, setPushTokenSynced] = useState(false);
 
   // 학습 통계 상태
   const [totalStudyCount, setTotalStudyCount] = useState(0);
@@ -92,6 +95,40 @@ export default function App() {
     // 앱 시작시 자동 로그인 체크
     checkAutoLogin();
   }, []);
+
+  useEffect(() => {
+    if (step !== 'home' || pushTokenSynced) return;
+
+    const registerAndSyncPushToken = async () => {
+      if (Platform.OS === 'web') return;
+
+      const authToken = await getToken();
+      if (!authToken) return;
+
+      const permission = await Notifications.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        console.log('알림 권한이 거부되었습니다.');
+        return;
+      }
+
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.DEFAULT,
+        });
+      }
+
+      const deviceToken = await Notifications.getDevicePushTokenAsync();
+      if (!deviceToken?.data) return;
+
+      await updateFcmToken(authToken, deviceToken.data);
+      setPushTokenSynced(true);
+    };
+
+    registerAndSyncPushToken().catch((error) => {
+      console.error('푸시 토큰 등록 실패:', error);
+    });
+  }, [step, pushTokenSynced]);
 
   const checkAutoLogin = async () => {
     try {
@@ -146,6 +183,27 @@ export default function App() {
           setMonthlyStats(monthly.compare);
         } catch (e) {
           console.error('통계 데이터 로드 실패:', e);
+        }
+      })();
+    }
+
+    // 리그 화면 진입 시 상위 5명 리더보드 로드
+    if (step === 'league') {
+      (async () => {
+        try {
+          const response = await getRewardLeaderboard();
+          if (response.status === 'success' && response.leaderboard) {
+            // 백엔드에서 상위 5명만 반환됨
+            const users: LeagueUser[] = response.leaderboard.map((item, idx) => ({
+              id: `user_${idx}`,
+              nickname: item.nickname,
+              xp: item.total_reward,
+              minutesAgo: 0, // 백엔드에서 제공하지 않음
+            }));
+            setLeagueUsers(users);
+          }
+        } catch (e) {
+          console.error('리그 데이터 로드 실패:', e);
         }
       })();
     }
@@ -248,53 +306,14 @@ export default function App() {
     }));
   };
 
-  const applyStudyReward = async () => {
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const result = await getRewardSummary(token);
-      const totalReward = result.total_reward ?? 0;
-      const delta = Math.max(0, totalReward - exp);
-
-      setExp(totalReward);
-      if (delta > 0) {
-        setRewardState({
-          baseXP: delta,
-          bonusXP: 0,
-          showBase: true,
-          showBonus: false,
-        });
-      }
-    } catch (error) {
-      console.error('리워드 반영 실패:', error);
-    }
-  };
   const [weekAttendance, setWeekAttendance] = useState<boolean[]>( //이번 주 요일 별 출석
     [false, false, false, false, false, false, false],
   );
   const [currentLeagueTier] = useState<LeagueTier>('iron');  // 우선 아이언으로 시작
-  /* 백엔드 연결
-  const [leagueUsers] = useState<LeagueUser[]>([]);
-  const [leagueRemainingText] = useState<string>('');
-  */
-  const [leagueUsers] = useState<LeagueUser[]>([
-    {
-      id: 'u1',
-      nickname: '데일리기록러',
-      xp: 1200,
-      minutesAgo: 51,
-    },
-    {
-      id: 'u2',
-      nickname: '공부하는곰돌이',
-      xp: 900,
-      minutesAgo: 51,
-    },
-  ]);
-
+  const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
   const [leagueRemainingText] = useState<string>(
     '남은 시간: 3일 19시간 30분',
-  );        // 예: "남은 시간: 3일 19시간 30분"
+  );        // 예: "남은 시간: 3일 19시간 30분" (백엔드에서 제공하지 않음)
   const getWeekdayIndex = (date: Date) => {
     const jsDay = date.getDay(); // 0(일)~6(토)
     return (jsDay + 6) % 7;      // 월0, 화1, ... 일6
@@ -506,9 +525,17 @@ export default function App() {
               // 음성학습 스킵하고 바로 scaffolding으로
               setStep('scaffolding');
             } catch (e: any) {
+              const message = e?.message ?? 'OCR 호출에 실패했습니다.';
               console.error('❌ OCR 실패:', e);
               setScaffoldingPayload(null);
-              setScaffoldingError(e?.message ?? 'OCR 호출에 실패했습니다.');
+              setScaffoldingError(message);
+
+              if (typeof message === 'string' && message.includes('무료 횟수')) {
+                Alert.alert('OCR 사용 한도', message);
+                return;
+              }
+
+              Alert.alert('OCR 오류', message);
               // OCR 실패 시 홈으로 돌아가기
               setStep('home');
             } finally {
@@ -541,7 +568,6 @@ export default function App() {
             // 학습 완료 후 홈으로
             setIsReviewMode(false);
             setReviewQuizId(null);
-            applyStudyReward();
             setStep('home');
           }}
           sources={capturedSources}

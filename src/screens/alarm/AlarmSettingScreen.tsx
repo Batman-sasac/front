@@ -6,8 +6,11 @@ import {
     StyleSheet,
     Pressable,
     Switch,
+    Alert,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
+import { getToken } from '../../lib/storage';
+import { updateNotificationSettings } from '../../api/notification';
 
 type Time = {
     ampm: '오전' | '오후';
@@ -57,6 +60,29 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
         return `${t.hour}:${mm} ${suffix}`;
     };
 
+    const to24HourString = (t: Time) => {
+        const mm = t.minute.toString().padStart(2, '0');
+        const base = t.hour % 12;
+        const hour = t.ampm === '오후' ? base + 12 : base;
+        return `${hour.toString().padStart(2, '0')}:${mm}`;
+    };
+
+    const saveReviewSettings = async (enabled: boolean, time: Time) => {
+        try {
+            const token = await getToken();
+            if (!token) {
+                Alert.alert('알림 설정', '로그인이 필요합니다.');
+                return;
+            }
+            await updateNotificationSettings(token, {
+                is_notify: enabled,
+                remind_time: to24HourString(time),
+            });
+        } catch (error: any) {
+            Alert.alert('알림 설정 저장 실패', error?.message ?? '알림 설정 저장에 실패했습니다.');
+        }
+    };
+
     const dndLabel = `${formatTime(dndStart)} ~ ${formatTime(dndEnd)}`;
 
     const openPicker = (target: ActivePicker) => {
@@ -68,7 +94,10 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
     };
 
     const confirmPicker = () => {
-        if (picker === 'review') setReviewTime(tempTime);
+        if (picker === 'review') {
+            setReviewTime(tempTime);
+            saveReviewSettings(reviewEnabled, tempTime);
+        }
         if (picker === 'dndStart') setDndStart(tempTime);
         if (picker === 'dndEnd') setDndEnd(tempTime);
         setPicker(null);
@@ -126,7 +155,10 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                         </View>
                         <Switch
                             value={reviewEnabled}
-                            onValueChange={setReviewEnabled}
+                            onValueChange={(value) => {
+                                setReviewEnabled(value);
+                                saveReviewSettings(value, reviewTime);
+                            }}
                             trackColor={{ false: '#D1D5DB', true: '#5E82FF' }}
                             thumbColor="#FFFFFF"
                         />

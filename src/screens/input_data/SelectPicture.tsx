@@ -13,6 +13,7 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
+import { getOcrUsage } from '../../api/ocr';
 
 type Props = {
     sources: ImageSourcePropType[];
@@ -47,6 +48,8 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [rotation, setRotation] = useState(0);
     const [subjectName, setSubjectName] = useState('');  // 과목명 추가
+    const [ocrUsage, setOcrUsage] = useState<{ remaining: number; pages_limit: number; status: string } | null>(null);
+    const [ocrUsageError, setOcrUsageError] = useState<string | null>(null);
 
     const selectedSource = useMemo(() => {
         if (!sources || sources.length === 0) return null;
@@ -137,6 +140,34 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             }
         }
     }, [selectedSource]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadUsage = async () => {
+            try {
+                const usage = await getOcrUsage();
+                if (!cancelled) {
+                    setOcrUsage({
+                        remaining: usage.remaining ?? 0,
+                        pages_limit: usage.pages_limit ?? 0,
+                        status: usage.status,
+                    });
+                    setOcrUsageError(null);
+                }
+            } catch (e: any) {
+                if (!cancelled) {
+                    setOcrUsage(null);
+                    setOcrUsageError(e?.message ?? 'OCR 사용량을 불러오지 못했습니다.');
+                }
+            }
+        };
+
+        loadUsage();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (displayRect.dw <= 0 || displayRect.dh <= 0) return;
@@ -462,6 +493,17 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             <View style={styles.centerWrap}>
                 <Text style={styles.guide}>원하는 개념 한 가지만 포함되도록 잘라주세요.</Text>
 
+                {ocrUsage && (
+                    <View style={styles.usageChip}>
+                        <Text style={styles.usageText}>
+                            OCR 남은 횟수 {ocrUsage.remaining}/{ocrUsage.pages_limit}
+                        </Text>
+                    </View>
+                )}
+                {ocrUsageError && (
+                    <Text style={styles.usageErrorText}>{ocrUsageError}</Text>
+                )}
+
                 <TextInput
                     style={styles.subjectInput}
                     placeholder="과목명 입력 (예: 수학, 영어)"
@@ -633,6 +675,26 @@ const styles = StyleSheet.create({
         color: '#111827',
         marginBottom: scale(12),
         lineHeight: fontScale(26),
+    },
+    usageChip: {
+        alignSelf: 'center',
+        backgroundColor: '#EEF2FF',
+        paddingHorizontal: scale(12),
+        paddingVertical: scale(6),
+        borderRadius: scale(999),
+        marginBottom: scale(10),
+    },
+    usageText: {
+        color: '#4338CA',
+        fontSize: fontScale(12),
+        fontWeight: '700',
+    },
+    usageErrorText: {
+        color: '#EF4444',
+        fontSize: fontScale(11),
+        fontWeight: '700',
+        marginBottom: scale(8),
+        textAlign: 'center',
     },
 
     subjectInput: {
