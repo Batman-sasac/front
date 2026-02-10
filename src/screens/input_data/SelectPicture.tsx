@@ -536,7 +536,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                                 <View style={[styles.maskLeft, overlayStyles.left, { pointerEvents: 'none' }]} />
                                 <View style={[styles.maskRight, overlayStyles.right, { pointerEvents: 'none' }]} />
 
-                                <View style={[styles.cropFrame, overlayStyles.frame, { pointerEvents: 'box-only' }]} {...moveResponder.panHandlers} onMouseDown={handleMouseDown('move')}>
+                                <View style={[styles.cropFrame, overlayStyles.frame, { pointerEvents: 'box-only' }]} {...moveResponder.panHandlers}>
                                     <View style={[styles.cropCornerTL, { pointerEvents: 'none' }]} />
                                     <View style={[styles.cropCornerTR, { pointerEvents: 'none' }]} />
                                     <View style={[styles.cropCornerBL, { pointerEvents: 'none' }]} />
@@ -544,25 +544,25 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
                                     <View
                                         style={[styles.handle, styles.handleTL, { pointerEvents: 'auto' }]}
-                                        onMouseDown={handleHandleMouseDown('tl')}
+                                        {...tlResponder.panHandlers}
                                     >
                                         <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
                                     </View>
                                     <View
                                         style={[styles.handle, styles.handleTR, { pointerEvents: 'auto' }]}
-                                        onMouseDown={handleHandleMouseDown('tr')}
+                                        {...trResponder.panHandlers}
                                     >
                                         <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
                                     </View>
                                     <View
                                         style={[styles.handle, styles.handleBL, { pointerEvents: 'auto' }]}
-                                        onMouseDown={handleHandleMouseDown('bl')}
+                                        {...blResponder.panHandlers}
                                     >
                                         <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
                                     </View>
                                     <View
                                         style={[styles.handle, styles.handleBR, { pointerEvents: 'auto' }]}
-                                        onMouseDown={handleHandleMouseDown('br')}
+                                        {...brResponder.panHandlers}
                                     >
                                         <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
                                     </View>
