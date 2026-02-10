@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Modal, ActivityIndicator } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
-import Constants from 'expo-constants';
+import config from '../../lib/config';
 import { getToken } from '../../lib/storage';
 import type { Screen } from '../../components/Sidebar';
 
-const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl || 'http://localhost:8000';
+const API_BASE_URL = config.apiBaseUrl;
 
 type Subject = {
     id: string;

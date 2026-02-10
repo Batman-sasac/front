@@ -23,7 +23,9 @@ export type OcrUsageResponse = {
     message?: string;
 };
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+import config from '../lib/config';
+
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
 export async function runOcr(fileUri: string, cropInfo?: { px: number; py: number; pw: number; ph: number }): Promise<ScaffoldingPayload> {
     console.log('🔵 OCR 요청 시작 - fileUri:', fileUri, 'cropInfo:', cropInfo);
