@@ -17,10 +17,10 @@ import {
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { saveTest } from '../../api/ocr';
-import Constants from 'expo-constants';
+import config from '../../lib/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl || 'http://localhost:8000';
+const API_BASE_URL = config.apiBaseUrl;
 
 type Step = '1-1' | '1-2' | '1-3' | '2-1' | '2-2' | '2-3' | '3-1' | '3-2' | '3-3';
 type GradeState = 'idle' | 'correct' | 'wrong';

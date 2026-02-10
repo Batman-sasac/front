@@ -1,5 +1,7 @@
+import config from '../lib/config';
+
 // API Base URL - 실제 백엔드 서버 주소로 변경 필요
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
 
