@@ -148,8 +148,7 @@ export default function MyPageScreen({
     };
 
     const handleConnectNaver = () => {
-        setOauthProvider('naver');
-        setShowOAuthWebView(true);
+        Alert.alert('안내', '현재 네이버 계정 연동은 지원되지 않습니다.');
     };
 
     const handleOAuthCode = async (code: string) => {
@@ -157,6 +156,11 @@ export default function MyPageScreen({
             const token = await getToken();
             if (!token) {
                 Alert.alert('오류', '로그인이 필요합니다');
+                return;
+            }
+
+            if (oauthProvider === 'naver') {
+                Alert.alert('안내', '현재 네이버 계정 연동은 지원되지 않습니다.');
                 return;
             }
 

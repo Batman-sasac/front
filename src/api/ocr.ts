@@ -192,6 +192,32 @@ export async function saveTest(payload: SaveTestRequest) {
     return res.json();
 }
 
+export type GradeStudyRequest = {
+    quiz_id: number;
+    user_answers: string[];
+    answer: string[];
+};
+
+export async function gradeStudy(payload: GradeStudyRequest) {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const res = await fetch(`${API_BASE}/study/grade`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Grade HTTP ${res.status}: ${errorText}`);
+    }
+    return res.json();
+}
+
 /** 복습 시 DB에 저장된 퀴즈를 ScaffoldingPayload 형태로 가져오기 */
 export type QuizForReviewResponse = {
     status: string;

@@ -13,6 +13,7 @@ import {
     Alert,
     Modal,
     ActivityIndicator,
+    PanResponder,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { saveTest } from '../../api/ocr';
@@ -97,15 +98,29 @@ export default function ScaffoldingScreen({
     const [hintType, setHintType] = useState<'first' | 'last' | 'chosung' | null>(null); // 선택된 힌트 타입
     const [hintPosition, setHintPosition] = useState<{ x: number; y: number } | null>(null); // 힌트 모달 위치
 
+    const [blankDefsState, setBlankDefsState] = useState<BlankItem[]>([]);
+    const [pendingSelection, setPendingSelection] = useState<{ includeWord: string; excludeWords: string[] } | null>(null);
+    const [dragConfirm, setDragConfirm] = useState<{ text: string; box: { x: number; y: number; w: number; h: number } } | null>(null);
+    const [dragSelection, setDragSelection] = useState<{ text: string; box: { x: number; y: number; w: number; h: number } } | null>(null);
+
     const inputRefs = useRef<Record<number, TextInput | null>>({});
     const blankRefs = useRef<Record<number, View | null>>({}); // blankBox 위치 추적
     const selectionSeqRef = useRef(0);
     const reviewInitRef = useRef(false);
+    const flowLayoutRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+    const tokenLayoutsRef = useRef<Record<number, { x: number; y: number; width: number; height: number }>>({});
+    const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+    const dragSelectionRef = useRef<{ text: string; box: { x: number; y: number; w: number; h: number } } | null>(null);
 
     // 안전한 값들 (payload가 없어도 안전)
     const title = payload?.title ?? '';
     const extractedText = payload?.extractedText ?? '';
-    const blankDefs = payload?.blanks ?? [];
+
+    useEffect(() => {
+        setBlankDefsState(payload?.blanks ?? []);
+    }, [payload?.blanks, payload?.extractedText]);
+
+    const blankDefs = blankDefsState;
 
     /** 키워드 목록 */
     const keywordList = useMemo(() => blankDefs.map((b) => b.word), [blankDefs]);
@@ -172,6 +187,46 @@ export default function ScaffoldingScreen({
         reviewInitRef.current = true;
     }, [reviewQuizId, keywordInstances, payload?.user_answers]);
 
+    useEffect(() => {
+        if (!pendingSelection) return;
+        const includeNorm = normalize(pendingSelection.includeWord);
+        const excludeNorms = pendingSelection.excludeWords.map((w) => normalize(w));
+        const includeIds = keywordInstances
+            .filter((ki) => normalize(ki.base?.word ?? ki.word) === includeNorm)
+            .map((ki) => ki.instanceId);
+
+        const filtered = selectedBlanks.filter((id) => {
+            const inst = keywordInstances.find((ki) => ki.instanceId === id);
+            if (!inst) return false;
+            return !excludeNorms.includes(normalize(inst.base?.word ?? inst.word));
+        });
+
+        const merged = [...filtered];
+        includeIds.forEach((id) => {
+            if (!merged.includes(id)) merged.push(id);
+        });
+
+        setSelectedBlanks(merged);
+        setSelectionOrder(() => {
+            const next: Record<number, number> = {};
+            merged.forEach((id, idx) => {
+                next[id] = idx;
+            });
+            return next;
+        });
+        selectionSeqRef.current = merged.length;
+
+        setAnswers((prev) => {
+            const next: Record<number, string> = {};
+            merged.forEach((id) => {
+                if (prev[id] != null) next[id] = prev[id];
+            });
+            return next;
+        });
+
+        setPendingSelection(null);
+    }, [pendingSelection, keywordInstances, selectedBlanks]);
+
     const orderedSelectedBlanks = useMemo(() => {
         return [...selectedBlanks].sort((a, b) => {
             const ao = selectionOrder[a] ?? 0;
@@ -233,6 +288,10 @@ export default function ScaffoldingScreen({
         const roundNum = round;
         const label = substep === '1' ? '단어 확인' : substep === '2' ? '빈칸 학습' : '학습 채점';
         return `Round ${roundNum} - ${label}`;
+    }, [step]);
+
+    useEffect(() => {
+        setDragConfirm(null);
     }, [step]);
 
     // 힌트 모달이 닫힐 때 (hintWord가 null이 될 때) 힌트 입력값 지우기
@@ -334,6 +393,135 @@ export default function ScaffoldingScreen({
         else if (step === '2-1') setStep('2-2');
         else if (step === '3-1') setStep('3-2');
     };
+
+    const recordTokenLayout = (idx: number) => (event: any) => {
+        const { x, y, width, height } = event.nativeEvent.layout;
+        tokenLayoutsRef.current[idx] = { x, y, width, height };
+    };
+
+    const buildSelectedText = (indices: number[]) => {
+        if (indices.length === 0) return '';
+        const sorted = [...indices].sort((a, b) => a - b);
+        const start = sorted[0];
+        const end = sorted[sorted.length - 1];
+        let text = '';
+        for (let i = start; i <= end; i++) {
+            const t = tokens[i];
+            if (!t) continue;
+            if (t.type === 'newline') {
+                text += ' ';
+                continue;
+            }
+            text += t.value;
+        }
+        return text.replace(/\s+/g, ' ').trim();
+    };
+
+    const getSelectionBox = (indices: number[]) => {
+        if (indices.length === 0) return null;
+        let minX = Number.POSITIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        indices.forEach((idx) => {
+            const box = tokenLayoutsRef.current[idx];
+            if (!box) return;
+            minX = Math.min(minX, box.x);
+            minY = Math.min(minY, box.y);
+            maxX = Math.max(maxX, box.x + box.width);
+            maxY = Math.max(maxY, box.y + box.height);
+        });
+        if (!Number.isFinite(minX)) return null;
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+    };
+
+    const applyCustomBlank = (rawText: string) => {
+        const trimmed = rawText.replace(/\s+/g, ' ').trim();
+        if (!trimmed) return;
+
+        const norm = normalize(trimmed);
+        const overlapWords = blankDefs
+            .filter((b) => {
+                const bn = normalize(b.word);
+                return norm.includes(bn) || bn.includes(norm);
+            })
+            .map((b) => b.word);
+
+        const excludeWords = overlapWords.filter((w) => normalize(w) !== norm);
+        const filtered = blankDefs.filter((b) => !excludeWords.some((w) => normalize(w) === normalize(b.word)));
+
+        const existing = filtered.find((b) => normalize(b.word) === norm);
+        if (existing) {
+            setBlankDefsState(filtered);
+            setPendingSelection({ includeWord: existing.word, excludeWords });
+            return;
+        }
+
+        const nextId = filtered.reduce((max, b) => Math.max(max, b.id), -1) + 1;
+        const nextBlank: BlankItem = { id: nextId, word: trimmed, meaningLong: '' };
+        setBlankDefsState([...filtered, nextBlank]);
+        setPendingSelection({ includeWord: trimmed, excludeWords });
+    };
+
+    const dragEnabled = step.endsWith('-1') && !reviewQuizId;
+    const dragResponder = useMemo(() => {
+        if (!dragEnabled) return null;
+        return PanResponder.create({
+            onStartShouldSetPanResponder: () => dragEnabled,
+            onMoveShouldSetPanResponder: (_, g) => dragEnabled && (Math.abs(g.dx) + Math.abs(g.dy) > 4),
+            onPanResponderGrant: (evt) => {
+                const { locationX, locationY } = evt.nativeEvent;
+                setDragConfirm(null);
+                setDragSelection(null);
+                dragSelectionRef.current = null;
+                dragStartRef.current = { x: locationX, y: locationY };
+            },
+            onPanResponderMove: (evt) => {
+                const start = dragStartRef.current;
+                if (!start) return;
+                const { locationX, locationY } = evt.nativeEvent;
+                const left = Math.min(start.x, locationX);
+                const right = Math.max(start.x, locationX);
+                const top = Math.min(start.y, locationY);
+                const bottom = Math.max(start.y, locationY);
+
+                const indices = Object.keys(tokenLayoutsRef.current)
+                    .map((k) => Number(k))
+                    .filter((idx) => {
+                        const box = tokenLayoutsRef.current[idx];
+                        if (!box) return false;
+                        const bLeft = box.x;
+                        const bRight = box.x + box.width;
+                        const bTop = box.y;
+                        const bBottom = box.y + box.height;
+                        return bLeft <= right && bRight >= left && bTop <= bottom && bBottom >= top;
+                    });
+
+                const text = buildSelectedText(indices);
+                const box = getSelectionBox(indices);
+                if (box && text) {
+                    const selection = { text, box };
+                    setDragSelection(selection);
+                    dragSelectionRef.current = selection;
+                } else {
+                    setDragSelection(null);
+                    dragSelectionRef.current = null;
+                }
+            },
+            onPanResponderRelease: () => {
+                const selection = dragSelectionRef.current;
+                if (!selection || !selection.text || !selection.box) {
+                    setDragSelection(null);
+                    return;
+                }
+                setDragConfirm({ text: selection.text, box: selection.box });
+                setDragSelection(null);
+            },
+            onPanResponderTerminate: () => {
+                setDragSelection(null);
+            },
+        });
+    }, [dragEnabled, tokens]);
 
     const onLongPressBlank = (instanceId: number) => {
         setHintWord(instanceId);
@@ -669,11 +857,17 @@ export default function ScaffoldingScreen({
                 {/* 오른쪽 카드(글만) */}
                 <View style={styles.rightCard}>
                     <ScrollView contentContainerStyle={styles.textContainer}>
-                        <View style={styles.flow}>
+                        <View
+                            style={styles.flow}
+                            onLayout={(e) => {
+                                flowLayoutRef.current = e.nativeEvent.layout;
+                            }}
+                            {...(dragResponder ? dragResponder.panHandlers : {})}
+                        >
                             {tokens.map((t, idx) => {
                                 if (t.type === 'newline') return <View key={idx} style={styles.newline} />;
-                                if (t.type === 'space') return <Text key={idx}>{t.value}</Text>;
-                                if (t.type === 'text') return <Text key={idx} style={styles.bodyText}>{t.value}</Text>;
+                                if (t.type === 'space') return <Text key={idx} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
+                                if (t.type === 'text') return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
 
                                 const base = baseInfoByWord.get(t.baseWord) ?? null;
                                 const instanceId = t.instanceId;
@@ -692,6 +886,7 @@ export default function ScaffoldingScreen({
                                                 key={idx}
                                                 onPress={() => onToggleBlankSelection(instanceId)}
                                                 style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}
+                                                onLayout={recordTokenLayout(idx)}
                                             >
                                                 <View style={{ position: 'relative' }}>
                                                     <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
@@ -705,6 +900,7 @@ export default function ScaffoldingScreen({
                                                 key={idx}
                                                 onPress={() => onToggleBlankSelection(instanceId)}
                                                 style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}
+                                                onLayout={recordTokenLayout(idx)}
                                             >
                                                 <Text style={styles.wordText}>{t.value}</Text>
                                             </Pressable>
@@ -716,7 +912,7 @@ export default function ScaffoldingScreen({
                                     // 선택된 빈칸만 입력 가능, 나머지는 텍스트로 표시
                                     if (!isSelected) {
                                         return (
-                                            <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}>
+                                            <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
                                                 <Text style={styles.wordText}>{t.value}</Text>
                                             </Pressable>
                                         );
@@ -734,6 +930,7 @@ export default function ScaffoldingScreen({
                                                 onLongPress={() => onLongPressBlank(instanceId)}
                                                 delayLongPress={450}
                                                 style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
+                                                onLayout={recordTokenLayout(idx)}
                                             >
                                                 <View style={{ position: 'relative' }}>
                                                     <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
@@ -756,7 +953,7 @@ export default function ScaffoldingScreen({
                                 // 선택되지 않은 단어는 텍스트로 표시
                                 if (!isSelected) {
                                     return (
-                                        <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}>
+                                        <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
                                             <Text style={styles.wordText}>{t.value}</Text>
                                         </Pressable>
                                     );
@@ -769,6 +966,7 @@ export default function ScaffoldingScreen({
                                         key={idx}
                                         onPress={() => base && setSelectedWord(base)}
                                         style={[styles.wordPill, { backgroundColor: bg }]}
+                                        onLayout={recordTokenLayout(idx)}
                                     >
                                         <Text style={styles.wordText}>{t.value}</Text>
                                     </Pressable>
@@ -776,6 +974,37 @@ export default function ScaffoldingScreen({
                             })}
                         </View>
                     </ScrollView>
+                    {dragSelection?.box && flowLayoutRef.current && dragEnabled && (
+                        <View
+                            style={[
+                                styles.dragSelectionBox,
+                                {
+                                    left: flowLayoutRef.current.x + dragSelection.box.x,
+                                    top: flowLayoutRef.current.y + dragSelection.box.y,
+                                    width: dragSelection.box.w,
+                                    height: dragSelection.box.h,
+                                },
+                            ]}
+                            pointerEvents="none"
+                        />
+                    )}
+                    {dragConfirm?.box && flowLayoutRef.current && dragEnabled && (
+                        <Pressable
+                            style={[
+                                styles.dragConfirmBtn,
+                                {
+                                    left: flowLayoutRef.current.x + dragConfirm.box.x + dragConfirm.box.w / 2 - scale(52),
+                                    top: Math.max(0, flowLayoutRef.current.y + dragConfirm.box.y - scale(34)),
+                                },
+                            ]}
+                            onPress={() => {
+                                applyCustomBlank(dragConfirm.text);
+                                setDragConfirm(null);
+                            }}
+                        >
+                            <Text style={styles.dragConfirmText}>빈칸 만들기</Text>
+                        </Pressable>
+                    )}
                 </View>
             </View>
 
@@ -895,12 +1124,19 @@ function matchKeywordAllowingSpaces(
     let ti = pos;
     let ki = 0;
     while (ki < kwLower.length && ti < text.length) {
+        if (kwLower[ki] === ' ' || kwLower[ki] === '\t') {
+            ki++;
+            continue;
+        }
         if (text[ti] === ' ' || text[ti] === '\t') {
             ti++;
             continue;
         }
         if (textLower[ti] !== kwLower[ki]) return 0;
         ti++;
+        ki++;
+    }
+    while (ki < kwLower.length && (kwLower[ki] === ' ' || kwLower[ki] === '\t')) {
         ki++;
     }
     return ki === kwLower.length ? ti - pos : 0;
@@ -1103,7 +1339,7 @@ const styles = StyleSheet.create({
     },
     primaryRectBtnText: { color: '#FFFFFF', fontSize: fontScale(12), fontWeight: '900' },
 
-    rightCard: { flex: 1, backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: scale(16), overflow: 'hidden' },
+    rightCard: { flex: 1, backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: scale(16), overflow: 'hidden', position: 'relative' },
     textContainer: { paddingHorizontal: scale(14), paddingVertical: scale(14) },
     flow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
     newline: { width: '100%', height: fontScale(14) },
@@ -1193,4 +1429,24 @@ const styles = StyleSheet.create({
     hintButtonTextActive: { color: '#FFFFFF' },
     hintButtonTextInactive: { color: '#9CA3AF' },
     hintArrow: { width: 0, height: 0, borderLeftWidth: scale(8), borderRightWidth: scale(8), borderBottomWidth: scale(8), borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#FFFFFF', alignSelf: 'center', marginTop: scale(0) } as any,
+    dragSelectionBox: {
+        position: 'absolute',
+        borderWidth: 1,
+        borderColor: '#5E82FF',
+        backgroundColor: 'rgba(94,130,255,0.15)',
+        borderRadius: scale(4),
+    },
+    dragConfirmBtn: {
+        position: 'absolute',
+        paddingHorizontal: scale(10),
+        paddingVertical: scale(6),
+        backgroundColor: '#111827',
+        borderRadius: scale(10),
+        zIndex: 5,
+    },
+    dragConfirmText: {
+        color: '#FFFFFF',
+        fontSize: fontScale(11),
+        fontWeight: '800',
+    },
 });

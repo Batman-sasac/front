@@ -82,3 +82,27 @@ export const fetchLearningStats = async (): Promise<{
         return null;
     }
 };
+
+export const setStudyGoal = async (cycleCount: number): Promise<{ status: string; target_count?: number; message?: string; }> => {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const formData = new FormData();
+    formData.append('token', token || '');
+    formData.append('cycle_count', String(cycleCount));
+
+    const response = await fetch(`${API_BASE_URL}/cycle/set-goal`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token || ''}`,
+        },
+        body: formData,
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || error.message || '목표 저장 실패');
+    }
+
+    return response.json();
+};
