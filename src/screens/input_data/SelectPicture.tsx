@@ -48,7 +48,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [rotation, setRotation] = useState(0);
     const [subjectName, setSubjectName] = useState('');  // 과목명 추가
-    const [ocrUsage, setOcrUsage] = useState<{ remaining: number; pages_limit: number; status: string } | null>(null);
+    const [ocrUsage, setOcrUsage] = useState<{ remaining: number; pages_limit: number; status: string; message?: string } | null>(null);
     const [ocrUsageError, setOcrUsageError] = useState<string | null>(null);
 
     const selectedSource = useMemo(() => {
@@ -152,6 +152,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                         remaining: usage.remaining ?? 0,
                         pages_limit: usage.pages_limit ?? 0,
                         status: usage.status,
+                        message: usage.message,
                     });
                     setOcrUsageError(null);
                 }
@@ -480,6 +481,8 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         };
     }, [crop, containerW, containerH]);
 
+    const limitReached = ocrUsage?.status === 'limit_reached';
+
     return (
         <View style={styles.root}>
             <Pressable style={styles.backBtn} onPress={onBack} hitSlop={10}>
@@ -502,6 +505,9 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                 )}
                 {ocrUsageError && (
                     <Text style={styles.usageErrorText}>{ocrUsageError}</Text>
+                )}
+                {limitReached && ocrUsage?.message && !ocrUsageError && (
+                    <Text style={styles.usageErrorText}>{ocrUsage.message}</Text>
                 )}
 
                 <TextInput
@@ -612,9 +618,9 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             </View>
 
             <Pressable
-                style={[styles.fab, (!sources || sources.length === 0 || isCropping) && { opacity: 0.5 }]}
+                style={[styles.fab, (!sources || sources.length === 0 || isCropping || limitReached) && { opacity: 0.5 }]}
                 onPress={handleStart}
-                disabled={!sources || sources.length === 0 || isCropping}
+                disabled={!sources || sources.length === 0 || isCropping || limitReached}
             >
                 {isCropping ? (
                     <ActivityIndicator size="large" color="#FFFFFF" />

@@ -21,9 +21,10 @@ import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, saveTest, getQuizForReview, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
+import { runOcr, ScaffoldingPayload, saveTest, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
 import { updateFcmToken } from './src/api/notification';
-import { getRewardLeaderboard } from './src/api/reward';
+import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
+import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 
 type SocialProvider = 'kakao' | 'naver';
@@ -345,7 +346,7 @@ export default function App() {
 
   const hasCheckedInToday = lastAttendanceDate === getTodayKey();
 
-  const handleDailyCheckIn = () => {
+  const handleDailyCheckIn = async () => {
     const today = new Date();
     const todayKey = today.toISOString().slice(0, 10);
 
@@ -354,6 +355,22 @@ export default function App() {
     const yesterday = new Date();
     yesterday.setDate(today.getDate() - 1);
     const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+    let baseXP = 10;
+    let bonusXP = 0;
+    let shouldReward = true;
+
+    try {
+      const result = await checkAttendanceReward();
+      if (result?.status === 'success') {
+        shouldReward = result.is_new_reward;
+        baseXP = result.baseXP ?? 0;
+        bonusXP = result.bonusXP ?? 0;
+      }
+    } catch (error) {
+      console.error('출석 보상 API 실패, 로컬 처리로 대체:', error);
+      bonusXP = Math.random() < 0.5 ? 10 : 0;
+    }
 
     // 연속 출석 계산
     setStreak((prev) => (lastAttendanceDate === yesterdayKey ? prev + 1 : 1));
@@ -367,17 +384,15 @@ export default function App() {
       return next;
     });
 
-    // XP 보상 로직은 그대로
-    const baseXP = 10;
-    const bonusXP = Math.random() < 0.5 ? 10 : 0;
-    setExp((prev) => prev + baseXP + bonusXP);
-
-    setRewardState({
-      baseXP,
-      bonusXP,
-      showBase: true,
-      showBonus: false,
-    });
+    if (shouldReward && (baseXP > 0 || bonusXP > 0)) {
+      setExp((prev) => prev + baseXP + bonusXP);
+      setRewardState({
+        baseXP,
+        bonusXP,
+        showBase: true,
+        showBonus: false,
+      });
+    }
   };
   const handleCloseBaseReward = () => {
     setRewardState((prev) => ({
@@ -453,9 +468,14 @@ export default function App() {
 
       {step === 'goal' && (
         <GoalSettingScreen
-          onSubmit={(goal) => {
-            setMonthlyGoal(goal);
-            setStep('typeIntro');
+          onSubmit={async (goal) => {
+            try {
+              await setStudyGoal(goal);
+              setMonthlyGoal(goal);
+              setStep('typeIntro');
+            } catch (error: any) {
+              Alert.alert('목표 저장 실패', error?.message ?? '목표 저장에 실패했습니다.');
+            }
           }}
         />
       )}
@@ -535,7 +555,14 @@ export default function App() {
           continuousDays={continuousDays}
           monthlyGoal={monthlyGoal}
           onNavigate={(screen) => setStep(screen)}
-          onMonthlyGoalChange={(goal) => setMonthlyGoal(goal)}
+          onMonthlyGoalChange={async (goal) => {
+            try {
+              await setStudyGoal(goal);
+              setMonthlyGoal(goal);
+            } catch (error: any) {
+              Alert.alert('목표 저장 실패', error?.message ?? '목표 저장에 실패했습니다.');
+            }
+          }}
           onNicknameChange={(newNickname) => setNickname(newNickname)}
           onWithdraw={() => {
             // 모든 상태 초기화
@@ -689,7 +716,7 @@ export default function App() {
             const blanks = scaffoldingPayload.blanks ?? [];
             const keywords = blanks.map((b) => b.word);
 
-            await saveTest({
+            const saveResult = await saveTest({
               subject_name: scaffoldingPayload.title,
               study_name: scaffoldingPayload.title,
               original: scaffoldingPayload.extractedText,
@@ -699,6 +726,15 @@ export default function App() {
               user_answers: userAnswers,
               quiz: scaffoldingPayload.extractedText,
             });
+
+            const quizId = saveResult?.quiz_id ?? saveResult?.quizId;
+            if (quizId) {
+              await gradeStudy({
+                quiz_id: quizId,
+                user_answers: userAnswers,
+                answer: keywords,
+              });
+            }
           }}
         />
 

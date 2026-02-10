@@ -92,8 +92,9 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
 
         {/* 네이버 로그인 */}
         <Pressable
-          style={[styles.button, styles.naver]}
-          onPress={() => handleSocialLogin('naver')}
+          style={[styles.button, styles.naver, { opacity: 0.6 }]}
+          onPress={() => Alert.alert('안내', '현재 네이버 로그인은 지원되지 않습니다.')}
+          disabled
         >
           <Text style={styles.naverIcon}>N</Text>
           <Text style={[styles.buttonText, styles.naverText]}>

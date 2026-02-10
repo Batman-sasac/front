@@ -27,6 +27,9 @@ export async function loginWithOAuth(
     provider: 'kakao' | 'naver',
     code: string
 ): Promise<LoginResponse> {
+    if (provider === 'naver') {
+        throw new Error('현재 네이버 로그인은 지원되지 않습니다.');
+    }
     const endpoint = `${API_BASE_URL}/auth/${provider}/mobile`;
 
     const formData = new FormData();
@@ -85,28 +88,34 @@ export async function verifyToken(token: string): Promise<{
     email: string;
     social_id: string;
 }> {
-    const endpoint = `${API_BASE_URL}/auth/verify-token`;
-
-    const formData = new FormData();
-    formData.append('token', token);
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
+    const response = await fetch(`${API_BASE_URL}/auth/user-info`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '토큰 검증 실패');
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || error.message || '토큰 검증 실패');
     }
 
-    return await response.json();
+    const data = await response.json();
+    return {
+        status: 'success',
+        email: data.email ?? '',
+        social_id: data.social_id ?? '',
+    };
 }
 
 /**
  * OAuth URL 생성
  */
 export function getOAuthUrl(provider: 'kakao' | 'naver'): string {
+    if (provider === 'naver') {
+        throw new Error('현재 네이버 로그인은 지원되지 않습니다.');
+    }
     // 카카오/네이버 API 키
     const KAKAO_REST_API_KEY = '5202f1b3b542b79fdf499d766362bef6';
     const NAVER_CLIENT_ID = 'DRk2JpSbhKJO6ImkKIE9';
@@ -183,6 +192,9 @@ export async function connectAccount(
     message: string;
     connected_email: string;
 }> {
+    if (provider === 'naver') {
+        throw new Error('현재 네이버 계정 연동은 지원되지 않습니다.');
+    }
     void token;
     // 백엔드에는 connect-account가 없어서 OAuth 로그인 엔드포인트를 그대로 사용
     const result = await loginWithOAuth(provider, code);
@@ -231,18 +243,10 @@ export async function logout(): Promise<{
     status: string;
     message: string;
 }> {
-    const endpoint = `${API_BASE_URL}/auth/logout`;
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-    });
-
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '로그아웃 실패');
-    }
-
-    return await response.json();
+    return {
+        status: 'success',
+        message: '로그아웃은 클라이언트에서 처리됩니다.',
+    };
 }
 
 /**

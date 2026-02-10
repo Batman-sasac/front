@@ -145,21 +145,18 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
                 input.click();
             } else {
-                // 네이티브: 갤러리에서 이미지만 선택
-                console.log('📁 네이티브 환경에서 이미지 선택');
-                if (hasMediaPermission !== true) return;
-
-                const res = await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ['images'] as const,
-                    quality: 1,
-                    allowsMultipleSelection: true,
-                    selectionLimit: 10,
+                // 네이티브: 문서 선택기 사용
+                console.log('📁 네이티브 환경에서 문서 선택');
+                const res = await DocumentPicker.getDocumentAsync({
+                    type: 'image/*',
+                    multiple: true,
+                    copyToCacheDirectory: false,
                 });
 
-                if (res.canceled) return;
+                if (res.canceled || !res.assets || res.assets.length === 0) return;
 
                 const sources = res.assets.map((a) => {
-                    console.log('📁 선택된 이미지:', a.uri);
+                    console.log('📁 선택된 문서:', a.uri);
                     return { uri: a.uri } as ImageSourcePropType;
                 });
 
