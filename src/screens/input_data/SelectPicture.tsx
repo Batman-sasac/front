@@ -536,36 +536,40 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                                 <View style={[styles.maskLeft, overlayStyles.left, { pointerEvents: 'none' }]} />
                                 <View style={[styles.maskRight, overlayStyles.right, { pointerEvents: 'none' }]} />
 
-                                <View style={[styles.cropFrame, overlayStyles.frame, { pointerEvents: 'box-only' }]} {...moveResponder.panHandlers}>
+                                <View style={[styles.cropFrame, overlayStyles.frame, { pointerEvents: 'none' }]}>
                                     <View style={[styles.cropCornerTL, { pointerEvents: 'none' }]} />
                                     <View style={[styles.cropCornerTR, { pointerEvents: 'none' }]} />
                                     <View style={[styles.cropCornerBL, { pointerEvents: 'none' }]} />
                                     <View style={[styles.cropCornerBR, { pointerEvents: 'none' }]} />
+                                </View>
 
-                                    <View
-                                        style={[styles.handle, styles.handleTL, { pointerEvents: 'auto' }]}
-                                        {...tlResponder.panHandlers}
-                                    >
-                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                    </View>
-                                    <View
-                                        style={[styles.handle, styles.handleTR, { pointerEvents: 'auto' }]}
-                                        {...trResponder.panHandlers}
-                                    >
-                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                    </View>
-                                    <View
-                                        style={[styles.handle, styles.handleBL, { pointerEvents: 'auto' }]}
-                                        {...blResponder.panHandlers}
-                                    >
-                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                    </View>
-                                    <View
-                                        style={[styles.handle, styles.handleBR, { pointerEvents: 'auto' }]}
-                                        {...brResponder.panHandlers}
-                                    >
-                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                    </View>
+                                {/* 크롭 프레임 이동 영역 (투명한 내부 영역) */}
+                                <View style={[styles.cropMoveArea, overlayStyles.frame]} {...moveResponder.panHandlers} />
+
+                                {/* 핸들들을 cropFrame 밖에 독립적으로 배치 */}
+                                <View
+                                    style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top - 12 }]}
+                                    {...tlResponder.panHandlers}
+                                >
+                                    <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                </View>
+                                <View
+                                    style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top - 12 }]}
+                                    {...trResponder.panHandlers}
+                                >
+                                    <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                </View>
+                                <View
+                                    style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
+                                    {...blResponder.panHandlers}
+                                >
+                                    <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                </View>
+                                <View
+                                    style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
+                                    {...brResponder.panHandlers}
+                                >
+                                    <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
                                 </View>
                             </View>
                         </View>
@@ -795,6 +799,11 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.9)',
     },
 
+    cropMoveArea: {
+        position: 'absolute',
+        backgroundColor: 'transparent',
+    },
+
     cropCornerTL: {
         position: 'absolute',
         left: 6,
@@ -843,8 +852,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'transparent',
-        opacity: 1,
         cursor: 'pointer',
+        zIndex: 10,
     } as any,
     handleDot: {
         width: 12,
@@ -852,12 +861,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderWidth: 1,
         borderColor: '#FFFFFF',
-        cursor: 'pointer',
     } as any,
-    handleTL: { left: -12, top: -12, cursor: 'nwse-resize' } as any,
-    handleTR: { right: -12, top: -12, cursor: 'nesw-resize' } as any,
-    handleBL: { left: -12, bottom: -12, cursor: 'nesw-resize' } as any,
-    handleBR: { right: -12, bottom: -12, cursor: 'nwse-resize' } as any,
 
     rotateRow: {
         width: '100%',
