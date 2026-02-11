@@ -92,6 +92,7 @@ export default function MyPageScreen({
     // OAuth WebView 상태
     const [showOAuthWebView, setShowOAuthWebView] = useState(false);
     const [oauthProvider, setOauthProvider] = useState<'kakao' | 'naver'>('kakao');
+    const [oauthUrl, setOauthUrl] = useState<string | null>(null);
 
     const [showSingleDisconnectModal, setShowSingleDisconnectModal] =
         useState(false);
@@ -142,9 +143,16 @@ export default function MyPageScreen({
     const connectedCount =
         (kakaoConnected ? 1 : 0) + (naverConnected ? 1 : 0);
 
-    const handleConnectKakao = () => {
+    const handleConnectKakao = async () => {
         setOauthProvider('kakao');
-        setShowOAuthWebView(true);
+        try {
+            const url = await getOAuthUrl('kakao');
+            setOauthUrl(url);
+            setShowOAuthWebView(true);
+        } catch (err) {
+            console.error('OAuth URL 로드 실패:', err);
+            Alert.alert('오류', err instanceof Error ? err.message : '로그인 설정을 불러올 수 없습니다.');
+        }
     };
 
     const handleConnectNaver = () => {
@@ -598,13 +606,18 @@ export default function MyPageScreen({
             )}
 
             {/* OAuth WebView */}
-            <OAuthWebView
-                visible={showOAuthWebView}
-                provider={oauthProvider}
-                oauthUrl={getOAuthUrl(oauthProvider)}
-                onCode={handleOAuthCode}
-                onClose={() => setShowOAuthWebView(false)}
-            />
+            {oauthUrl && (
+                <OAuthWebView
+                    visible={showOAuthWebView}
+                    provider={oauthProvider}
+                    oauthUrl={oauthUrl}
+                    onCode={handleOAuthCode}
+                    onClose={() => {
+                        setShowOAuthWebView(false);
+                        setOauthUrl(null);
+                    }}
+                />
+            )}
         </View>
     );
 }
