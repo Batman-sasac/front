@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { View, ImageSourcePropType, Alert, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,7 +21,7 @@ import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, saveTest, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
+import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
 import { updateFcmToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
@@ -60,7 +60,7 @@ export default function App() {
   const [streak, setStreak] = useState(0);                 // 연속 학습 일수
   const [lastAttendanceDate, setLastAttendanceDate] = useState<string | null>(null);
   const [isReviewMode, setIsReviewMode] = useState(false); // 복습 모드 여부
-  const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습할 quiz ID
+  const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습용 quiz ID
   const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
   const [subjectName, setSubjectName] = useState('');
   const [cropInfo, setCropInfo] = useState<{ px: number; py: number; pw: number; ph: number } | null>(null);
@@ -75,13 +75,13 @@ export default function App() {
   // 학습 통계 상태
   const [totalStudyCount, setTotalStudyCount] = useState(0);
   const [continuousDays, setContinuousDays] = useState(0);
-  const [weekAttendance, setWeekAttendance] = useState<boolean[]>( //이번 주 요일 별 출석
+  const [weekAttendance, setWeekAttendance] = useState<boolean[]>( // 이번 주 요일별 출석
     [false, false, false, false, false, false, false],
   );
 
   const getWeekdayIndex = (date: Date) => {
-    const jsDay = date.getDay(); // 0(일)~6(토)
-    return (jsDay + 6) % 7;      // 월0, 화1, ... 일6
+    const jsDay = date.getDay(); // 0(??~6(??
+    return (jsDay + 6) % 7;      // ??, ??, ... ??
   };
   const [progressLoaded, setProgressLoaded] = useState(false);
 
@@ -177,7 +177,7 @@ export default function App() {
   }, [step]);
 
   useEffect(() => {
-    // 앱 시작시 자동 로그인 체크
+    // 앱 시작 시 자동 로그인 체크
     checkAutoLogin();
   }, []);
 
@@ -223,7 +223,7 @@ export default function App() {
         if (userInfo.email && userInfo.nickname) {
           setUserEmail(userInfo.email);
           setNickname(userInfo.nickname);
-          // splash 끝나면 바로 홈으로
+          // splash 종료 후 바로 홈으로
           setTimeout(() => setStep('home'), 2000);
           return;
         }
@@ -240,7 +240,7 @@ export default function App() {
     try {
       console.log('로그아웃 시작...');
       await clearAuthData();
-      console.log('✅ 로그아웃 완료');
+      console.log('로그아웃 완료');
       // 상태 초기화
       setUserEmail('');
       setNickname('');
@@ -249,13 +249,13 @@ export default function App() {
       // 로그인 화면으로 이동
       setStep('login');
     } catch (error) {
-      console.error('❌ 로그아웃 오류:', error);
+      console.error('로그아웃 오류:', error);
     }
   };
 
   useEffect(() => {
     if (step === 'home' && progressLoaded) {
-      handleDailyCheckIn();   // 홈 들어오자마자 자동 출석
+      handleDailyCheckIn();   // 홈 진입 시 자동 출석
 
       // 통계 데이터 로드
       (async () => {
@@ -281,12 +281,12 @@ export default function App() {
         try {
           const response = await getRewardLeaderboard();
           if (response.status === 'success' && response.leaderboard) {
-            // 백엔드에서 상위 5명만 반환됨
+            // 백엔드에서 상위 5명만 반환
             const users: LeagueUser[] = response.leaderboard.map((item, idx) => ({
               id: `user_${idx}`,
               nickname: item.nickname,
               xp: item.total_reward,
-              minutesAgo: 0, // 백엔드에서 제공하지 않음
+              minutesAgo: 0, // 백엔드에서 미제공
             }));
             setLeagueUsers(users);
           }
@@ -297,7 +297,7 @@ export default function App() {
     }
   }, [step, progressLoaded]);
 
-  // 복습 진입 시 DB에서 퀴즈 데이터 가져오기 (저장된 pages/quiz 형태 그대로 사용)
+  // 복습 진입 시 DB에서 퀴즈 데이터 조회
   useEffect(() => {
     if (step !== 'scaffolding' || reviewQuizId == null) return;
     let cancelled = false;
@@ -368,7 +368,7 @@ export default function App() {
         bonusXP = result.bonusXP ?? 0;
       }
     } catch (error) {
-      console.error('출석 보상 API 실패, 로컬 처리로 대체:', error);
+      console.error('출석 보상 API 실패, 로컬 처리로 대체', error);
       bonusXP = Math.random() < 0.5 ? 10 : 0;
     }
 
@@ -398,7 +398,7 @@ export default function App() {
     setRewardState((prev) => ({
       ...prev,
       showBase: false,
-      showBonus: prev.bonusXP > 0, // 보너스 있으면 다음 모달로
+      showBonus: prev.bonusXP > 0, // 보너스가 있으면 다음 모달로
     }));
   };
   const handleCloseBonusReward = () => {
@@ -410,10 +410,8 @@ export default function App() {
 
   const [currentLeagueTier] = useState<LeagueTier>('iron');  // 우선 아이언으로 시작
   const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
-  const [leagueRemainingText] = useState<string>(
-    '남은 시간: 3일 19시간 30분',
-  );        // 예: "남은 시간: 3일 19시간 30분" (백엔드에서 제공하지 않음)
-  //촬영 결과 임시로 App으로 이동
+  const [leagueRemainingText] = useState<string>('남은 시간: 3일 19시간 30분'); // 예시 텍스트
+  // 촬영 결과 임시 저장
   const [capturedSources, setCapturedSources] = useState<ImageSourcePropType[]>([]);
 
   const [scaffoldingPayload, setScaffoldingPayload] = useState<ScaffoldingPayload | null>(null);
@@ -428,7 +426,7 @@ export default function App() {
     // 1) 공백/문장부호 기준 분리
     const raw = text
       .replace(/[0-9]/g, ' ')
-      .replace(/[.,!?()\[\]{}"“”‘’]/g, ' ')
+      .replace(/[.,!?()\[\]{}"'`~]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .split(' ');
@@ -491,7 +489,7 @@ export default function App() {
         <TypeTestScreen
           onFinish={(result) => {
             setTypeResult(result);
-            // typeKey 로 프로필 찾아서 title 사용
+            // typeKey로 프로필을 찾아 title 사용
             const profile = typeProfiles[result.typeKey];
             setTypeLabel(profile.title);
             setStep('result');
@@ -589,7 +587,7 @@ export default function App() {
         />
       )}
 
-      {/* 자료입력: 촬영 화면 */}
+      {/* 자료 입력: 촬영 화면 */}
       {step === 'takePicture' && (
         <TakePicture
           onBack={() => setStep('home')}
@@ -601,7 +599,7 @@ export default function App() {
       )}
 
 
-      {/* 자료입력: 선택/미리보기(크롭 UI) 화면 */}
+      {/* 자료 입력: 선택/미리보기 화면 */}
       {step === 'selectPicture' && (
         <SelectPicture
           sources={capturedSources}
@@ -611,7 +609,7 @@ export default function App() {
             if (subject) setSubjectName(subject);
             if (cropInfo) setCropInfo(cropInfo);
 
-            // 1) OCR 요청 (필요할 때만)
+            // 1) OCR 요청 (필요한 경우만)
             const first = finalSources[0] as any;
             const uri = first?.uri as string | undefined;
 
@@ -627,13 +625,13 @@ export default function App() {
 
             try {
               const payload = await runOcr(uri, cropInfo);
-              console.log('✅ OCR 성공, payload:', payload);
+              console.log('OCR 성공, payload:', payload);
               setScaffoldingPayload(payload);
-              // 음성학습 스킵하고 바로 scaffolding으로
+              // 말하기 학습 스킵하고 바로 scaffolding으로
               setStep('scaffolding');
             } catch (e: any) {
-              const message = e?.message ?? 'OCR 호출에 실패했습니다.';
-              console.error('❌ OCR 실패:', e);
+              const message = e?.message ?? 'OCR 추출에 실패했습니다.';
+              console.error('OCR 실패:', e);
               setScaffoldingPayload(null);
               setScaffoldingError(message);
 
@@ -643,7 +641,7 @@ export default function App() {
               }
 
               Alert.alert('OCR 오류', message);
-              // OCR 실패 시 홈으로 돌아가기
+              // OCR 실패 시 홈으로 이동
               setStep('home');
             } finally {
               setScaffoldingLoading(false);
@@ -683,7 +681,7 @@ export default function App() {
           loading={scaffoldingLoading}
           error={scaffoldingError}
           initialRound={isReviewMode ? '3-1' : '1-1'} // 복습 모드면 3라운드로 시작
-          reviewQuizId={reviewQuizId} // 복습할 quiz ID 전달
+          reviewQuizId={reviewQuizId} // 복습용 quiz ID 전달
           subjectName={subjectName} // 과목명 전달
           onRetry={async () => {
             const first = capturedSources[0] as any;
@@ -716,25 +714,31 @@ export default function App() {
             const blanks = scaffoldingPayload.blanks ?? [];
             const keywords = blanks.map((b) => b.word);
 
-            const saveResult = await saveTest({
-              subject_name: scaffoldingPayload.title,
-              study_name: scaffoldingPayload.title,
-              original: scaffoldingPayload.extractedText,
-              answers: keywords,
+            const ocrText = {
               pages: [{ original_text: scaffoldingPayload.extractedText, keywords }],
               blanks: blanks.map((b, i) => ({ blank_index: i, word: b.word, page_index: 0 })),
-              user_answers: userAnswers,
-              quiz: scaffoldingPayload.extractedText,
-            });
+              quiz: { raw: scaffoldingPayload.extractedText },
+            };
 
-            const quizId = saveResult?.quiz_id ?? saveResult?.quizId;
-            if (quizId) {
-              await gradeStudy({
-                quiz_id: quizId,
-                user_answers: userAnswers,
-                answer: keywords,
-              });
-            }
+            const gradeCount = userAnswers.reduce((acc, ua, idx) => {
+              const isCorrect = (ua ?? '').trim().toLowerCase() === (keywords[idx] ?? '').trim().toLowerCase();
+              return acc + (isCorrect ? 1 : 0);
+            }, 0);
+
+            await gradeStudy({
+              quiz_id: 0,
+              answer: keywords,
+              user_answer: userAnswers,
+              quiz_html: scaffoldingPayload.extractedText,
+              ocr_text: ocrText,
+              // backend compatibility
+              user_answers: userAnswers,
+              subject_name: scaffoldingPayload.title,
+              study_name: scaffoldingPayload.title,
+              original_text: [scaffoldingPayload.extractedText],
+              keywords,
+              grade_cnt: gradeCount,
+            });
           }}
         />
 
@@ -743,7 +747,7 @@ export default function App() {
       {step === 'brushup' && (
         <BrushUPScreen
           onBack={() => setStep('home')}
-          // 🔧 수정
+          // 타입 보정
           onNavigate={(screen: SidebarScreen) => setStep(screen)}
           onCardPress={(card) => {
             setIsReviewMode(true);
