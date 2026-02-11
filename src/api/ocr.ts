@@ -150,7 +150,7 @@ export async function getOcrUsage(): Promise<OcrUsageResponse> {
 
 
 
-// ocr_app.py의 /ocr/save-test 스펙: 페이지·빈칸·사용자 답변 모두 JSON
+// ocr_app.py의 /ocr/save 스펙: 페이지·빈칸·사용자 답변 모두 JSON
 export type PageItem = {
     original_text: string;
     keywords: string[];
@@ -181,7 +181,7 @@ export async function saveTest(payload: SaveTestRequest) {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/ocr/save-test`, {
+    const res = await fetch(`${API_BASE}/ocr/save`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
