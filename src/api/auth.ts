@@ -2,13 +2,10 @@
 
 // API Base URL - 실제 백엔드 서버 주소
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
-<<<<<<< Updated upstream
-=======
 const ENV_KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY ?? '';
 const ENV_NAVER_CLIENT_ID = process.env.EXPO_PUBLIC_NAVER_CLIENT_ID ?? '';
 const ENV_KAKAO_REDIRECT_URI = process.env.EXPO_PUBLIC_KAKAO_REDIRECT_URI ?? '';
 const ENV_NAVER_REDIRECT_URI = process.env.EXPO_PUBLIC_NAVER_REDIRECT_URI ?? '';
->>>>>>> Stashed changes
 
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
 
@@ -37,10 +34,6 @@ export async function loginWithOAuth(
 
     const formData = new FormData();
     formData.append('code', code);
-<<<<<<< Updated upstream
-    // Naver token exchange expects state that matches authorize request.
-=======
->>>>>>> Stashed changes
     if (provider === 'naver') {
         formData.append('state', 'naver_mobile');
     }
@@ -90,52 +83,6 @@ export async function setNickname(
     return await response.json();
 }
 
-<<<<<<< Updated upstream
-/**
- * 토큰 검증
- */
-export async function verifyToken(token: string): Promise<{
-    status: string;
-    email: string;
-    social_id: string;
-}> {
-    const response = await fetch(`${API_BASE_URL}/auth/user-info`, {
-        method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
-    });
-
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || error.message || '토큰 검증 실패');
-    }
-
-    const data = await response.json();
-    return {
-        status: 'success',
-        email: data.email ?? '',
-        social_id: data.social_id ?? '',
-    };
-}
-
-/**
- * OAuth URL 생성
- */
-export function getOAuthUrl(provider: 'kakao' | 'naver'): string {
-    // 카카오/네이버 API 키
-    const KAKAO_REST_API_KEY = '5202f1b3b542b79fdf499d766362bef6';
-    const NAVER_CLIENT_ID = 'DRk2JpSbhKJO6ImkKIE9';
-
-    const REDIRECT_URI = `${API_BASE_URL}/auth/${provider}/mobile`;
-
-    if (provider === 'kakao') {
-        return `https://kauth.kakao.com/oauth/authorize?client_id=${KAKAO_REST_API_KEY}&redirect_uri=${REDIRECT_URI}&response_type=code`;
-    } else {
-        return `https://nid.naver.com/oauth2.0/authorize?client_id=${NAVER_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code&state=naver_mobile`;
-    }
-=======
 export interface OAuthConfig {
     kakao_rest_api_key?: string;
     kakao_redirect_uri?: string;
@@ -145,12 +92,12 @@ export interface OAuthConfig {
 
 export async function fetchOAuthConfig(): Promise<OAuthConfig> {
     const res = await fetch(`${API_BASE_URL}/config`);
-    if (!res.ok) throw new Error('OAuth ??? ??? ? ????.');
+    if (!res.ok) throw new Error('OAuth 설정 정보를 불러오지 못했습니다.');
     return res.json();
 }
 
 /**
- * OAuth URL ?? (.env ??, ??? /config fallback)
+ * OAuth URL 생성 (.env/config fallback)
  */
 export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
     let kakaoRestApiKey = ENV_KAKAO_REST_API_KEY;
@@ -168,16 +115,15 @@ export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> 
 
     if (provider === 'kakao') {
         if (!kakaoRestApiKey) {
-            throw new Error('KAKAO_REST_API_KEY? .env ?? ??? ??? ??????.');
+            throw new Error('KAKAO_REST_API_KEY가 없습니다. .env 파일 또는 서버 설정을 확인하세요.');
         }
         return `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(kakaoRestApiKey)}&redirect_uri=${encodeURIComponent(kakaoRedirectUri)}&response_type=code`;
     }
 
     if (!naverClientId) {
-        throw new Error('NAVER_CLIENT_ID? .env ?? ??? ??? ??????.');
+        throw new Error('NAVER_CLIENT_ID가 없습니다. .env 파일 또는 서버 설정을 확인하세요.');
     }
     return `https://nid.naver.com/oauth2.0/authorize?client_id=${encodeURIComponent(naverClientId)}&redirect_uri=${encodeURIComponent(naverRedirectUri)}&response_type=code&state=naver_mobile`;
->>>>>>> Stashed changes
 }
 
 /**
