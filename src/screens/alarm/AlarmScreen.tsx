@@ -1,4 +1,4 @@
-// src/screens/alarm/AlarmScreen.tsx
+﻿// src/screens/alarm/AlarmScreen.tsx
 import React, { useState } from 'react';
 import {
     View,
@@ -35,63 +35,20 @@ type AlarmSection = {
     items: AlarmItem[];
 };
 
-// 우선 더미 데이터로 UI만 구성
-const initialAlarms: AlarmSection[] = [
-    {
-        dateLabel: '2025. 11. 17',
-        items: [
-            {
-                id: 'a1',
-                type: 'review',
-                title: "📚 '비유법'을 복습할 시간이예요!",
-                description: '오늘의 복습으로 최대 20XP를 획득해보세요',
-                timeLabel: '7:30 PM',
-                read: false,
-            },
-            {
-                id: 'a2',
-                type: 'league',
-                title: '😭 아이언 리그 1위를 뺏겼어요!',
-                description: '학습하셔서 1위를 탈환하세요',
-                timeLabel: '3:43 PM',
-                read: false,
-            },
-        ],
-    },
-    {
-        dateLabel: '2025. 11. 16',
-        items: [
-            {
-                id: 'a3',
-                type: 'review',
-                title: "🌍 '시장 경제'를 복습할 시간이예요!",
-                description: '오늘의 복습으로 최대 20XP를 획득해보세요',
-                timeLabel: '7:30 PM',
-                read: true,
-            },
-            {
-                id: 'a4',
-                type: 'league',
-                title: '😭 아이언 리그 1위를 뺏겼어요!',
-                description: '학습하셔서 1위를 탈환하세요',
-                timeLabel: '4:20 PM',
-                read: true,
-            },
-        ],
-    },
-];
+// 
+const initialAlarms: AlarmSection[] = [];
 
 const BG = '#F6F7FB';
 
 export default function AlarmScreen({ onNavigate }: Props) {
-    // 나중에는 백엔드에서 받아오면 됨. 지금은 더미로 상태만 연결.
+    // ?섏쨷?먮뒗 諛깆뿏?쒖뿉??諛쏆븘?ㅻ㈃ ?? 吏湲덉? ?붾?濡??곹깭留??곌껐.
     const [sections] = useState<AlarmSection[]>(initialAlarms);
 
     return (
         <View style={styles.root}>
-            {/* 상단바 */}
+            {/* ?곷떒諛?*/}
             <View style={styles.header}>
-                {/* 왼쪽: < 버튼 (홈으로) */}
+                {/* ?쇱そ: < 踰꾪듉 (?덉쑝濡? */}
                 <Pressable
                     style={styles.backButton}
                     onPress={() => onNavigate('home')}
@@ -99,13 +56,13 @@ export default function AlarmScreen({ onNavigate }: Props) {
                     <Text style={styles.backIcon}>{'<'}</Text>
                 </Pressable>
 
-                {/* 가운데: 타이틀 */}
+                {/* 媛?대뜲: ??댄? */}
                 <Text style={styles.headerTitle}>알림함</Text>
 
-                {/* 오른쪽: 알림 설정 버튼 */}
+                {/* ?ㅻⅨ履? ?뚮┝ ?ㅼ젙 踰꾪듉 */}
                 <Pressable
                     style={styles.settingButton}
-                    onPress={() => onNavigate('alarmSetting')}  // ✅ 여기만 수정
+                    onPress={() => onNavigate('alarmSetting')}  // ???ш린留??섏젙
                 >
                     <Image
                         source={require('../../../assets/alarm/alarm-setting.png')}
@@ -116,27 +73,27 @@ export default function AlarmScreen({ onNavigate }: Props) {
 
             </View>
 
-            {/* 알림 리스트 */}
+            {/* ?뚮┝ 由ъ뒪??*/}
             <ScrollView
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
             >
                 {sections.map((section) => (
                     <View key={section.dateLabel} style={styles.section}>
-                        {/* 날짜 라벨 */}
+                        {/* ?좎쭨 ?쇰꺼 */}
                         <Text style={styles.sectionDate}>{section.dateLabel}</Text>
 
-                        {/* 카드들 */}
+                        {/* 移대뱶??*/}
                         {section.items.map((alarm) => (
                             <Pressable
                                 key={alarm.id}
                                 style={[
                                     styles.card,
-                                    alarm.read && styles.cardRead, // 읽은 알림은 흐리게
+                                    alarm.read && styles.cardRead, // ?쎌? ?뚮┝? ?먮━寃?
                                 ]}
                                 onPress={() => {
-                                    // TODO: 알림 눌렀을 때 이동/상세 처리
-                                    console.log('알림 클릭:', alarm.id);
+                                    // TODO: ?뚮┝ ?뚮??????대룞/?곸꽭 泥섎━
+                                    console.log('?뚮┝ ?대┃:', alarm.id);
                                 }}
                             >
                                 <View style={styles.cardLeft}>
@@ -183,7 +140,7 @@ const styles = StyleSheet.create({
         backgroundColor: BG,
     },
 
-    /* 상단바 */
+    /* ?곷떒諛?*/
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -215,7 +172,7 @@ const styles = StyleSheet.create({
         height: scale(24),
     },
 
-    /* 리스트 */
+    /* 由ъ뒪??*/
     scroll: {
         flex: 1,
     },
@@ -280,3 +237,4 @@ const styles = StyleSheet.create({
         tintColor: '#9CA3AF',
     },
 });
+
