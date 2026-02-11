@@ -13,10 +13,20 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
   const [loading, setLoading] = useState(false);
   const [showOAuthWebView, setShowOAuthWebView] = useState(false);
   const [oauthProvider, setOauthProvider] = useState<'kakao' | 'naver'>('kakao');
+  const [oauthUrl, setOauthUrl] = useState('');
 
   const handleSocialLogin = async (provider: 'kakao' | 'naver') => {
-    setOauthProvider(provider);
-    setShowOAuthWebView(true);
+    try {
+      const url = await getOAuthUrl(provider);
+      setOauthProvider(provider);
+      setOauthUrl(url);
+      setShowOAuthWebView(true);
+    } catch (error) {
+      Alert.alert(
+        '로그인 준비 실패',
+        error instanceof Error ? error.message : 'OAuth URL 생성에 실패했습니다.'
+      );
+    }
   };
 
   const handleOAuthCode = async (code: string) => {
@@ -106,7 +116,7 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
       <OAuthWebView
         visible={showOAuthWebView}
         provider={oauthProvider}
-        oauthUrl={getOAuthUrl(oauthProvider)}
+        oauthUrl={oauthUrl}
         onCode={handleOAuthCode}
         onClose={() => setShowOAuthWebView(false)}
       />

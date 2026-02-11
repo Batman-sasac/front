@@ -1,27 +1,26 @@
-// src/screens/mypage/MyPageScreen.tsx
-import React, { useState, useEffect } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
+    Alert,
     Image,
     Pressable,
     ScrollView,
+    StyleSheet,
+    Text,
     TextInput,
-    Alert,
+    View,
 } from 'react-native';
-import { scale, fontScale } from '../../lib/layout';
+import { fontScale, scale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
 import OAuthWebView from '../../components/OAuthWebView';
-import { getToken, clearAuthData, getUserInfo as getStoredUserInfo } from '../../lib/storage';
+import { clearAuthData, getToken, getUserInfo as getStoredUserInfo } from '../../lib/storage';
 import { confirmLogout } from '../../lib/auth';
 import {
-    getOAuthUrl,
     connectAccount,
     disconnectAccount,
-    withdrawAccount,
-    updateNickname as apiUpdateNickname,
+    getOAuthUrl,
     getUserStats,
+    updateNickname as apiUpdateNickname,
+    withdrawAccount,
 } from '../../api/auth';
 import { getMonthlyStats } from '../../api/ocr';
 
@@ -40,27 +39,16 @@ type Props = {
     onWithdraw?: () => void;
 };
 
-// 홈 화면에서 쓰는 것과 같은 유형별 캐릭터 매핑 함수
+const BG = '#F6F7FB';
+
 const getCharacterSourceByType = (typeLabel: string) => {
-    if (!typeLabel) {
-        return require('../../../assets/bat-character.png');
-    }
-    if (typeLabel.includes('분석형')) {
-        return require('../../../assets/character/bat-green.png');
-    }
-    if (typeLabel.includes('협력형')) {
-        return require('../../../assets/character/bat-red.png');
-    }
-    if (typeLabel.includes('창의형')) {
-        return require('../../../assets/character/bat-yellow.png');
-    }
-    if (typeLabel.includes('사회형')) {
-        return require('../../../assets/character/bat-purple.png');
-    }
+    if (!typeLabel) return require('../../../assets/bat-character.png');
+    if (typeLabel.includes('분석')) return require('../../../assets/character/bat-green.png');
+    if (typeLabel.includes('암기')) return require('../../../assets/character/bat-red.png');
+    if (typeLabel.includes('창의')) return require('../../../assets/character/bat-yellow.png');
+    if (typeLabel.includes('사회')) return require('../../../assets/character/bat-purple.png');
     return require('../../../assets/bat-character.png');
 };
-
-const BG = '#F6F7FB';
 
 export default function MyPageScreen({
     nickname,
@@ -76,41 +64,38 @@ export default function MyPageScreen({
 }: Props) {
     const characterSource = getCharacterSourceByType(typeLabel);
 
-    // 닉네임 상태 관리
     const [currentNickname, setCurrentNickname] = useState(nickname);
-
-    // 통계 상태 (서버 값 우선)
     const [totalStudyCountState, setTotalStudyCountState] = useState(totalStudyCount);
     const [continuousDaysState, setContinuousDaysState] = useState(continuousDays);
     const [monthlyGoalState, setMonthlyGoalState] = useState<number | null>(monthlyGoal);
 
-    // 계정 연결 상태
     const [kakaoEmail, setKakaoEmail] = useState<string | null>(null);
     const [naverEmail, setNaverEmail] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
 
-    // OAuth WebView 상태
     const [showOAuthWebView, setShowOAuthWebView] = useState(false);
     const [oauthProvider, setOauthProvider] = useState<'kakao' | 'naver'>('kakao');
+    const [oauthUrl, setOauthUrl] = useState('');
 
-    const [showSingleDisconnectModal, setShowSingleDisconnectModal] =
-        useState(false);
+    const [showSingleDisconnectModal, setShowSingleDisconnectModal] = useState(false);
     const [showWithdrawModal, setShowWithdrawModal] = useState(false);
     const [showMonthlyGoalModal, setShowMonthlyGoalModal] = useState(false);
     const [showNicknameModal, setShowNicknameModal] = useState(false);
+
     const [tempGoal, setTempGoal] = useState(monthlyGoal || 20);
     const [tempNickname, setTempNickname] = useState(nickname);
 
-    // 계정 정보 로드
     useEffect(() => {
-        loadAccountInfo();
+        const run = async () => {
+            await loadAccountInfo();
+        };
+        run();
     }, []);
 
     const loadAccountInfo = async () => {
         try {
             const token = await getToken();
             if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다');
+                Alert.alert('오류', '로그인이 필요합니다.');
                 return;
             }
 
@@ -118,49 +103,52 @@ export default function MyPageScreen({
             setKakaoEmail(stored.email ?? null);
             setNaverEmail(null);
 
-            const [stats, monthlyStats] = await Promise.all([
-                getUserStats(token),
-                getMonthlyStats(),
-            ]);
+            const [stats, monthlyStats] = await Promise.all([getUserStats(token), getMonthlyStats()]);
+
             const monthlyGoalValue = monthlyStats?.compare?.target_count ?? stats.data.monthly_goal;
             const fallbackGoal = typeof monthlyGoal === 'number' ? monthlyGoal : null;
-            const resolvedGoal = (monthlyGoalValue && monthlyGoalValue > 0) ? monthlyGoalValue : (fallbackGoal ?? monthlyGoalValue);
+            const resolvedGoal = monthlyGoalValue && monthlyGoalValue > 0 ? monthlyGoalValue : fallbackGoal ?? monthlyGoalValue;
+
             setTotalStudyCountState(stats.data.total_learning_count);
             setContinuousDaysState(stats.data.consecutive_days);
             setMonthlyGoalState(resolvedGoal ?? 0);
             setTempGoal(resolvedGoal ?? 20);
-            setLoading(false);
         } catch (error) {
             console.error('계정 정보 로드 실패:', error);
-            Alert.alert('오류', '계정 정보를 불러오지 못했습니다');
-            setLoading(false);
+            Alert.alert('오류', '계정 정보를 불러오지 못했습니다.');
         }
     };
 
     const kakaoConnected = !!kakaoEmail;
     const naverConnected = !!naverEmail;
-    const connectedCount =
-        (kakaoConnected ? 1 : 0) + (naverConnected ? 1 : 0);
 
-    const handleConnectKakao = () => {
-        setOauthProvider('kakao');
-        setShowOAuthWebView(true);
+    const handleConnectKakao = async () => {
+        try {
+            const url = await getOAuthUrl('kakao');
+            setOauthProvider('kakao');
+            setOauthUrl(url);
+            setShowOAuthWebView(true);
+        } catch (error: any) {
+            Alert.alert('오류', error?.message || '카카오 로그인 URL 생성 실패');
+        }
     };
 
-    const handleConnectNaver = () => {
-        Alert.alert('안내', '현재 네이버 계정 연동은 지원되지 않습니다.');
+    const handleConnectNaver = async () => {
+        try {
+            const url = await getOAuthUrl('naver');
+            setOauthProvider('naver');
+            setOauthUrl(url);
+            setShowOAuthWebView(true);
+        } catch (error: any) {
+            Alert.alert('오류', error?.message || '네이버 로그인 URL 생성 실패');
+        }
     };
 
     const handleOAuthCode = async (code: string) => {
         try {
             const token = await getToken();
             if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다');
-                return;
-            }
-
-            if (oauthProvider === 'naver') {
-                Alert.alert('안내', '현재 네이버 계정 연동은 지원되지 않습니다.');
+                Alert.alert('오류', '로그인이 필요합니다.');
                 return;
             }
 
@@ -174,7 +162,7 @@ export default function MyPageScreen({
 
             Alert.alert('성공', result.message);
         } catch (error: any) {
-            Alert.alert('오류', error.message || '계정 연동 실패');
+            Alert.alert('오류', error?.message || '계정 연동 실패');
         }
     };
 
@@ -189,7 +177,7 @@ export default function MyPageScreen({
         try {
             const token = await getToken();
             if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다');
+                Alert.alert('오류', '로그인이 필요합니다.');
                 return;
             }
 
@@ -201,9 +189,9 @@ export default function MyPageScreen({
                 setNaverEmail(null);
             }
 
-            Alert.alert('성공', `${provider === 'kakao' ? '카카오' : '네이버'} 계정 연동이 해제되었습니다`);
+            Alert.alert('성공', `${provider === 'kakao' ? '카카오' : '네이버'} 계정 연동을 해제했습니다.`);
         } catch (error: any) {
-            Alert.alert('오류', error.message || '연동 해제 실패');
+            Alert.alert('오류', error?.message || '연동 해제 실패');
         }
     };
 
@@ -211,27 +199,24 @@ export default function MyPageScreen({
         try {
             const token = await getToken();
             if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다');
+                Alert.alert('오류', '로그인이 필요합니다.');
                 return;
             }
 
             await withdrawAccount(token);
             await clearAuthData();
-
             setShowWithdrawModal(false);
-            Alert.alert('완료', '회원 탈퇴가 완료되었습니다', [
+
+            Alert.alert('완료', '회원 탈퇴가 완료되었습니다.', [
                 {
                     text: '확인',
                     onPress: () => {
-                        // App.tsx의 초기화 로직 호출
-                        if (onWithdraw) {
-                            onWithdraw();
-                        }
-                    }
-                }
+                        if (onWithdraw) onWithdraw();
+                    },
+                },
             ]);
         } catch (error: any) {
-            Alert.alert('오류', error.message || '회원 탈퇴 실패');
+            Alert.alert('오류', error?.message || '회원 탈퇴 실패');
         }
     };
 
@@ -239,17 +224,17 @@ export default function MyPageScreen({
         try {
             const token = await getToken();
             if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다');
+                Alert.alert('오류', '로그인이 필요합니다.');
                 return false;
             }
 
             await apiUpdateNickname(token, newNickname);
             setCurrentNickname(newNickname);
             onNicknameChange?.(newNickname);
-            Alert.alert('성공', '닉네임이 변경되었습니다');
+            Alert.alert('성공', '닉네임이 변경되었습니다.');
             return true;
         } catch (error: any) {
-            Alert.alert('오류', error.message || '닉네임 변경 실패');
+            Alert.alert('오류', error?.message || '닉네임 변경 실패');
             return false;
         }
     };
@@ -262,20 +247,10 @@ export default function MyPageScreen({
                 onLogout={() => confirmLogout(() => onNavigate('home'))}
             />
 
-            {/* 우측 마이페이지 메인 */}
-            <ScrollView
-                style={styles.main}
-                contentContainerStyle={styles.mainContent}
-            >
-                {/* 상단 프로필 영역 */}
+            <ScrollView style={styles.main} contentContainerStyle={styles.mainContent}>
                 <View style={styles.profileSection}>
-                    {/* 왼쪽: 캐릭터 + 닉네임 (중앙정렬) */}
                     <View style={styles.leftColumn}>
-                        <Image
-                            source={characterSource}
-                            style={styles.character}
-                            resizeMode="contain"
-                        />
+                        <Image source={characterSource} style={styles.character} resizeMode="contain" />
                         <View style={styles.nameRow}>
                             <Text style={styles.nickname}>{currentNickname}</Text>
                             <Pressable
@@ -294,18 +269,15 @@ export default function MyPageScreen({
                         </View>
                     </View>
 
-                    {/* 오른쪽: 학습 정보 */}
                     <View style={styles.rightColumn}>
-                        {/* 레벨 + 학습유형 (상단 중앙) */}
                         <View style={styles.levelSection}>
                             <Text style={styles.levelText}>
-                                Level <Text style={styles.levelValue}>{level}</Text> <Text style={styles.typeText}>{typeLabel || '학습 유형 미지정'}</Text>
+                                Level <Text style={styles.levelValue}>{level}</Text>{' '}
+                                <Text style={styles.typeText}>{typeLabel || '학습 유형 미지정'}</Text>
                             </Text>
                         </View>
 
-                        {/* 통계 3개 가로 나열 */}
                         <View style={styles.statsRow}>
-                            {/* 총 학습 횟수 */}
                             <View style={styles.statItem}>
                                 <View style={styles.statIconRow}>
                                     <Image
@@ -318,7 +290,6 @@ export default function MyPageScreen({
                                 <Text style={styles.statValue}>{totalStudyCountState}회</Text>
                             </View>
 
-                            {/* 연속 학습일 */}
                             <View style={styles.statItem}>
                                 <View style={styles.statIconRow}>
                                     <Image
@@ -331,18 +302,14 @@ export default function MyPageScreen({
                                 <Text style={styles.statValue}>{continuousDaysState}일</Text>
                             </View>
 
-                            {/* 한달 목표 */}
-                            <Pressable
-                                style={styles.statItem}
-                                onPress={() => setShowMonthlyGoalModal(true)}
-                            >
+                            <Pressable style={styles.statItem} onPress={() => setShowMonthlyGoalModal(true)}>
                                 <View style={styles.statIconRow}>
                                     <Image
                                         source={require('../../../assets/mypage/monthly-goal.png')}
                                         style={styles.statIcon}
                                         resizeMode="contain"
                                     />
-                                    <Text style={styles.statTitle}>한달 목표</Text>
+                                    <Text style={styles.statTitle}>월간 목표</Text>
                                 </View>
                                 <Text style={styles.statValue}>{monthlyGoalState || 0}회</Text>
                             </Pressable>
@@ -350,11 +317,9 @@ export default function MyPageScreen({
                     </View>
                 </View>
 
-                {/* 연결된 계정 섹션 */}
                 <View style={styles.accountSection}>
                     <Text style={styles.sectionTitle}>연결된 계정</Text>
 
-                    {/* 카카오 계정 */}
                     <View style={[styles.accountContainer, kakaoConnected && styles.accountContainerConnected]}>
                         <View style={[styles.accountBox, styles.kakaoBox]}>
                             <View style={styles.accountRow}>
@@ -368,11 +333,8 @@ export default function MyPageScreen({
                                 </View>
 
                                 {kakaoConnected ? (
-                                    <Pressable
-                                        style={styles.accountAction}
-                                        onPress={() => tryDisconnect('kakao')}
-                                    >
-                                        <Text style={styles.accountActionText}>연결해제</Text>
+                                    <Pressable style={styles.accountAction} onPress={() => tryDisconnect('kakao')}>
+                                        <Text style={styles.accountActionText}>연동 해제</Text>
                                         <Image
                                             source={require('../../../assets/shift.png')}
                                             style={styles.shiftIcon}
@@ -380,11 +342,8 @@ export default function MyPageScreen({
                                         />
                                     </Pressable>
                                 ) : (
-                                    <Pressable
-                                        style={styles.accountAction}
-                                        onPress={handleConnectKakao}
-                                    >
-                                        <Text style={styles.accountActionText}>연결</Text>
+                                    <Pressable style={styles.accountAction} onPress={handleConnectKakao}>
+                                        <Text style={styles.accountActionText}>연동하기</Text>
                                         <Image
                                             source={require('../../../assets/shift.png')}
                                             style={styles.shiftIcon}
@@ -397,14 +356,11 @@ export default function MyPageScreen({
 
                         {kakaoConnected && (
                             <View style={styles.emailBox}>
-                                <Text style={styles.emailText}>
-                                    이메일: {kakaoEmail}
-                                </Text>
+                                <Text style={styles.emailText}>이메일: {kakaoEmail}</Text>
                             </View>
                         )}
                     </View>
 
-                    {/* 네이버 계정 */}
                     <View style={[styles.accountContainer, naverConnected && styles.accountContainerConnectedNaver]}>
                         <View style={[styles.accountBox, styles.naverBox]}>
                             <View style={styles.accountRow}>
@@ -418,11 +374,8 @@ export default function MyPageScreen({
                                 </View>
 
                                 {naverConnected ? (
-                                    <Pressable
-                                        style={styles.accountAction}
-                                        onPress={() => tryDisconnect('naver')}
-                                    >
-                                        <Text style={[styles.accountActionText, styles.naverText]}>연결해제</Text>
+                                    <Pressable style={styles.accountAction} onPress={() => tryDisconnect('naver')}>
+                                        <Text style={[styles.accountActionText, styles.naverText]}>연동 해제</Text>
                                         <Image
                                             source={require('../../../assets/shift.png')}
                                             style={styles.shiftIcon}
@@ -431,11 +384,8 @@ export default function MyPageScreen({
                                         />
                                     </Pressable>
                                 ) : (
-                                    <Pressable
-                                        style={styles.accountAction}
-                                        onPress={handleConnectNaver}
-                                    >
-                                        <Text style={[styles.accountActionText, styles.naverText]}>연결</Text>
+                                    <Pressable style={styles.accountAction} onPress={handleConnectNaver}>
+                                        <Text style={[styles.accountActionText, styles.naverText]}>연동하기</Text>
                                         <Image
                                             source={require('../../../assets/shift.png')}
                                             style={styles.shiftIcon}
@@ -449,45 +399,30 @@ export default function MyPageScreen({
 
                         {naverConnected && (
                             <View style={styles.emailBox}>
-                                <Text style={styles.emailText}>
-                                    이메일: {naverEmail}
-                                </Text>
+                                <Text style={styles.emailText}>이메일: {naverEmail}</Text>
                             </View>
                         )}
                     </View>
 
-                    {/* 탈퇴하기 */}
-                    <Pressable
-                        style={styles.withdrawButton}
-                        onPress={() => setShowWithdrawModal(true)}
-                    >
-                        <Text style={styles.withdrawText}>탈퇴하기</Text>
+                    <Pressable style={styles.withdrawButton} onPress={() => setShowWithdrawModal(true)}>
+                        <Text style={styles.withdrawText}>회원 탈퇴</Text>
                     </Pressable>
                 </View>
             </ScrollView>
 
-            {/* 연결 1개일 때 해제 불가 모달 */}
             {showSingleDisconnectModal && (
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalBox}>
-                        <Text style={styles.modalMessage}>
-                            연결된 계정이 1개여서 해제할 수 없어요.
-                        </Text>
-                        <Text style={styles.modalMessage}>
-                            먼저 다른 계정을 추가로 연결한 뒤 해제해주세요.
-                        </Text>
+                        <Text style={styles.modalMessage}>연결된 계정이 1개일 때는 해제할 수 없습니다.</Text>
+                        <Text style={styles.modalMessage}>다른 계정을 먼저 연동한 뒤 해제해주세요.</Text>
 
-                        <Pressable
-                            style={styles.modalPrimaryButton}
-                            onPress={() => setShowSingleDisconnectModal(false)}
-                        >
+                        <Pressable style={styles.modalPrimaryButton} onPress={() => setShowSingleDisconnectModal(false)}>
                             <Text style={styles.modalPrimaryText}>확인</Text>
                         </Pressable>
                     </View>
                 </View>
             )}
 
-            {/* 닉네임 수정 모달 */}
             {showNicknameModal && (
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalBox}>
@@ -505,19 +440,14 @@ export default function MyPageScreen({
                         </View>
 
                         <View style={styles.modalButtonRow}>
-                            <Pressable
-                                style={[styles.modalButton, styles.modalCancel]}
-                                onPress={() => setShowNicknameModal(false)}
-                            >
+                            <Pressable style={[styles.modalButton, styles.modalCancel]} onPress={() => setShowNicknameModal(false)}>
                                 <Text style={styles.modalCancelText}>취소</Text>
                             </Pressable>
                             <Pressable
                                 style={[styles.modalButton, styles.modalPrimaryButton]}
                                 onPress={async () => {
                                     const success = await handleNicknameChange(tempNickname);
-                                    if (success) {
-                                        setShowNicknameModal(false);
-                                    }
+                                    if (success) setShowNicknameModal(false);
                                 }}
                             >
                                 <Text style={styles.modalPrimaryText}>확인</Text>
@@ -527,11 +457,10 @@ export default function MyPageScreen({
                 </View>
             )}
 
-            {/* 한달 목표 설정 모달 */}
             {showMonthlyGoalModal && (
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalBox}>
-                        <Text style={styles.modalTitle}>한달 목표</Text>
+                        <Text style={styles.modalTitle}>월간 목표 설정</Text>
 
                         <View style={styles.goalPicker}>
                             <Pressable onPress={() => setTempGoal(tempGoal + 1)}>
@@ -565,22 +494,16 @@ export default function MyPageScreen({
                 </View>
             )}
 
-            {/* 탈퇴하기 모달 */}
             {showWithdrawModal && (
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalWithdrawBox}>
                         <Text style={styles.modalWithdrawMessage}>
-                            지금까지의 학습 기록과 리그 데이터가 모두 삭제돼요.
+                            지금까지의 학습 기록과 활동 데이터가 모두 삭제됩니다.
                         </Text>
-                        <Text style={styles.modalWithdrawStrong}>
-                            정말 탈퇴하시겠어요?
-                        </Text>
+                        <Text style={styles.modalWithdrawStrong}>정말 탈퇴하시겠어요?</Text>
 
                         <View style={styles.modalButtonRow}>
-                            <Pressable
-                                style={[styles.modalButton, styles.modalCancel]}
-                                onPress={() => setShowWithdrawModal(false)}
-                            >
+                            <Pressable style={[styles.modalButton, styles.modalCancel]} onPress={() => setShowWithdrawModal(false)}>
                                 <Text style={styles.modalCancelText}>취소</Text>
                             </Pressable>
                             <Pressable
@@ -597,11 +520,10 @@ export default function MyPageScreen({
                 </View>
             )}
 
-            {/* OAuth WebView */}
             <OAuthWebView
                 visible={showOAuthWebView}
                 provider={oauthProvider}
-                oauthUrl={getOAuthUrl(oauthProvider)}
+                oauthUrl={oauthUrl}
                 onCode={handleOAuthCode}
                 onClose={() => setShowOAuthWebView(false)}
             />
@@ -615,19 +537,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         backgroundColor: BG,
     },
-
-    /* 메인 영역 */
     main: {
         flex: 1,
     },
     mainContent: {
         gap: scale(0),
     },
-
-    /* 프로필 섹션 - 2열 구조 */
     profileSection: {
         flexDirection: 'row',
-        backgroundColor: '##F6F7FB',
+        backgroundColor: '#F6F7FB',
         paddingVertical: scale(40),
         paddingHorizontal: scale(60),
         gap: scale(80),
@@ -658,7 +576,6 @@ const styles = StyleSheet.create({
         width: scale(24),
         height: scale(24),
     },
-
     rightColumn: {
         flex: 2,
         gap: scale(24),
@@ -680,7 +597,6 @@ const styles = StyleSheet.create({
         fontSize: fontScale(16),
         color: '#6B7280',
     },
-
     statsRow: {
         flexDirection: 'row',
         justifyContent: 'center',
@@ -709,8 +625,6 @@ const styles = StyleSheet.create({
         color: '#111827',
         marginTop: scale(4),
     },
-
-    /* 계정 섹션 */
     accountSection: {
         backgroundColor: '#FFFFFF',
         paddingVertical: scale(24),
@@ -721,7 +635,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginBottom: scale(16),
     },
-
     accountContainer: {
         borderRadius: scale(12),
         marginBottom: scale(12),
@@ -771,7 +684,7 @@ const styles = StyleSheet.create({
     accountActionText: {
         fontSize: fontScale(16),
         fontWeight: '600',
-        color: '#5f5f5f',
+        color: '#5F5F5F',
     },
     shiftIcon: {
         width: scale(14),
@@ -786,11 +699,9 @@ const styles = StyleSheet.create({
         fontSize: fontScale(13),
         color: '#374151',
     },
-
     naverText: {
         color: '#FFFFFF',
     },
-
     withdrawButton: {
         marginTop: scale(16),
     },
@@ -798,8 +709,6 @@ const styles = StyleSheet.create({
         fontSize: fontScale(13),
         color: '#000000',
     },
-
-    /* 모달 공통 */
     modalOverlay: {
         position: 'absolute',
         inset: 0,
@@ -840,8 +749,6 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#FFFFFF',
     },
-
-    /* 닉네임 수정 모달 */
     nicknameInputWrapper: {
         width: '100%',
         marginVertical: scale(16),
@@ -857,8 +764,6 @@ const styles = StyleSheet.create({
         color: '#111827',
         backgroundColor: '#F9FAFB',
     },
-
-    /* 한달 목표 모달 */
     goalPicker: {
         alignItems: 'center',
         gap: scale(16),
@@ -880,8 +785,6 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#111827',
     },
-
-    /* 탈퇴 모달 */
     modalWithdrawBox: {
         width: '40%',
         maxWidth: 400,
@@ -904,7 +807,6 @@ const styles = StyleSheet.create({
         color: '#EF4444',
         marginBottom: scale(32),
     },
-
     modalButtonRow: {
         flexDirection: 'row',
         width: '100%',
