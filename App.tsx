@@ -666,7 +666,7 @@ export default function App() {
               setReviewQuizId(null);
               setStep('brushup');
             } else {
-              setStep('talkingStudy');
+              setStep('selectPicture');
             }
           }}
           onBackFromCompletion={() => {
