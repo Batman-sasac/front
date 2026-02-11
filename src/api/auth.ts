@@ -2,6 +2,13 @@
 
 // API Base URL - 실제 백엔드 서버 주소
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
+<<<<<<< Updated upstream
+=======
+const ENV_KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY ?? '';
+const ENV_NAVER_CLIENT_ID = process.env.EXPO_PUBLIC_NAVER_CLIENT_ID ?? '';
+const ENV_KAKAO_REDIRECT_URI = process.env.EXPO_PUBLIC_KAKAO_REDIRECT_URI ?? '';
+const ENV_NAVER_REDIRECT_URI = process.env.EXPO_PUBLIC_NAVER_REDIRECT_URI ?? '';
+>>>>>>> Stashed changes
 
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
 
@@ -22,9 +29,6 @@ export interface SetNicknameResponse {
     message: string;
 }
 
-/**
- * 백엔드 OAuth 엔드포인트에 인가 코드 전송
- */
 export async function loginWithOAuth(
     provider: 'kakao' | 'naver',
     code: string
@@ -33,7 +37,10 @@ export async function loginWithOAuth(
 
     const formData = new FormData();
     formData.append('code', code);
+<<<<<<< Updated upstream
     // Naver token exchange expects state that matches authorize request.
+=======
+>>>>>>> Stashed changes
     if (provider === 'naver') {
         formData.append('state', 'naver_mobile');
     }
@@ -60,6 +67,7 @@ export async function setNickname(
     if (!token) {
         throw new Error('로그인이 필요합니다. 토큰이 없습니다.');
     }
+
     const endpoint = `${API_BASE_URL}/auth/set-nickname`;
     const response = await fetch(endpoint, {
         method: 'POST',
@@ -75,13 +83,14 @@ export async function setNickname(
     });
 
     if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.message || error.error || '닉네임 설정 실패');
     }
 
     return await response.json();
 }
 
+<<<<<<< Updated upstream
 /**
  * 토큰 검증
  */
@@ -126,6 +135,49 @@ export function getOAuthUrl(provider: 'kakao' | 'naver'): string {
     } else {
         return `https://nid.naver.com/oauth2.0/authorize?client_id=${NAVER_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code&state=naver_mobile`;
     }
+=======
+export interface OAuthConfig {
+    kakao_rest_api_key?: string;
+    kakao_redirect_uri?: string;
+    naver_client_id?: string;
+    naver_redirect_uri?: string;
+}
+
+export async function fetchOAuthConfig(): Promise<OAuthConfig> {
+    const res = await fetch(`${API_BASE_URL}/config`);
+    if (!res.ok) throw new Error('OAuth ??? ??? ? ????.');
+    return res.json();
+}
+
+/**
+ * OAuth URL ?? (.env ??, ??? /config fallback)
+ */
+export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
+    let kakaoRestApiKey = ENV_KAKAO_REST_API_KEY;
+    let naverClientId = ENV_NAVER_CLIENT_ID;
+    let kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || `${API_BASE_URL}/auth/kakao/mobile`;
+    let naverRedirectUri = ENV_NAVER_REDIRECT_URI || `${API_BASE_URL}/auth/naver/mobile`;
+
+    if (!kakaoRestApiKey || !naverClientId || !ENV_KAKAO_REDIRECT_URI || !ENV_NAVER_REDIRECT_URI) {
+        const serverConfig = await fetchOAuthConfig();
+        kakaoRestApiKey = kakaoRestApiKey || serverConfig.kakao_rest_api_key || '';
+        naverClientId = naverClientId || serverConfig.naver_client_id || '';
+        kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || serverConfig.kakao_redirect_uri || kakaoRedirectUri;
+        naverRedirectUri = ENV_NAVER_REDIRECT_URI || serverConfig.naver_redirect_uri || naverRedirectUri;
+    }
+
+    if (provider === 'kakao') {
+        if (!kakaoRestApiKey) {
+            throw new Error('KAKAO_REST_API_KEY? .env ?? ??? ??? ??????.');
+        }
+        return `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(kakaoRestApiKey)}&redirect_uri=${encodeURIComponent(kakaoRedirectUri)}&response_type=code`;
+    }
+
+    if (!naverClientId) {
+        throw new Error('NAVER_CLIENT_ID? .env ?? ??? ??? ??????.');
+    }
+    return `https://nid.naver.com/oauth2.0/authorize?client_id=${encodeURIComponent(naverClientId)}&redirect_uri=${encodeURIComponent(naverRedirectUri)}&response_type=code&state=naver_mobile`;
+>>>>>>> Stashed changes
 }
 
 /**

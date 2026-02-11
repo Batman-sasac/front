@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Modal, ActivityIndicator } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
@@ -34,70 +34,20 @@ type Props = {
 
 const SUBJECTS: Subject[] = [
     { id: 'all', icon: '📚', name: '전체', emoji: '📚' },
-    { id: 'korean', icon: '📖', name: '국어', emoji: '📖' },
+    { id: 'korean', icon: '📝', name: '국어', emoji: '📝' },
     { id: 'english', icon: 'abc', name: '영어', emoji: 'abc' },
     { id: 'math', icon: '📐', name: '수학', emoji: '📐' },
     { id: 'science', icon: '🔬', name: '과학', emoji: '🔬' },
     { id: 'society', icon: '🌍', name: '사회', emoji: '🌍' },
-    { id: 'history', icon: '📜', name: '역사', emoji: '📜' },
+    { id: 'history', icon: '🏛️', name: '역사', emoji: '🏛️' },
     { id: 'law', icon: '⚖️', name: '법', emoji: '⚖️' },
-];
-
-const MOCK_CARDS: Card[] = [
-    {
-        id: '1',
-        title: '이차방정식',
-        subject: '수학',
-        description: 'ax²+bx+c=0 형태의 식에서 해를 구하는 방법을 배워요.',
-        progress: 100,
-        daysAgo: 7,
-    },
-    {
-        id: '2',
-        title: '세포 호흡',
-        subject: '과학',
-        description: '포도당을 분해해 에너지를 얻는 과정을 이해해요.',
-        progress: 100,
-        daysAgo: 7,
-    },
-    {
-        id: '3',
-        title: '비유법',
-        subject: '국어',
-        description: '어떤 대상을 다른 것에 빗대어 표현하는 방법을 익혀요.',
-        progress: 100,
-        daysAgo: 7,
-    },
-    {
-        id: '4',
-        title: '조동사',
-        subject: '영어',
-        description: 'can·must 같은 조동사가 문장 의미를 어떻게 바꾸는지 이해해요.',
-        progress: 100,
-        daysAgo: 7,
-    },
-    {
-        id: '5',
-        title: '기후 분류',
-        subject: '사회',
-        description: '지역별 기후 특징을 기준에 따라 구분해요.',
-        progress: 100,
-        daysAgo: 7,
-    },
-    {
-        id: '6',
-        title: '산화·환원 반응',
-        subject: '과학',
-        description: '전자의 이동으로 물질의 성질이 변하는 과정을 살펴봐요.',
-        progress: 100,
-        daysAgo: 7,
-    },
 ];
 
 export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props) {
     const [selectedSubject, setSelectedSubject] = React.useState('all');
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
+    const [suppressCardPress, setSuppressCardPress] = useState(false);
     const [searchModalVisible, setSearchModalVisible] = useState(false);
     const [searchText, setSearchText] = useState('');
     const [cards, setCards] = useState<Card[]>([]);
@@ -113,7 +63,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
             setLoading(true);
             const token = await getToken();
 
-            // 기존 /ocr/list 엔드포인트 사용 (모든 학습 데이터 가져오기)
+            // /ocr/list에서 복습 카드 데이터 조회
             const response = await fetch(`${API_BASE_URL}/ocr/list?page=1&size=100`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -135,7 +85,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
                         title: item.study_name,
                         subject: item.subject_name,
                         description: item.ocr_preview || '학습 데이터',
-                        progress: 100, // 일단 100%로 표시
+                        progress: 100, // 일단 100% 표시
                         daysAgo: daysAgo,
                         quiz_id: item.id
                     };
@@ -169,12 +119,20 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
         : cards.filter(card => card.subject === SUBJECTS.find(s => s.id === selectedSubject)?.name);
 
     const handleDeletePress = (card: Card) => {
+        setSuppressCardPress(true);
         setCardToDelete(card);
         setDeleteModalVisible(true);
+        setTimeout(() => setSuppressCardPress(false), 250);
     };
 
     const handleConfirmDelete = async () => {
         if (!cardToDelete) return;
+        if (typeof cardToDelete.quiz_id !== 'number') {
+            alert('삭제할 카드 ID를 찾을 수 없습니다.');
+            setDeleteModalVisible(false);
+            setCardToDelete(null);
+            return;
+        }
 
         try {
             const token = await getToken();
@@ -226,7 +184,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
                     {/* 타이틀 */}
                     <Text style={styles.pageTitle}>복습</Text>
 
-                    {/* 과목 필터 (수평 탭) */}
+                    {/* 과목 필터 */}
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -256,7 +214,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
 
                     {/* 검색 바 */}
                     <View style={styles.searchBar}>
-                        <Text style={styles.searchBarPlaceholder}>검색어를 입력하세요...</Text>
+                        <Text style={styles.searchBarPlaceholder}>검색어를 입력하세요..</Text>
                         <Pressable
                             style={styles.searchButton}
                             onPress={() => setSearchModalVisible(true)}
@@ -275,13 +233,13 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
                     {loading ? (
                         <View style={styles.loadingContainer}>
                             <ActivityIndicator size="large" color="#5E82FF" />
-                            <Text style={styles.loadingText}>복습 카드를 불러오는 중...</Text>
+                            <Text style={styles.loadingText}>복습 카드를 불러오는 중..</Text>
                         </View>
                     ) : filteredCards.length === 0 ? (
                         <View style={styles.emptyContainer}>
                             <Text style={styles.emptyIcon}>📚</Text>
                             <Text style={styles.emptyTitle}>복습할 카드가 없어요</Text>
-                            <Text style={styles.emptyDesc}>학습을 완료하면 여기에 나타나요!</Text>
+                            <Text style={styles.emptyDesc}>학습을 완료하면 여기에 표시돼요!</Text>
                         </View>
                     ) : (
                         filteredCards.map((card) => (
@@ -293,6 +251,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
                                 <Pressable
                                     style={styles.closeBtn}
                                     hitSlop={10}
+                                    onPressIn={() => setSuppressCardPress(true)}
                                     onPress={() => handleDeletePress(card)}
                                 >
                                     <Text style={styles.closeText}>×</Text>
@@ -301,7 +260,10 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
                                 {/* 카드 클릭 영역 */}
                                 <Pressable
                                     style={styles.cardPressable}
-                                    onPress={() => onCardPress?.(card)}
+                                    onPress={() => {
+                                        if (suppressCardPress) return;
+                                        onCardPress?.(card);
+                                    }}
                                 >
 
                                     {/* 제목 + 과목 아이콘 */}
@@ -315,7 +277,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
 
                                     {/* 정답률 + 기간 */}
                                     <View style={styles.cardFooter}>
-                                        <Text style={styles.cardProgress}>정답률: {card.progress}%</Text>
+                                        <Text style={styles.cardProgress}>정답률 {card.progress}%</Text>
                                         <Text style={styles.cardDays}>{card.daysAgo}일 전</Text>
                                     </View>
                                 </Pressable>
@@ -336,7 +298,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>정말 삭제하시겠어요?</Text>
                         <Text style={styles.modalMessage}>
-                            확실히 기억이 잘 나요.{'\n'}삭제하면 복구할 수 없어요.
+                            삭제된 기록은 복구할 수 없어요.{'\n'}그래도 삭제할까요?
                         </Text>
 
                         <View style={styles.modalButtons}>
@@ -375,10 +337,10 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
 
                         <View style={styles.searchInputContainer}>
                             <Text style={styles.searchIcon}>🔍</Text>
-                            <Text style={styles.searchPlaceholder}>검색어를 입력하세요...</Text>
+                            <Text style={styles.searchPlaceholder}>검색어를 입력하세요..</Text>
                         </View>
 
-                        <Text style={styles.searchHint}>제목, 과목명, 설명에서 검색할 수 있어요</Text>
+                        <Text style={styles.searchHint}>제목, 과목명, 설명에서 검색할 수 있어요.</Text>
                     </View>
                 </View>
             </Modal>
@@ -396,7 +358,7 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingTop: scale(20),
     },
-    // 상단 헤더 카드
+    // ?곷떒 ?ㅻ뜑 移대뱶
     headerCard: {
         backgroundColor: '#FFFFFF',
         marginHorizontal: scale(20),
@@ -415,7 +377,7 @@ const styles = StyleSheet.create({
         color: '#111827',
         marginBottom: scale(20),
     },
-    // 검색 바
+    // 寃??諛?
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -445,7 +407,7 @@ const styles = StyleSheet.create({
         height: scale(24),
         tintColor: '#FFFFFF',
     },
-    // 로딩 및 빈 상태
+    // 濡쒕뵫 諛?鍮??곹깭
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -479,7 +441,7 @@ const styles = StyleSheet.create({
         color: '#9CA3AF',
         textAlign: 'center',
     },
-    // 상단 카드 스타일 (사용 안 함, 제거 가능)
+    // ?곷떒 移대뱶 ?ㅽ???(?ъ슜 ???? ?쒓굅 媛??
     topCardsScroll: {
         paddingHorizontal: scale(24),
         paddingBottom: scale(20),
@@ -530,7 +492,7 @@ const styles = StyleSheet.create({
     topCardCountActive: {
         color: '#5E82FF',
     },
-    // 기존 과목 필터
+    // 湲곗〈 怨쇰ぉ ?꾪꽣
     subjectScroll: {
         paddingBottom: scale(4),
         gap: scale(10),
@@ -562,7 +524,7 @@ const styles = StyleSheet.create({
         color: '#5E82FF',
         fontWeight: '700',
     },
-    // 카드 목록 (한 줄에 2개씩)
+    // 移대뱶 紐⑸줉 (??以꾩뿉 2媛쒖뵫)
     cardList: {
         paddingHorizontal: scale(20),
         paddingTop: scale(4),
@@ -598,6 +560,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#F3F4F6',
+        zIndex: 10,
+        elevation: 10,
     },
     closeText: {
         fontSize: fontScale(22),
@@ -650,7 +614,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#9CA3AF',
     },
-    // 삭제 모달 스타일
+    // ??젣 紐⑤떖 ?ㅽ???
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -706,7 +670,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#FFFFFF',
     },
-    // 검색 모달 스타일
+    // 寃??紐⑤떖 ?ㅽ???
     searchModalContainer: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
