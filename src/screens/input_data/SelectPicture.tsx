@@ -230,8 +230,8 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         const anySrc: any = selectedSource;
         const uri = typeof anySrc?.uri === 'string' ? (anySrc.uri as string) : null;
 
-        if (!uri || !uri.startsWith('file://')) {
-            // 더미 이미지는 그대로 진행
+        if (!uri) {
+            // 더미 이미지(uri 없음)만 OCR 생략
             onStartLearning(sources, false, subjectName);
             return;
         }
