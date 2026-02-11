@@ -77,6 +77,7 @@ export default function ScaffoldingScreen({
     reviewQuizId = null, // 복습 quiz ID
 }: Props) {
     const [step, setStep] = useState<Step>(initialRound);
+    const isReviewMode = reviewQuizId != null;
 
     // 설명
     // 설명
@@ -155,23 +156,42 @@ export default function ScaffoldingScreen({
     }, [tokens, baseInfoByWord, blankDefs]);
 
     useEffect(() => {
-        if (!reviewQuizId || reviewInitRef.current) return;
+        if (!isReviewMode || reviewInitRef.current) return;
         if (keywordInstances.length === 0) return;
 
-        // 설명
         const userAnswers = payload?.user_answers || [];
         let selected: number[] = [];
 
-        if (userAnswers.length > 0) {
-            // 설명
+        // 1) 저장된 빈칸 정의를 최우선으로 사용
+        const savedBlankIdSet = new Set(
+            (payload?.blanks ?? []).map((b, idx) => (typeof b.id === 'number' ? b.id : idx))
+        );
+        if (savedBlankIdSet.size > 0) {
+            selected = keywordInstances
+                .filter((ki) => savedBlankIdSet.has(ki.blankId))
+                .map((ki) => ki.instanceId);
+        }
+
+        // 2) 레거시 데이터: user_answers 기준 보정
+        if (selected.length === 0 && userAnswers.length > 0) {
             const answeredBlankIds = new Set(
                 userAnswers.map((ans, idx) => (ans && ans.trim() !== '' ? idx : -1)).filter((id) => id >= 0)
             );
             selected = keywordInstances.filter((ki) => answeredBlankIds.has(ki.blankId)).map((ki) => ki.instanceId);
-        } else {
-            // 설명
-            const limit = Math.min(20, keywordInstances.length);
-            selected = keywordInstances.slice(0, limit).map((ki) => ki.instanceId);
+        }
+
+        // 3) 최종 안전장치: 복습은 항상 최대 20개 빈칸 표시
+        const targetCount = Math.min(20, keywordInstances.length);
+        if (selected.length === 0) {
+            selected = keywordInstances.slice(0, targetCount).map((ki) => ki.instanceId);
+        } else if (selected.length < targetCount) {
+            const selectedSet = new Set(selected);
+            const remain = keywordInstances
+                .map((ki) => ki.instanceId)
+                .filter((id) => !selectedSet.has(id));
+            selected = [...selected, ...remain.slice(0, targetCount - selected.length)];
+        } else if (selected.length > targetCount) {
+            selected = selected.slice(0, targetCount);
         }
 
         setSelectedBlanks(selected);
@@ -184,7 +204,7 @@ export default function ScaffoldingScreen({
         });
         selectionSeqRef.current = selected.length;
         reviewInitRef.current = true;
-    }, [reviewQuizId, keywordInstances, payload?.user_answers]);
+    }, [isReviewMode, keywordInstances, payload?.blanks, payload?.user_answers]);
 
     useEffect(() => {
         if (!pendingSelection) return;
@@ -314,6 +334,7 @@ export default function ScaffoldingScreen({
 
 
     const onReselectWords = () => {
+        if (isReviewMode) return;
         // 설명
         if (step === '1-2') setStep('1-1');
         else if (step === '2-2') setStep('2-1');
@@ -322,6 +343,7 @@ export default function ScaffoldingScreen({
 
     // 설명
     const onToggleBlankSelection = (instanceId: number) => {
+        if (isReviewMode) return;
         setSelectedBlanks((prev) => {
             const lockedCount = currentRound === 1 ? 0 : currentRound === 2 ? round1Count : round2Count;
             const requiredTotal = currentRound === 1 ? round1Count : currentRound === 2 ? round2Count : round3Count;
