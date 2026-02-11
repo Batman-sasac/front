@@ -28,6 +28,7 @@ export type LeagueUser = {
 
 type Props = {
     onNavigate: (screen: Screen) => void;
+    onLogout?: () => void;
 
     // 현재 로그인한 사용자의 리그 정보
     currentTier: LeagueTier;
@@ -90,6 +91,7 @@ const BG = '#F6F7FB';
 
 export default function LeagueScreen({
     onNavigate,
+    onLogout,
     currentTier,
     users,
     remainingText,
@@ -103,7 +105,12 @@ export default function LeagueScreen({
             <Sidebar
                 activeScreen="league"
                 onNavigate={onNavigate}
-                onLogout={() => confirmLogout(() => onNavigate('home'))}
+                onLogout={() =>
+                    confirmLogout(() => {
+                        if (onLogout) onLogout();
+                        else onNavigate('home');
+                    })
+                }
             />
 
             {/* 우측 리그 메인 영역 */}

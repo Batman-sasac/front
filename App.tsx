@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { View, ImageSourcePropType, Alert, Platform } from 'react-native';
+import { View, ImageSourcePropType, Alert, Platform, Modal, Pressable, Image, Text, StyleSheet } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Splash from './src/components/Splash';
@@ -21,12 +21,14 @@ import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import ErrorScreen from './src/screens/error/error';
+import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
+import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse } from './src/api/ocr';
 import { updateFcmToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
+import { getUserStats } from './src/api/auth';
 
 type SocialProvider = 'kakao' | 'naver';
 type Step =
@@ -47,6 +49,7 @@ type Step =
   | 'talkingStudy'
   | 'scaffolding'
   | 'brushup'
+  | 'subscribe'
   | 'error';
 
 export default function App() {
@@ -73,6 +76,9 @@ export default function App() {
     showBonus: false,
   });
   const [pushTokenSynced, setPushTokenSynced] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [ocrUsage, setOcrUsage] = useState<OcrUsageResponse | null>(null);
+  const [showUsageExhaustedModal, setShowUsageExhaustedModal] = useState(false);
 
   // 학습 통계 상태
   const [totalStudyCount, setTotalStudyCount] = useState(0);
@@ -104,6 +110,62 @@ export default function App() {
   };
 
   const progressLoadedRef = useRef(false);
+
+  const isUsageLimitReached = (usage?: OcrUsageResponse | null) => {
+    const target = usage ?? ocrUsage;
+    if (!target) return false;
+    return target.status === 'limit_reached' || target.remaining <= 0;
+  };
+
+  const refreshOcrUsage = async () => {
+    try {
+      const token = await getToken();
+      if (!token) {
+        setOcrUsage(null);
+        return null;
+      }
+      const usage = await getOcrUsage();
+      setOcrUsage(usage);
+      return usage;
+    } catch (error) {
+      console.error('OCR 사용량 조회 실패:', error);
+      return null;
+    }
+  };
+
+  const tryMoveToTakePicture = async () => {
+    const usage = await refreshOcrUsage();
+    if (!isSubscribed && isUsageLimitReached(usage)) {
+      setShowUsageExhaustedModal(true);
+      return;
+    }
+    setStep('takePicture');
+  };
+
+  const handleMainNavigate = (screen: 'home' | 'league' | 'alarm' | 'mypage' | 'takePicture' | 'brushup') => {
+    if (screen === 'takePicture') {
+      void tryMoveToTakePicture();
+      return;
+    }
+    setStep(screen);
+  };
+
+  const handleSidebarNavigate = (screen: SidebarScreen) => {
+    if (screen === 'takePicture') {
+      void tryMoveToTakePicture();
+      return;
+    }
+    setStep(screen);
+  };
+
+  const handlePlanManageOpen = async () => {
+    const usage = await refreshOcrUsage();
+    if (!isSubscribed && isUsageLimitReached(usage)) {
+      setShowUsageExhaustedModal(true);
+      return;
+    }
+    setStep('subscribe');
+  };
 
   useEffect(() => {
     const loadProgress = async () => {
@@ -225,6 +287,19 @@ export default function App() {
         if (userInfo.email && userInfo.nickname) {
           setUserEmail(userInfo.email);
           setNickname(userInfo.nickname);
+          try {
+            const userState = await getUserStats(token);
+            if (typeof userState.data.total_points === 'number' && Number.isFinite(userState.data.total_points)) {
+              setExp(userState.data.total_points);
+            }
+            if (typeof userState.data.monthly_goal === 'number' && userState.data.monthly_goal > 0) {
+              setMonthlyGoal(userState.data.monthly_goal);
+            }
+            setIsSubscribed(!!userState.data.is_subscribed);
+          } catch (e) {
+            console.error('유저 상태 동기화 실패:', e);
+          }
+          await refreshOcrUsage();
           // splash 종료 후 바로 홈으로
           setTimeout(() => setStep('home'), 2000);
           return;
@@ -248,6 +323,10 @@ export default function App() {
       setNickname('');
       setUserSocialId('');
       setTypeResult(null);
+      setTypeLabel('');
+      setIsSubscribed(false);
+      setOcrUsage(null);
+      setShowUsageExhaustedModal(false);
       // 로그인 화면으로 이동
       setStep('login');
     } catch (error) {
@@ -299,6 +378,11 @@ export default function App() {
     }
   }, [step, progressLoaded]);
 
+  useEffect(() => {
+    if (step !== 'home') return;
+    void refreshOcrUsage();
+  }, [step, isSubscribed]);
+
   // 복습 진입 시 DB에서 퀴즈 데이터 조회
   useEffect(() => {
     if (step !== 'scaffolding' || reviewQuizId == null) return;
@@ -325,6 +409,22 @@ export default function App() {
   const handleLoginSuccess = async (email: string, userNickname: string) => {
     setUserEmail(email);
     setNickname(userNickname);
+    try {
+      const token = await getToken();
+      if (token) {
+        const userState = await getUserStats(token);
+        if (typeof userState.data.total_points === 'number' && Number.isFinite(userState.data.total_points)) {
+          setExp(userState.data.total_points);
+        }
+        if (typeof userState.data.monthly_goal === 'number' && userState.data.monthly_goal > 0) {
+          setMonthlyGoal(userState.data.monthly_goal);
+        }
+        setIsSubscribed(!!userState.data.is_subscribed);
+      }
+    } catch (e) {
+      console.error('유저 상태 동기화 실패:', e);
+    }
+    await refreshOcrUsage();
 
     // 바로 홈 화면으로 이동
     setStep('home');
@@ -523,14 +623,15 @@ export default function App() {
           weeklyGrowth={weeklyGrowth}
           monthlyStats={monthlyStats}
           monthlyGoal={monthlyGoal}
-          onNavigate={(screen) => setStep(screen)}
+          onNavigate={handleMainNavigate}
           onLogout={handleLogout}
         />
       )}
 
       {step === 'league' && (
         <LeagueScreen
-          onNavigate={(screen) => setStep(screen)}
+          onNavigate={handleSidebarNavigate}
+          onLogout={handleLogout}
           currentTier={currentLeagueTier}
           users={leagueUsers}
           remainingText={leagueRemainingText}
@@ -554,7 +655,7 @@ export default function App() {
           totalStudyCount={totalStudyCount}
           continuousDays={continuousDays}
           monthlyGoal={monthlyGoal}
-          onNavigate={(screen) => setStep(screen)}
+          onNavigate={handleMainNavigate}
           onMonthlyGoalChange={async (goal) => {
             try {
               await setStudyGoal(goal);
@@ -564,6 +665,9 @@ export default function App() {
             }
           }}
           onNicknameChange={(newNickname) => setNickname(newNickname)}
+          onLogout={handleLogout}
+          isSubscribed={isSubscribed}
+          onPlanManage={handlePlanManageOpen}
           onWithdraw={() => {
             // 모든 상태 초기화
             setNickname('');
@@ -671,11 +775,15 @@ export default function App() {
               setStep('selectPicture');
             }
           }}
-          onBackFromCompletion={() => {
+          onBackFromCompletion={async () => {
             // 학습 완료 후 홈으로
             setIsReviewMode(false);
             setReviewQuizId(null);
             setStep('home');
+            const usage = await refreshOcrUsage();
+            if (!isSubscribed && isUsageLimitReached(usage)) {
+              setShowUsageExhaustedModal(true);
+            }
           }}
           sources={capturedSources}
           selectedIndex={selectedSourceIndex}
@@ -751,11 +859,30 @@ export default function App() {
         <BrushUPScreen
           onBack={() => setStep('home')}
           // 타입 보정
-          onNavigate={(screen: SidebarScreen) => setStep(screen)}
+          onNavigate={handleSidebarNavigate}
+          onLogout={handleLogout}
           onCardPress={(card) => {
             setIsReviewMode(true);
             setReviewQuizId(card.quiz_id || null);
             setStep('scaffolding');
+          }}
+        />
+      )}
+
+      {step === 'subscribe' && (
+        <SubscribeScreen
+          isSubscribed={isSubscribed}
+          ocrUsage={ocrUsage}
+          onBack={() => setStep('mypage')}
+          onSubscribe={() => {
+            setStep('mypage');
+            setTimeout(() => {
+              Alert.alert('안내', '추후 업데이트 될 내용입니다');
+            }, 0);
+          }}
+          onCancelSubscribe={() => {
+            setIsSubscribed(false);
+            setStep('mypage');
           }}
         />
       )}
@@ -776,9 +903,111 @@ export default function App() {
         />
       )}
 
+      <Modal visible={showUsageExhaustedModal} transparent animationType="fade" onRequestClose={() => setShowUsageExhaustedModal(false)}>
+        <View style={stylesSub.modalBackdrop}>
+          <View style={stylesSub.modalCard}>
+            <View style={stylesSub.modalHeader}>
+              <Text style={stylesSub.modalTitle}>사용량 소진 안내</Text>
+              <Pressable onPress={() => setShowUsageExhaustedModal(false)}>
+                <Image source={require('./assets/subscribe/close.png')} style={stylesSub.closeIcon} resizeMode="contain" />
+              </Pressable>
+            </View>
+
+            <View style={stylesSub.modalBody}>
+              <Image source={require('./assets/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
+              <Text style={stylesSub.modalDesc}>무료 AI 호출 사용량을 모두 사용했어요.</Text>
+              <Text style={stylesSub.modalDesc}>더 깊이 학습하고 싶으시다면</Text>
+              <Text style={stylesSub.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>
+            </View>
+
+            <View style={stylesSub.modalButtons}>
+              <Pressable style={stylesSub.modalBtn} onPress={() => setShowUsageExhaustedModal(false)}>
+                <Image source={require('./assets/subscribe/popup-cancel.png')} style={stylesSub.modalBtnImg} resizeMode="stretch" />
+              </Pressable>
+              <Pressable
+                style={stylesSub.modalBtn}
+                onPress={() => {
+                  setShowUsageExhaustedModal(false);
+                  setStep('subscribe');
+                }}
+              >
+                <Image source={require('./assets/subscribe/popup-subscribe.png')} style={stylesSub.modalBtnImg} resizeMode="stretch" />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
 
 
 
     </View>
   );
 }
+
+const stylesSub = StyleSheet.create({
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 540,
+    backgroundColor: '#F8F8FA',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    height: 72,
+    borderBottomWidth: 1,
+    borderBottomColor: '#D7DAE3',
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexDirection: 'row',
+  },
+  modalTitle: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#111218',
+    marginLeft: 6,
+  },
+  closeIcon: {
+    width: 36,
+    height: 36,
+  },
+  modalBody: {
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 10,
+  },
+  modalBat: {
+    width: 220,
+    height: 180,
+    marginBottom: 10,
+  },
+  modalDesc: {
+    fontSize: 16,
+    lineHeight: 26,
+    fontWeight: '700',
+    color: '#111218',
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+  },
+  modalBtn: {
+    flex: 1,
+  },
+  modalBtnImg: {
+    width: '100%',
+    height: 58,
+  },
+});
