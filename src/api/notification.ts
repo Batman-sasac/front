@@ -9,7 +9,6 @@ export type NotificationSettingsPayload = {
 
 export async function updateNotificationSettings(token: string, payload: NotificationSettingsPayload) {
     const formData = new FormData();
-    formData.append('token', token);
     formData.append('is_notify', String(payload.is_notify));
     formData.append('remind_time', payload.remind_time);
 
@@ -30,16 +29,13 @@ export async function updateNotificationSettings(token: string, payload: Notific
 }
 
 export async function updateFcmToken(token: string, fcmToken: string) {
-    const formData = new FormData();
-    formData.append('token', token);
-    formData.append('fcm_token', fcmToken);
-
-    const response = await fetch(`${API_BASE_URL}/user/update-fcm-token`, {
+    const response = await fetch(`${API_BASE_URL}/firebase/user/update-fcm-token`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
         },
-        body: formData,
+        body: JSON.stringify({ fcm_token: fcmToken }),
     });
 
     if (!response.ok) {
