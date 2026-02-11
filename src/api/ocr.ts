@@ -1,4 +1,4 @@
-// src/api/ocr.ts
+﻿// src/api/ocr.ts
 export type BlankItem = {
     id: number;
     word: string;
@@ -28,27 +28,27 @@ import config from '../lib/config';
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
 export async function runOcr(fileUri: string, cropInfo?: { px: number; py: number; pw: number; ph: number }): Promise<ScaffoldingPayload> {
-    console.log('🔵 OCR 요청 시작 - fileUri:', fileUri, 'cropInfo:', cropInfo);
+    console.log('OCR 요청 시작 - fileUri:', fileUri, 'cropInfo:', cropInfo);
 
     const form = new FormData();
 
-    // 웹 환경에서는 파일 URI를 Blob으로 변환해야 함
+    // 모바일 환경에서 파일 URI를 Blob으로 변환 시도
     const fileExtension = fileUri.split('.').pop()?.toLowerCase() || 'jpg';
     const mimeType = fileExtension === 'png' ? 'image/png' : 'image/jpeg';
 
     try {
-        // 파일 URI를 fetch로 가져와서 Blob으로 변환
+        // 모바일 환경에서 파일 URI를 Blob으로 변환 시도
         const response = await fetch(fileUri);
         const blob = await response.blob();
 
-        // Blob을 File 객체로 변환 (웹 표준)
+        // Blob을 File 객체로 변환 (웹 호환)
         const file = new File([blob], `photo.${fileExtension}`, { type: mimeType });
 
         form.append('file', file);
-        console.log('🔵 FormData 생성 완료 (Blob):', { name: file.name, type: file.type, size: file.size });
+        console.log('FormData 생성 완료 (Blob):', { name: file.name, type: file.type, size: file.size });
     } catch (blobError) {
-        // Blob 변환 실패 시 폴백 (모바일 네이티브)
-        console.log('⚠️ Blob 변환 실패, RN 형식 사용:', blobError);
+        // Blob 변환 실패 시 RN 방식으로 fallback
+        console.log('Blob 변환 실패, RN 방식 사용:', blobError);
         form.append('file', {
             uri: fileUri,
             name: `photo.${fileExtension}`,
@@ -62,7 +62,7 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
         form.append('crop_y', String(cropInfo.py));
         form.append('crop_width', String(cropInfo.pw));
         form.append('crop_height', String(cropInfo.ph));
-        console.log('🔵 Crop 정보 추가:', cropInfo);
+        console.log('Crop 정보 추가:', cropInfo);
     }
 
     // 토큰 가져오기
@@ -78,20 +78,20 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
         },
     });
 
-    console.log('🔵 응답 상태:', res.status);
+    console.log('OCR 응답 상태:', res.status);
 
     if (!res.ok) {
         const errorText = await res.text();
-        console.error('🔴 OCR 오류 응답:', errorText);
+        console.error('OCR 오류 응답:', errorText);
         throw new Error(`OCR HTTP ${res.status}: ${errorText}`);
     }
     const data = (await res.json()) as any;
 
     if (data.status === 'limit_reached') {
-        throw new Error(data.message || '이용가능한 무료 횟수를 다 사용하셨습니다');
+        throw new Error(data.message || '이용 가능한 무료 횟수를 모두 사용했습니다.');
     }
 
-    if (data.status === 'error') throw new Error(data.message);
+        throw new Error(data.message || '이용 가능한 무료 횟수를 모두 사용했습니다.');
 
     const inner = data.data ?? data;
 
@@ -118,7 +118,7 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
     const blanks = keywords.map((word, idx) => ({
         id: idx,
         word: word,
-        meaningLong: `${word}의 뜻 (AI 생성 예정)`,
+        meaningLong: `${word} 뜻 (AI 생성 예정)`,
     }));
 
     return {
@@ -150,7 +150,7 @@ export async function getOcrUsage(): Promise<OcrUsageResponse> {
 
 
 
-// ocr_app.py의 /ocr/save 스펙: 페이지·빈칸·사용자 답변 모두 JSON
+// ocr_app.py의 /ocr/save 스펙: 페이지, 빈칸, 사용자 답변 모두 JSON
 export type PageItem = {
     original_text: string;
     keywords: string[];
@@ -168,7 +168,7 @@ export type SaveTestRequest = {
     /** 단일 페이지 호환 */
     original?: string;
     answers?: string[];
-    /** 페이지별 원문·키워드 (페이징 시 사용) */
+    /** 페이지별 원문/키워드 (페이지 사용 시) */
     pages?: PageItem[];
     /** 빈칸 정의 (blank_index 순서 = user_answers 인덱스) */
     blanks?: BlankItemSave[];
@@ -196,8 +196,21 @@ export async function saveTest(payload: SaveTestRequest) {
 
 export type GradeStudyRequest = {
     quiz_id: number;
-    user_answers: string[];
     answer: string[];
+    user_answer: string[];
+    quiz_html: string;
+    ocr_text: {
+        pages: PageItem[];
+        blanks: BlankItemSave[];
+        quiz: { raw: string };
+    };
+    // 백엔드 호환용 추가 필드
+    user_answers?: string[];
+    study_name?: string;
+    subject_name?: string;
+    original_text?: string[];
+    keywords?: string[];
+    grade_cnt?: number;
 };
 
 export async function gradeStudy(payload: GradeStudyRequest) {
@@ -220,7 +233,7 @@ export async function gradeStudy(payload: GradeStudyRequest) {
     return res.json();
 }
 
-/** 복습 시 DB에 저장된 퀴즈를 ScaffoldingPayload 형태로 가져오기 */
+/** 복습 시 DB에 저장한 퀴즈를 ScaffoldingPayload 형태로 조회 */
 export type QuizForReviewResponse = {
     status: string;
     data?: {
@@ -292,7 +305,7 @@ export async function getWeeklyGrowth(): Promise<WeeklyGrowthResponse> {
     return res.json();
 }
 
-// 복습 완료 시 리워드 제공 & 사용자 답변 저장
+// 복습 완료 시 리워드 지급 및 사용자 답변 저장
 export type ReviewStudyRequest = {
     quiz_id: number;
     user_answers: string[];
@@ -357,3 +370,6 @@ export async function getMonthlyStats(): Promise<MonthlyStatsResponse> {
     if (!res.ok) throw new Error(`Monthly Stats HTTP ${res.status}`);
     return res.json();
 }
+
+
+

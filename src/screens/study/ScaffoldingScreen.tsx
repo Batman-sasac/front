@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+﻿import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -50,7 +50,7 @@ type Props = {
     onRetry: () => void;
     onSave?: (answers: string[]) => Promise<void>;
     initialRound?: Step; // 초기 라운드 설정 (복습용)
-    reviewQuizId?: number | null; // 복습할 quiz ID
+    reviewQuizId?: number | null; // 복습용 quiz ID
     subjectName?: string; // 과목명
 };
 
@@ -73,16 +73,16 @@ export default function ScaffoldingScreen({
     error,
     onRetry,
     onSave,
-    initialRound = '1-1', // 기본값은 1라운드
+    initialRound = '1-1', // 기본값 1라운드
     reviewQuizId = null, // 복습 quiz ID
 }: Props) {
     const [step, setStep] = useState<Step>(initialRound);
 
-    // 복습 모드는 별도 로드 없이 initialRound만 사용
-    // (실제 데이터는 이미 학습 완료된 상태이므로 payload 재사용)
+    // 설명
+    // 설명
 
-    // ✅ Hook은 반드시 조건부 로직 BEFORE 호출되어야 함
-    // 아래 모든 hook들을 먼저 정의
+    // 설명
+    // 설명
     const [selectedWord, setSelectedWord] = useState<BlankItem | null>(null);
     const [activeBlankId, setActiveBlankId] = useState<number | null>(null);
     const [answers, setAnswers] = useState<Record<number, string>>({}); // instanceId 기반
@@ -95,7 +95,7 @@ export default function ScaffoldingScreen({
     const [popupMessage, setPopupMessage] = useState('');
     const [popupOnConfirm, setPopupOnConfirm] = useState<(() => void) | null>(null);
     const [hintWord, setHintWord] = useState<number | null>(null);
-    const [hintType, setHintType] = useState<'first' | 'last' | 'chosung' | null>(null); // 선택된 힌트 타입
+    const [hintType, setHintType] = useState<'first' | 'last' | 'chosung' | null>(null); // 선택한 힌트 타입
     const [hintPosition, setHintPosition] = useState<{ x: number; y: number } | null>(null); // 힌트 모달 위치
 
     const [blankDefsState, setBlankDefsState] = useState<BlankItem[]>([]);
@@ -112,7 +112,7 @@ export default function ScaffoldingScreen({
     const dragStartRef = useRef<{ x: number; y: number } | null>(null);
     const dragSelectionRef = useRef<{ text: string; box: { x: number; y: number; w: number; h: number } } | null>(null);
 
-    // 안전한 값들 (payload가 없어도 안전)
+    // 설명
     const title = payload?.title ?? '';
     const extractedText = payload?.extractedText ?? '';
 
@@ -132,7 +132,7 @@ export default function ScaffoldingScreen({
         return m;
     }, [blankDefs]);
 
-    /** ✅ 핵심: 중복 단어도 등장마다 instanceId를 부여해서 “각 칸이 독립 입력” 되게 함 */
+    /** 중요: 중복 단어마다 instanceId를 부여해서 입력/채점을 분리 */
     const tokens = useMemo(() => {
         const raw = tokenizeWithKeywords(extractedText, keywordList);
         let seq = 1;
@@ -143,11 +143,11 @@ export default function ScaffoldingScreen({
         const instances = tokens
             .filter((t): t is KeywordTokenWithId => t.type === 'keyword')
             .map((t, idx) => {
-                // blank.id 또는 배열 인덱스로 blank 식별
+                // 설명
                 const blankItem = blankDefs[idx] ?? null;
                 return {
-                    instanceId: t.instanceId,  // UI 렌더링용 시퀀스
-                    blankId: blankItem?.id ?? idx,  // 데이터 저장/전송용 (blank_index)
+                    instanceId: t.instanceId,  // UI 렌더링용 식별자
+                    blankId: blankItem?.id ?? idx,  // 서버 전송용(blank_index)
                     word: t.value,
                     base: baseInfoByWord.get(t.baseWord) ?? null,
                 };
@@ -159,18 +159,18 @@ export default function ScaffoldingScreen({
         if (!reviewQuizId || reviewInitRef.current) return;
         if (keywordInstances.length === 0) return;
 
-        // user_answers가 있는 빈칸만 선택 (이전 학습에서 작성한 빈칸들)
+        // 설명
         const userAnswers = payload?.user_answers || [];
         let selected: number[] = [];
 
         if (userAnswers.length > 0) {
-            // user_answers가 있는 인덱스(blankId)에 해당하는 instanceId들 찾기
+            // 설명
             const answeredBlankIds = new Set(
                 userAnswers.map((ans, idx) => (ans && ans.trim() !== '' ? idx : -1)).filter((id) => id >= 0)
             );
             selected = keywordInstances.filter((ki) => answeredBlankIds.has(ki.blankId)).map((ki) => ki.instanceId);
         } else {
-            // user_answers가 없으면 기존 방식 (처음 20개)
+            // 설명
             const limit = Math.min(20, keywordInstances.length);
             selected = keywordInstances.slice(0, limit).map((ki) => ki.instanceId);
         }
@@ -241,7 +241,7 @@ export default function ScaffoldingScreen({
         return m;
     }, [keywordInstances]);
 
-    // 전체 단어를 20개로 제한
+    // 설명
     const totalKeywordCount = Math.min(20, keywordInstances.length);
     const totalBars = 20;
     const round1Count = Math.min(5, totalKeywordCount);
@@ -255,11 +255,11 @@ export default function ScaffoldingScreen({
         return 1;
     }, [step]);
 
-    // 라운드별 필요 선택 개수
+    // 설명
     const requiredSelectCount = useMemo(() => {
-        if (currentRound === 1) return round1Count; // 1라운드: 5개
-        if (currentRound === 2) return 7; // 2라운드: 7개 추가
-        return 8; // 3라운드: 8개 추가
+        if (currentRound === 1) return round1Count; // 1라운드 5개
+        if (currentRound === 2) return 7; // 2라운드 7개 추가
+        return 8; // 3라운드 8개 추가
     }, [currentRound, round1Count]);
 
     const correctCount = useMemo(() => {
@@ -294,16 +294,16 @@ export default function ScaffoldingScreen({
         setDragConfirm(null);
     }, [step]);
 
-    // 힌트 모달이 닫힐 때 (hintWord가 null이 될 때) 힌트 입력값 지우기
+    // 설명
     useEffect(() => {
         if (hintWord === null && hintType !== null) {
-            // 모달이 닫혔을 때 모든 힌트 입력값 지우기
+            // 설명
             setAnswers((prev) => {
                 const newAnswers = { ...prev };
                 Object.keys(newAnswers).forEach((keyStr) => {
                     const key = parseInt(keyStr, 10);
                     const val = newAnswers[key];
-                    // 힌트만 입력된 경우 (첫글자, 마지막글자, 초성) 지우기
+                    // 설명
                     if (val && (val.length === 1 || /^[ㄱ-ㅎ]+$/.test(val))) {
                         delete newAnswers[key];
                     }
@@ -313,42 +313,15 @@ export default function ScaffoldingScreen({
         }
     }, [hintWord]);
 
-    /** 로딩/에러 (모든 Hook 호출 이후) */
-    if (loading) {
-        return (
-            <View style={[styles.root, styles.center]}>
-                <ActivityIndicator size="large" color="#5E82FF" />
-                <Text style={styles.loadingText}>OCR 결과를 불러오는 중입니다…</Text>
-            </View>
-        );
-    }
-    if (error || !payload) {
-        return (
-            <View style={[styles.root, styles.center, { paddingHorizontal: scale(18) }]}>
-                <Text style={styles.errorTitle}>데이터를 불러오지 못했습니다.</Text>
-                {!!error && <Text style={styles.errorDesc}>{error}</Text>}
-
-                {!reviewQuizId && (
-                    <Pressable style={styles.retryBtn} onPress={onRetry}>
-                        <Text style={styles.retryBtnText}>다시 시도</Text>
-                    </Pressable>
-                )}
-
-                <Pressable style={styles.backOnlyBtn} onPress={onBack}>
-                    <Text style={styles.backOnlyBtnText}>뒤로가기</Text>
-                </Pressable>
-            </View>
-        );
-    }
 
     const onReselectWords = () => {
-        // 현재 라운드의 -1 단계로 돌아가기
+        // 설명
         if (step === '1-2') setStep('1-1');
         else if (step === '2-2') setStep('2-1');
         else if (step === '3-2') setStep('3-1');
     };
 
-    // 단어 선택/취소 토글 (1-1, 2-1, 3-1 단계에서)
+    // 설명
     const onToggleBlankSelection = (instanceId: number) => {
         setSelectedBlanks((prev) => {
             const lockedCount = currentRound === 1 ? 0 : currentRound === 2 ? round1Count : round2Count;
@@ -356,7 +329,7 @@ export default function ScaffoldingScreen({
             const existsIndex = prev.indexOf(instanceId);
 
             if (existsIndex >= 0) {
-                // 이전 라운드 선택은 취소 불가
+                // 설명
                 if (existsIndex < lockedCount) return prev;
                 setSelectionOrder((orderPrev) => {
                     const nextOrder = { ...orderPrev };
@@ -366,7 +339,7 @@ export default function ScaffoldingScreen({
                 return prev.filter((id) => id !== instanceId);
             }
 
-            // 선택 개수 초과 방지
+            // 설명
             if (prev.length >= requiredTotal) return prev;
 
             setSelectionOrder((orderPrev) => {
@@ -382,7 +355,7 @@ export default function ScaffoldingScreen({
         const requiredTotal = currentRound === 1 ? round1Count : currentRound === 2 ? round2Count : round3Count;
         if (orderedSelectedBlanks.length < requiredTotal) {
             setPopupTitle('알림');
-            setPopupMessage(`${requiredTotal}개가 다 설정되지 않았어요!`);
+            setPopupMessage(`${requiredTotal}개가 아직 설정되지 않았어요!`);
             setPopupOnConfirm(null);
             setPopupVisible(true);
             return;
@@ -523,17 +496,46 @@ export default function ScaffoldingScreen({
         });
     }, [dragEnabled, tokens]);
 
+    /** 로딩/에러 UI (모든 Hook 선언 이후) */
+    if (loading) {
+        return (
+            <View style={[styles.root, styles.center]}>
+                <ActivityIndicator size="large" color="#5E82FF" />
+                <Text style={styles.loadingText}>OCR 결과를 불러오는 중입니다.</Text>
+            </View>
+        );
+    }
+    if (error || !payload) {
+        return (
+            <View style={[styles.root, styles.center, { paddingHorizontal: scale(18) }]}>
+                <Text style={styles.errorTitle}>데이터를 불러오지 못했습니다.</Text>
+                {!!error && <Text style={styles.errorDesc}>{error}</Text>}
+
+                {!reviewQuizId && (
+                    <Pressable style={styles.retryBtn} onPress={onRetry}>
+                        <Text style={styles.retryBtnText}>다시 시도</Text>
+                    </Pressable>
+                )}
+
+                <Pressable style={styles.backOnlyBtn} onPress={onBack}>
+                    <Text style={styles.backOnlyBtnText}>뒤로가기</Text>
+                </Pressable>
+            </View>
+        );
+    }
+
+
     const onLongPressBlank = (instanceId: number) => {
         setHintWord(instanceId);
         setHintType(null);
 
-        // 빈칸 좌표 추적
+        // 설명
         const blankRef = blankRefs.current[instanceId];
         if (blankRef) {
             blankRef.measure((fx, fy, width, height, px, py) => {
                 setHintPosition({
                     x: px + width / 2,
-                    y: py - 80, // 빈칸 상단에 표시 (모달 높이만큼 위로)
+                    y: py - 80, // 빈칸 상단에 힌트 모달 표시
                 });
             });
         }
@@ -553,7 +555,7 @@ export default function ScaffoldingScreen({
         if (cb) cb();
     };
 
-    // 한글 초성 추출 함수 (정확한 유니코드 계산)
+    // 한글 초성 추출 함수 (유니코드 계산)
     const getChosung = (char: string): string => {
         const code = char.charCodeAt(0);
 
@@ -562,17 +564,17 @@ export default function ScaffoldingScreen({
             return ''; // 한글이 아니면 빈 문자열 반환
         }
 
-        // 초성 리스트 (19개)
+        // 초성 목록 (19개)
         const chosungList = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
 
-        // 한글 음절 = 초성 * 588 + 중성 * 28 + 종성
+        // 한글 오프셋 = 초성 * 588 + 중성 * 28 + 종성
         const temp = code - 0xac00;
         const chosungIndex = Math.floor(temp / 588);
 
         return chosungList[chosungIndex] || '';
     };
 
-    // 힌트 함수들
+    // 설명
     const getFirstLetter = (word: string): string => word[0] || '';
     const getLastLetter = (word: string): string => word[word.length - 1] || '';
     const getChosungText = (word: string): string => {
@@ -587,27 +589,27 @@ export default function ScaffoldingScreen({
     const applyHint = (type: 'first' | 'last' | 'chosung', word: string, instanceId: number) => {
         let hint = '';
         if (type === 'first') {
-            hint = getFirstLetter(word); // 첫 글자만
+            hint = getFirstLetter(word); // 첫 글자
         } else if (type === 'last') {
-            hint = getLastLetter(word); // 마지막 글자만
+            hint = getLastLetter(word); // 마지막 글자
         } else {
             hint = getChosungText(word); // 초성
         }
 
         setAnswers(prev => ({ ...prev, [instanceId]: hint }));
-        setHintType(type); // 선택된 타입만 표시, 말풍선 유지
+        setHintType(type); // 선택한 타입만 표시
     };
 
     const onGrade = () => {
         const next: Record<number, GradeState> = { ...graded };
         const newWrong = new Set(wrongInstances);
 
-        // 선택된 빈칸만 채점
+        // 설명
         orderedSelectedBlanks.forEach((instanceId) => {
             const ins = keywordInstances.find(ki => ki.instanceId === instanceId);
             if (!ins) return;
 
-            // 이미 이전 라운드에서 맞췄으면 그대로 유지
+            // 설명
             if (next[ins.blankId] === 'correct') return;
 
             const user = (answers[ins.instanceId] ?? '').trim();
@@ -630,7 +632,7 @@ export default function ScaffoldingScreen({
         else if (step === '3-2') setStep('3-3');
     };
 
-    /** 왼쪽 설명 카드(상/하 색 분리) */
+    /** 왼쪽 설명 카드 */
     const HelpChip = () => {
         const substep = step.split('-')[1];
 
@@ -639,42 +641,42 @@ export default function ScaffoldingScreen({
                 <>
                     <View style={styles.helpBox}>
                         <View style={[styles.helpHeader, { backgroundColor: HIGHLIGHT_BG }]}>
-                            <Text style={styles.helpTitle}>빈칸 터치하기</Text>
+                            <Text style={styles.helpTitle}>빈칸 채우기</Text>
                         </View>
                         <View style={styles.helpBody}>
-                            <Text style={styles.helpDesc}>빈칸의 정답을</Text>
-                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>입력할 수 있어요!</Text>
+                            <Text style={styles.helpDesc}>빈칸에 정답을</Text>
+                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>입력해 보세요</Text>
                         </View>
                     </View>
                     <View style={styles.helpBox}>
                         <View style={[styles.helpHeader, { backgroundColor: HIGHLIGHT_BG }]}>
-                            <Text style={styles.helpTitle}>빈칸 꾹 누르기</Text>
+                            <Text style={styles.helpTitle}>힌트 버튼 누르기</Text>
                         </View>
                         <View style={styles.helpBody}>
-                            <Text style={styles.helpDesc}>H1을 누르면 첫글자,</Text>
-                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>H2를 누르면 마지막글자,</Text>
-                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>H3을 누르면 전체 단어의</Text>
-                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>초성이 제공돼요!</Text>
+                            <Text style={styles.helpDesc}>H1을 누르면 첫 글자</Text>
+                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>H2를 누르면 마지막 글자</Text>
+                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>H3을 누르면 전체 단어 초성</Text>
+                            <Text style={[styles.helpDesc, styles.helpDescBottom]}>힌트가 제공됩니다!</Text>
                         </View>
                     </View>
                 </>
             );
         }
 
-        // substep === '1' (단어 선택 단계)
+        // 설명
         if (substep === '1') {
             let titleText = '';
             let descText = '';
 
             if (currentRound === 1) {
-                titleText = '단어 터치하기';
-                descText = `${requiredSelectCount}개의 단어를 터치해서\n학습할 빈칸을 뚫을 수 있어요!`;
+                titleText = '단어 고르기';
+                descText = `${requiredSelectCount}개의 단어를 골라서\n학습할 빈칸을 만들어 보세요`;
             } else if (currentRound === 2) {
-                titleText = '단어 터치하기';
-                descText = `${requiredSelectCount}개의 단어를\n더 추가로 뚫어주세요!`;
+                titleText = '단어 고르기';
+                descText = `${requiredSelectCount}개의 단어를\n추가로 선택해 주세요`;
             } else {
-                titleText = '단어 터치하기';
-                descText = `${requiredSelectCount}개의 단어를\n추가로 뚫어주세요!`;
+                titleText = '단어 고르기';
+                descText = `${requiredSelectCount}개의 단어를\n추가로 선택해 주세요`;
             }
 
             return (
@@ -691,8 +693,8 @@ export default function ScaffoldingScreen({
 
         // substep === '3' (결과 확인)
         const titleText = '결과 확인';
-        const descTop = '단어를 터치하면';
-        const descBottom = '의미를 다시 확인할 수 있어요.';
+        const descTop = '단어를 다시 보고';
+        const descBottom = '의미를 확인해 보세요';
 
         return (
             <View style={styles.helpBox}>
@@ -713,7 +715,7 @@ export default function ScaffoldingScreen({
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
         >
-            {/* 상단(카드 아님) */}
+            {/* 설명 */}
             <View style={styles.header}>
                 <Pressable style={styles.backBtn} onPress={onBack} hitSlop={10}>
                     <Image source={require('../../../assets/shift.png')} style={styles.backIcon} resizeMode="contain" />
@@ -739,13 +741,13 @@ export default function ScaffoldingScreen({
             </View>
 
             <View style={styles.content}>
-                {/* 왼쪽 카드 */}
+                {/* 설명 */}
                 <View style={styles.leftCard}>
                     <HelpChip />
 
                     {(step === '1-1' || step === '2-1' || step === '3-1') && (
                         <View style={styles.buttonGroup}>
-                            {/* 복습 모드가 아닐 때만 재선정 버튼 표시 */}
+                            {/* 설명 */}
                             {!reviewQuizId && (step === '1-1' || step === '2-1' || step === '3-1') && (
                                 <Pressable style={styles.imgBtnWrap} onPress={onReselectWords}>
                                     <Image
@@ -820,7 +822,7 @@ export default function ScaffoldingScreen({
                                 onPress={async () => {
                                     if (onSave) {
                                         try {
-                                            // blankDefs(blank_index) 순서로 답변 정렬
+                                            // blankDefs(blank_index) 순서대로 답변 정렬
                                             const answerList = blankDefs.map((blank) => {
                                                 const instance = keywordInstances.find((ki) => ki.blankId === blank.id);
                                                 return instance ? (answers[instance.instanceId] ?? '') : '';
@@ -832,8 +834,8 @@ export default function ScaffoldingScreen({
                                         }
                                     }
                                     const earnedXp = correctCount * 2;
-                                    setPopupTitle('축하합니다!');
-                                    setPopupMessage(`학습을 완료해서 ${earnedXp}xp를 획득했어요!`);
+                                    setPopupTitle('축하합니다');
+                                    setPopupMessage(`학습을 완료해서 ${earnedXp}xp를 획득했어요`);
                                     setPopupOnConfirm(() => () => {
                                         if (onBackFromCompletion) {
                                             onBackFromCompletion();
@@ -854,7 +856,7 @@ export default function ScaffoldingScreen({
                     )}
                 </View>
 
-                {/* 오른쪽 카드(글만) */}
+                {/* 설명 */}
                 <View style={styles.rightCard}>
                     <ScrollView contentContainerStyle={styles.textContainer}>
                         <View
@@ -878,9 +880,9 @@ export default function ScaffoldingScreen({
                                 const isSelected = selectedBlankSet.has(instanceId); // 사용자가 선택한 빈칸인지
 
                                 if (substep === '1') {
-                                    // 단어 선택 단계: 클릭하면 빈칸으로 토글
+                                    // 설명
                                     if (isSelected) {
-                                        // 선택된 단어 = 빈칸으로 표시 (클릭하면 취소)
+                                        // 설명
                                         return (
                                             <Pressable
                                                 key={idx}
@@ -894,7 +896,7 @@ export default function ScaffoldingScreen({
                                             </Pressable>
                                         );
                                     } else {
-                                        // 선택되지 않은 단어 = 텍스트로 표시 (클릭하면 선택)
+                                        // 설명
                                         return (
                                             <Pressable
                                                 key={idx}
@@ -909,7 +911,7 @@ export default function ScaffoldingScreen({
                                 }
 
                                 if (substep === '2') {
-                                    // 선택된 빈칸만 입력 가능, 나머지는 텍스트로 표시
+                                    // 설명
                                     if (!isSelected) {
                                         return (
                                             <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
@@ -949,8 +951,8 @@ export default function ScaffoldingScreen({
                                     );
                                 }
 
-                                // substep === '3' (결과 확인 단계)
-                                // 선택되지 않은 단어는 텍스트로 표시
+                                // 설명
+                                // 설명
                                 if (!isSelected) {
                                     return (
                                         <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
@@ -1008,24 +1010,24 @@ export default function ScaffoldingScreen({
                 </View>
             </View>
 
-            {/* 뜻 모달 */}
+            {/* 설명 */}
             <Modal visible={!!selectedWord} transparent animationType="fade" onRequestClose={() => setSelectedWord(null)}>
                 <Pressable style={styles.modalOverlay} onPress={() => setSelectedWord(null)}>
                     <Pressable style={styles.modalCard} onPress={() => { }}>
                         <Pressable style={styles.modalClose} onPress={() => setSelectedWord(null)} hitSlop={10}>
-                            <Text style={styles.modalCloseText}>×</Text>
+                            <Text style={styles.modalCloseText}>횞</Text>
                         </Pressable>
 
                         <Text style={styles.modalWord}>{selectedWord?.word ?? ''}</Text>
-                        <Text style={styles.modalLong}>{selectedWord?.meaningLong ?? '추후 AI 의미 API로 교체 예정입니다.'}</Text>
+                        <Text style={styles.modalLong}>{selectedWord?.meaningLong ?? '추후 AI 사전 API로 교체 예정입니다.'}</Text>
                     </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* 힌트 말풍선 - Absolute positioning으로 단어 위에 표시 */}
+            {/* 설명 */}
             {hintWord !== null && (
                 (() => {
-                    const hintInstance = keywordInstances.find(ki => ki.instanceId === hintWord);  // instanceId로 찾음
+                    const hintInstance = keywordInstances.find(ki => ki.instanceId === hintWord);  // instanceId濡?李얠쓬
                     return (
                         <Modal visible={true} transparent onRequestClose={() => {
                             setHintWord(null);
@@ -1040,7 +1042,7 @@ export default function ScaffoldingScreen({
                                     setHintPosition(null);
                                 }}
                             >
-                                {/* 말풍선 박스 */}
+                                {/* 설명 */}
                                 <View
                                     style={[
                                         styles.hintBalloonContainer,
@@ -1073,7 +1075,7 @@ export default function ScaffoldingScreen({
                                                 <Text style={[styles.hintButtonText, hintType === 'chosung' && styles.hintButtonTextActive, hintType !== 'chosung' && styles.hintButtonTextInactive]}>H3</Text>
                                             </Pressable>
                                         </View>
-                                        {/* 말풍선 꼬리 - 아래쪽 */}
+                                        {/* 설명 */}
                                         <View style={styles.hintArrow} />
                                     </View>
                                 </View>
@@ -1082,7 +1084,7 @@ export default function ScaffoldingScreen({
                     );
                 })()
             )}
-            {/* 알림/보상 팝업 */}
+            {/* 설명 */}
             {popupVisible && (
                 <View style={styles.popupOverlay}>
                     <Pressable style={styles.popupBackdrop} onPress={handlePopupConfirm}>
@@ -1110,9 +1112,9 @@ type Token =
 type KeywordTokenWithId = { type: 'keyword'; value: string; occ: number; instanceId: number; baseWord: string };
 
 /**
- * 키워드가 text의 pos 위치에서 시작하는지 확인.
- * OCR이 단어 안에 공백을 넣은 경우("단 어")도 매칭되도록, 텍스트 쪽 공백은 건너뛰고 비교.
- * 반환: 매칭되면 원문 기준 길이(공백 포함), 아니면 0.
+ * keyword가 text의 pos 위치에서 시작하는지 확인.
+ * OCR 단어 중간에 공백이 끼는 경우("연 구")를 매칭하기 위해 텍스트의 공백을 건너뛰며 비교.
+ * 반환: 매칭 시 원문 기준 길이(공백 포함), 아니면 0.
  */
 function matchKeywordAllowingSpaces(
     text: string,
@@ -1370,7 +1372,7 @@ const styles = StyleSheet.create({
 
     hintModalOverlay: { flex: 1, backgroundColor: 'transparent', paddingHorizontal: scale(18) },
 
-    // 알림/보상 팝업 스타일
+    // 설명
     popupOverlay: {
         ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',

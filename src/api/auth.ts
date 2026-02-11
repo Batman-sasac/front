@@ -1,6 +1,6 @@
-import config from '../lib/config';
+﻿import config from '../lib/config';
 
-// API Base URL - 실제 백엔드 서버 주소로 변경 필요
+// API Base URL - 실제 백엔드 서버 주소
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
@@ -29,13 +29,14 @@ export async function loginWithOAuth(
     provider: 'kakao' | 'naver',
     code: string
 ): Promise<LoginResponse> {
-    if (provider === 'naver') {
-        throw new Error('현재 네이버 로그인은 지원되지 않습니다.');
-    }
     const endpoint = `${API_BASE_URL}/auth/${provider}/mobile`;
 
     const formData = new FormData();
     formData.append('code', code);
+    // Naver token exchange expects state that matches authorize request.
+    if (provider === 'naver') {
+        formData.append('state', 'naver_mobile');
+    }
 
     const response = await fetch(endpoint, {
         method: 'POST',
@@ -49,7 +50,6 @@ export async function loginWithOAuth(
 
     return await response.json();
 }
-
 
 export async function setNickname(
     nickname: string,
@@ -115,9 +115,6 @@ export async function verifyToken(token: string): Promise<{
  * OAuth URL 생성
  */
 export function getOAuthUrl(provider: 'kakao' | 'naver'): string {
-    if (provider === 'naver') {
-        throw new Error('현재 네이버 로그인은 지원되지 않습니다.');
-    }
     // 카카오/네이버 API 키
     const KAKAO_REST_API_KEY = '5202f1b3b542b79fdf499d766362bef6';
     const NAVER_CLIENT_ID = 'DRk2JpSbhKJO6ImkKIE9';
@@ -127,7 +124,7 @@ export function getOAuthUrl(provider: 'kakao' | 'naver'): string {
     if (provider === 'kakao') {
         return `https://kauth.kakao.com/oauth/authorize?client_id=${KAKAO_REST_API_KEY}&redirect_uri=${REDIRECT_URI}&response_type=code`;
     } else {
-        return `https://nid.naver.com/oauth2.0/authorize?client_id=${NAVER_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code`;
+        return `https://nid.naver.com/oauth2.0/authorize?client_id=${NAVER_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code&state=naver_mobile`;
     }
 }
 
@@ -183,7 +180,7 @@ export async function getUserInfo(token: string): Promise<{
 }
 
 /**
- * 소셜 계정 연동
+ * 외부 계정 연동
  */
 export async function connectAccount(
     token: string,
@@ -194,11 +191,8 @@ export async function connectAccount(
     message: string;
     connected_email: string;
 }> {
-    if (provider === 'naver') {
-        throw new Error('현재 네이버 계정 연동은 지원되지 않습니다.');
-    }
     void token;
-    // 백엔드에는 connect-account가 없어서 OAuth 로그인 엔드포인트를 그대로 사용
+    // 백엔드에 connect-account가 없어 OAuth 로그인 엔드포인트를 그대로 사용
     const result = await loginWithOAuth(provider, code);
 
     if (result.status !== 'success') {
@@ -213,7 +207,7 @@ export async function connectAccount(
 }
 
 /**
- * 소셜 계정 연동 해제
+ * 외부 계정 연동 해제
  */
 export async function disconnectAccount(
     token: string,
@@ -247,7 +241,7 @@ export async function logout(): Promise<{
 }> {
     return {
         status: 'success',
-        message: '로그아웃은 클라이언트에서 처리됩니다.',
+        message: '로그아웃은 클라이언트에서 처리합니다.',
     };
 }
 
