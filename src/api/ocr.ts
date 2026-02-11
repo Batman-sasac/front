@@ -91,8 +91,6 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
         throw new Error(data.message || '이용 가능한 무료 횟수를 모두 사용했습니다.');
     }
 
-        throw new Error(data.message || '이용 가능한 무료 횟수를 모두 사용했습니다.');
-
     const inner = data.data ?? data;
 
     let originalText: string;
@@ -196,6 +194,7 @@ export async function saveTest(payload: SaveTestRequest) {
 
 export type GradeStudyRequest = {
     quiz_id: number;
+    correct_answers: string[];
     answer: string[];
     user_answer: string[];
     quiz_html: string;
