@@ -727,6 +727,7 @@ export default function App() {
 
             await gradeStudy({
               quiz_id: 0,
+              correct_answers: keywords,
               answer: keywords,
               user_answer: userAnswers,
               quiz_html: scaffoldingPayload.extractedText,
