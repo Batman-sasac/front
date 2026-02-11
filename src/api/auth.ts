@@ -1,7 +1,6 @@
 import config from '../lib/config';
 
-// API Base URL - 실제 백엔드 서버 주소로 변경 필요
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
+const API_BASE_URL = config.apiBaseUrl;
 
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
 
@@ -43,8 +42,9 @@ export async function loginWithOAuth(
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '로그인 실패');
+        const error = await response.json().catch(() => ({}));
+        const msg = error.detail ? `${error.error || '로그인 실패'}: ${error.detail}` : (error.error || '로그인 실패');
+        throw new Error(msg);
     }
 
     return await response.json();
@@ -111,24 +111,43 @@ export async function verifyToken(token: string): Promise<{
     };
 }
 
+/** /config API 응답 타입 */
+export interface OAuthConfig {
+    kakao_rest_api_key?: string;
+    kakao_redirect_uri?: string;
+    naver_client_id?: string;
+    naver_redirect_uri?: string;
+}
+
+/** 백엔드 /config에서 OAuth 설정 로드 */
+export async function fetchOAuthConfig(): Promise<OAuthConfig> {
+    const res = await fetch(`${API_BASE_URL}/config`);
+    if (!res.ok) throw new Error('OAuth 설정을 불러올 수 없습니다.');
+    return res.json();
+}
+
 /**
- * OAuth URL 생성
+ * OAuth URL 생성 (.env 또는 /config API 활용)
  */
-export function getOAuthUrl(provider: 'kakao' | 'naver'): string {
+export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
     if (provider === 'naver') {
         throw new Error('현재 네이버 로그인은 지원되지 않습니다.');
     }
-    // 카카오/네이버 API 키
-    const KAKAO_REST_API_KEY = '5202f1b3b542b79fdf499d766362bef6';
-    const NAVER_CLIENT_ID = 'DRk2JpSbhKJO6ImkKIE9';
 
-    const REDIRECT_URI = `${API_BASE_URL}/auth/${provider}/mobile`;
+    let kakaoRestApiKey = config.kakaoRestApiKey;
+    let redirectUri = config.kakaoRedirectUri || `${config.apiBaseUrl}/auth/kakao/mobile`;
 
-    if (provider === 'kakao') {
-        return `https://kauth.kakao.com/oauth/authorize?client_id=${KAKAO_REST_API_KEY}&redirect_uri=${REDIRECT_URI}&response_type=code`;
-    } else {
-        return `https://nid.naver.com/oauth2.0/authorize?client_id=${NAVER_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code`;
+    if (!kakaoRestApiKey) {
+        const serverConfig = await fetchOAuthConfig();
+        kakaoRestApiKey = serverConfig.kakao_rest_api_key || '';
+        redirectUri = serverConfig.kakao_redirect_uri || redirectUri;
     }
+
+    if (!kakaoRestApiKey) {
+        throw new Error('KAKAO_REST_API_KEY를 .env 또는 백엔드 설정에 추가해주세요.');
+    }
+
+    return `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(kakaoRestApiKey)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code`;
 }
 
 /**
