@@ -41,14 +41,13 @@ const initialAlarms: AlarmSection[] = [];
 const BG = '#F6F7FB';
 
 export default function AlarmScreen({ onNavigate }: Props) {
-    // ?섏쨷?먮뒗 諛깆뿏?쒖뿉??諛쏆븘?ㅻ㈃ ?? 吏湲덉? ?붾?濡??곹깭留??곌껐.
     const [sections] = useState<AlarmSection[]>(initialAlarms);
 
     return (
         <View style={styles.root}>
-            {/* ?곷떒諛?*/}
+            {/* 헤더 */}
             <View style={styles.header}>
-                {/* ?쇱そ: < 踰꾪듉 (?덉쑝濡? */}
+                {/* 뒤로가기: < 기호 버튼 */}
                 <Pressable
                     style={styles.backButton}
                     onPress={() => onNavigate('home')}
@@ -56,13 +55,13 @@ export default function AlarmScreen({ onNavigate }: Props) {
                     <Text style={styles.backIcon}>{'<'}</Text>
                 </Pressable>
 
-                {/* 媛?대뜲: ??댄? */}
+                {/* 제목: 알림함 */}
                 <Text style={styles.headerTitle}>알림함</Text>
 
-                {/* ?ㅻⅨ履? ?뚮┝ ?ㅼ젙 踰꾪듉 */}
+                {/* 알림함 설정 버튼 */}
                 <Pressable
                     style={styles.settingButton}
-                    onPress={() => onNavigate('alarmSetting')}  // ???ш린留??섏젙
+                    onPress={() => onNavigate('alarmSetting')}  // 알림함 설정 화면으로 이동
                 >
                     <Image
                         source={require('../../../assets/alarm/alarm-setting.png')}
@@ -73,27 +72,27 @@ export default function AlarmScreen({ onNavigate }: Props) {
 
             </View>
 
-            {/* ?뚮┝ 由ъ뒪??*/}
+            {/* 알림 리스트 */}
             <ScrollView
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
             >
                 {sections.map((section) => (
                     <View key={section.dateLabel} style={styles.section}>
-                        {/* ?좎쭨 ?쇰꺼 */}
+                        {/* 날짜 표시 */}
                         <Text style={styles.sectionDate}>{section.dateLabel}</Text>
 
-                        {/* 移대뱶??*/}
+                        {/* 알림 카드 */}
                         {section.items.map((alarm) => (
                             <Pressable
                                 key={alarm.id}
                                 style={[
                                     styles.card,
-                                    alarm.read && styles.cardRead, // ?쎌? ?뚮┝? ?먮━寃?
+                                    alarm.read && styles.cardRead, // 읽은 알림은 배경색 변경
                                 ]}
                                 onPress={() => {
-                                    // TODO: ?뚮┝ ?뚮??????대룞/?곸꽭 泥섎━
-                                    console.log('?뚮┝ ?대┃:', alarm.id);
+                                    // TODO: 알림 클릭 시 동작/화면 전환
+                                    console.log('알림 클릭:', alarm.id);
                                 }}
                             >
                                 <View style={styles.cardLeft}>
@@ -140,7 +139,7 @@ const styles = StyleSheet.create({
         backgroundColor: BG,
     },
 
-    /* ?곷떒諛?*/
+    /* 상단바 */
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -172,7 +171,7 @@ const styles = StyleSheet.create({
         height: scale(24),
     },
 
-    /* 由ъ뒪??*/
+    /* 스크롤 영역 */
     scroll: {
         flex: 1,
     },

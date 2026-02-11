@@ -37,6 +37,9 @@ type Props = {
     onMonthlyGoalChange?: (goal: number) => void;
     onNicknameChange?: (nickname: string) => void;
     onWithdraw?: () => void;
+    onLogout?: () => void;
+    isSubscribed?: boolean;
+    onPlanManage?: () => void;
 };
 
 const BG = '#F6F7FB';
@@ -61,6 +64,9 @@ export default function MyPageScreen({
     onMonthlyGoalChange,
     onNicknameChange,
     onWithdraw,
+    onLogout,
+    isSubscribed = false,
+    onPlanManage,
 }: Props) {
     const characterSource = getCharacterSourceByType(typeLabel);
 
@@ -105,7 +111,7 @@ export default function MyPageScreen({
 
             const [stats, monthlyStats] = await Promise.all([getUserStats(token), getMonthlyStats()]);
 
-            const monthlyGoalValue = monthlyStats?.compare?.target_count ?? stats.data.monthly_goal;
+            const monthlyGoalValue = stats.data.monthly_goal ?? monthlyStats?.compare?.target_count;
             const fallbackGoal = typeof monthlyGoal === 'number' ? monthlyGoal : null;
             const resolvedGoal = monthlyGoalValue && monthlyGoalValue > 0 ? monthlyGoalValue : fallbackGoal ?? monthlyGoalValue;
 
@@ -244,7 +250,12 @@ export default function MyPageScreen({
             <Sidebar
                 activeScreen="mypage"
                 onNavigate={onNavigate}
-                onLogout={() => confirmLogout(() => onNavigate('home'))}
+                onLogout={() =>
+                    confirmLogout(() => {
+                        if (onLogout) onLogout();
+                        else onNavigate('home');
+                    })
+                }
             />
 
             <ScrollView style={styles.main} contentContainerStyle={styles.mainContent}>
@@ -312,6 +323,18 @@ export default function MyPageScreen({
                                     <Text style={styles.statTitle}>월간 목표</Text>
                                 </View>
                                 <Text style={styles.statValue}>{monthlyGoalState || 0}회</Text>
+                            </Pressable>
+
+                            <Pressable style={styles.statItem} onPress={onPlanManage}>
+                                <View style={styles.statIconRow}>
+                                    <Image
+                                        source={require('../../../assets/mypage/subscription-plan.png')}
+                                        style={styles.statIcon}
+                                        resizeMode="contain"
+                                    />
+                                    <Text style={styles.statTitle}>플랜 관리</Text>
+                                </View>
+                                <Text style={styles.statValue}>{isSubscribed ? '구독중' : '무료플랜'}</Text>
                             </Pressable>
                         </View>
                     </View>

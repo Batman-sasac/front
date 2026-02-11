@@ -5,6 +5,7 @@ import Sidebar from '../../components/Sidebar';
 import config from '../../lib/config';
 import { getToken } from '../../lib/storage';
 import type { Screen } from '../../components/Sidebar';
+import { confirmLogout } from '../../lib/auth';
 
 const API_BASE_URL = config.apiBaseUrl;
 
@@ -29,6 +30,7 @@ type Props = {
     onBack: () => void;
     onCardPress?: (card: Card) => void;
     onNavigate: (screen: Screen) => void;
+    onLogout?: () => void;
 };
 
 
@@ -43,7 +45,7 @@ const SUBJECTS: Subject[] = [
     { id: 'law', icon: '⚖️', name: '법', emoji: '⚖️' },
 ];
 
-export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props) {
+export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogout }: Props) {
     const [selectedSubject, setSelectedSubject] = React.useState('all');
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
@@ -175,6 +177,12 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate }: Props
                     }
                     onNavigate(screen);
                 }}
+                onLogout={() =>
+                    confirmLogout(() => {
+                        if (onLogout) onLogout();
+                        else onBack();
+                    })
+                }
             />
 
             {/* 메인 콘텐츠 */}

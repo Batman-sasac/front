@@ -281,22 +281,46 @@ export async function getUserStats(token: string): Promise<{
         total_learning_count: number;
         consecutive_days: number;
         monthly_goal: number | null;
+        total_points: number;
+        is_subscribed: boolean;
     };
 }> {
-    const endpoint = `${API_BASE_URL}/auth/user/stats`;
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+    };
 
-    const response = await fetch(endpoint, {
+    const parseResponse = (json: any) => {
+        const raw = json?.data ?? json ?? {};
+        return {
+            status: json?.status ?? 'success',
+            data: {
+                total_learning_count: Number(raw.total_learning_count ?? raw.total_count ?? 0),
+                consecutive_days: Number(raw.consecutive_days ?? raw.continuous_days ?? 0),
+                monthly_goal: raw.monthly_goal ?? raw.target_count ?? null,
+                total_points: Number(raw.total_points ?? raw.exp ?? 0),
+                is_subscribed: Boolean(
+                    raw.is_subscribed ??
+                    raw.subscribed ??
+                    raw.is_premium ??
+                    raw.premium ??
+                    raw.plan_active ??
+                    (typeof raw.plan_status === 'string' && raw.plan_status.toLowerCase() === 'subscribed')
+                ),
+            },
+        };
+    };
+
+    const endpoint = `${API_BASE_URL}/auth/user/stats`;
+    const res = await fetch(endpoint, {
         method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
+        headers,
     });
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '사용자 통계 조회 실패');
+    if (!res.ok) {
+        throw new Error(`사용자 상태 조회 실패 (${res.status})`);
     }
 
-    return await response.json();
+    const json = await res.json();
+    return parseResponse(json);
 }
