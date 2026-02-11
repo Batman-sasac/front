@@ -609,9 +609,6 @@ export default function ScaffoldingScreen({
             const ins = keywordInstances.find(ki => ki.instanceId === instanceId);
             if (!ins) return;
 
-            // 설명
-            if (next[ins.blankId] === 'correct') return;
-
             const user = (answers[ins.instanceId] ?? '').trim();
             const isCorrect = normalize(user) === normalize(ins.word);
 
@@ -930,7 +927,7 @@ export default function ScaffoldingScreen({
                                                 onPress={() => onPressBlank(instanceId)}
                                                 onLongPress={() => onLongPressBlank(instanceId)}
                                                 delayLongPress={450}
-                                                style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
+                                                style={[styles.wordPill, styles.blankBoxBase, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
                                                 onLayout={recordTokenLayout(idx)}
                                             >
                                                 <View style={{ position: 'relative' }}>
@@ -1335,7 +1332,8 @@ const styles = StyleSheet.create({
     wordText: { fontSize: fontScale(13), lineHeight: fontScale(20), fontWeight: '600', color: '#111827' },
 
     blankBox: { paddingHorizontal: 0, paddingVertical: 0, borderRadius: scale(4), marginVertical: 0, justifyContent: 'center' },
-    blankBoxActive: { borderWidth: 2, borderColor: '#5E82FF' },
+    blankBoxBase: { borderWidth: 2, borderColor: 'transparent' },
+    blankBoxActive: { borderColor: '#5E82FF' },
     blankInput: {
         padding: 0,
         margin: 0,
