@@ -83,7 +83,6 @@ export default function ScaffoldingScreen({
 
     // 설명
     // 설명
-    const [selectedWord, setSelectedWord] = useState<BlankItem | null>(null);
     const [activeBlankId, setActiveBlankId] = useState<number | null>(null);
     const [answers, setAnswers] = useState<Record<number, string>>({}); // instanceId 기반
     const [graded, setGraded] = useState<Record<number, GradeState>>({}); // blankId 기반
@@ -361,7 +360,6 @@ export default function ScaffoldingScreen({
             return;
         }
 
-        setSelectedWord(null);
         if (step === '1-1') setStep('1-2');
         else if (step === '2-1') setStep('2-2');
         else if (step === '3-1') setStep('3-2');
@@ -436,7 +434,9 @@ export default function ScaffoldingScreen({
         setPendingSelection({ includeWord: trimmed, excludeWords });
     };
 
-    const dragEnabled = step.endsWith('-1') && !reviewQuizId;
+    // TODO: 드래그로 빈칸 생성 기능은 임시 비활성화
+    // const dragEnabled = step.endsWith('-1') && !reviewQuizId;
+    const dragEnabled = false;
     const dragResponder = useMemo(() => {
         if (!dragEnabled) return null;
         return PanResponder.create({
@@ -871,7 +871,6 @@ export default function ScaffoldingScreen({
                                 if (t.type === 'space') return <Text key={idx} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
                                 if (t.type === 'text') return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
 
-                                const base = baseInfoByWord.get(t.baseWord) ?? null;
                                 const instanceId = t.instanceId;
                                 const instanceInfo = keywordInstances.find(ki => ki.instanceId === instanceId);
                                 const grade = instanceInfo ? (graded[instanceInfo.blankId] ?? 'idle') : 'idle';
@@ -964,14 +963,13 @@ export default function ScaffoldingScreen({
                                     grade === 'correct' ? CORRECT_BG : grade === 'wrong' ? WRONG_BG : HIGHLIGHT_BG;
 
                                 return (
-                                    <Pressable
+                                    <View
                                         key={idx}
-                                        onPress={() => base && setSelectedWord(base)}
                                         style={[styles.wordPill, { backgroundColor: bg }]}
                                         onLayout={recordTokenLayout(idx)}
                                     >
                                         <Text style={styles.wordText}>{t.value}</Text>
-                                    </Pressable>
+                                    </View>
                                 );
                             })}
                         </View>
@@ -1009,20 +1007,6 @@ export default function ScaffoldingScreen({
                     )}
                 </View>
             </View>
-
-            {/* 설명 */}
-            <Modal visible={!!selectedWord} transparent animationType="fade" onRequestClose={() => setSelectedWord(null)}>
-                <Pressable style={styles.modalOverlay} onPress={() => setSelectedWord(null)}>
-                    <Pressable style={styles.modalCard} onPress={() => { }}>
-                        <Pressable style={styles.modalClose} onPress={() => setSelectedWord(null)} hitSlop={10}>
-                            <Text style={styles.modalCloseText}>횞</Text>
-                        </Pressable>
-
-                        <Text style={styles.modalWord}>{selectedWord?.word ?? ''}</Text>
-                        <Text style={styles.modalLong}>{selectedWord?.meaningLong ?? '추후 AI 사전 API로 교체 예정입니다.'}</Text>
-                    </Pressable>
-                </Pressable>
-            </Modal>
 
             {/* 설명 */}
             {hintWord !== null && (

@@ -20,6 +20,7 @@ import SelectPicture from './src/screens/input_data/SelectPicture';
 import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
+import ErrorScreen from './src/screens/error/error';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
 import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats } from './src/api/ocr';
 import { updateFcmToken } from './src/api/notification';
@@ -45,7 +46,8 @@ type Step =
   | 'selectPicture'
   | 'talkingStudy'
   | 'scaffolding'
-  | 'brushup';
+  | 'brushup'
+  | 'error';
 
 export default function App() {
   const [step, setStep] = useState<Step>('splash');
@@ -754,6 +756,22 @@ export default function App() {
             setIsReviewMode(true);
             setReviewQuizId(card.quiz_id || null);
             setStep('scaffolding');
+          }}
+        />
+      )}
+
+      {step === 'error' && (
+        <ErrorScreen
+          onGoHome={() => setStep('home')}
+          onRetry={() => {
+            if (Platform.OS === 'web' && typeof window !== 'undefined') {
+              window.location.reload();
+              return;
+            }
+            setStep('home');
+          }}
+          onSubmitReport={(message) => {
+            console.log('[오류 제보]', message);
           }}
         />
       )}
