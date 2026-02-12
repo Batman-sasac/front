@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { View, ImageSourcePropType, Alert, Platform, Modal, Pressable, Image, Text, StyleSheet } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Splash from './src/components/Splash';
 import LoginScreen from './src/screens/auth/LoginScreen';
@@ -23,7 +24,7 @@ import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
 import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse } from './src/api/ocr';
-import { registerAndSyncPushToken } from './src/api/notification';
+import { updateFcmToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
@@ -251,16 +252,36 @@ export default function App() {
   // 로그인 후 홈에 들어오면: FCM 토큰 생성(Expo) → 백엔드에 전달 (푸시 수신용)
   useEffect(() => {
     if (step !== 'home' || pushTokenSynced) return;
-    (async () => {
+
+    const registerAndSyncPushToken = async () => {
+      if (Platform.OS === 'web') return;
+
       const authToken = await getToken();
       if (!authToken) return;
-      try {
-        const ok = await registerAndSyncPushToken(authToken);
-        if (ok) setPushTokenSynced(true);
-      } catch (err) {
-        console.error('푸시 토큰 등록 실패:', err);
+
+      const permission = await Notifications.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        console.log('알림 권한이 거부되었습니다.');
+        return;
       }
-    })();
+
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.DEFAULT,
+        });
+      }
+
+      const deviceToken = await Notifications.getDevicePushTokenAsync();
+      if (!deviceToken?.data) return;
+
+      await updateFcmToken(authToken, deviceToken.data);
+      setPushTokenSynced(true);
+    };
+
+    registerAndSyncPushToken().catch((error) => {
+      console.error('푸시 토큰 등록 실패:', error);
+    });
   }, [step, pushTokenSynced]);
 
   const checkAutoLogin = async () => {
