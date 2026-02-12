@@ -58,14 +58,14 @@ export default function App() {
   const [userEmail, setUserEmail] = useState('');
   const [userSocialId, setUserSocialId] = useState('');
   const [typeResult, setTypeResult] = useState<ResultStats | null>(null);
-  const [typeLabel, setTypeLabel] = useState(''); // 홈 화면용
+  const [typeLabel, setTypeLabel] = useState(''); // 학습 유형 라벨
   const [level, setLevel] = useState(1);
   const [exp, setExp] = useState(0);
   const [monthlyGoal, setMonthlyGoal] = useState<number | null>(null);
   const [streak, setStreak] = useState(0);                 // 연속 학습 일수
   const [lastAttendanceDate, setLastAttendanceDate] = useState<string | null>(null);
   const [isReviewMode, setIsReviewMode] = useState(false); // 복습 모드 여부
-  const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습용 quiz ID
+  const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습 퀴즈 ID
   const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
   const [subjectName, setSubjectName] = useState('');
   const [cropInfo, setCropInfo] = useState<{ px: number; py: number; pw: number; ph: number } | null>(null);
@@ -88,8 +88,8 @@ export default function App() {
   );
 
   const getWeekdayIndex = (date: Date) => {
-    const jsDay = date.getDay(); // 0(??~6(??
-    return (jsDay + 6) % 7;      // ??, ??, ... ??
+    const jsDay = date.getDay(); // 0(일)~6(토)
+    return (jsDay + 6) % 7;      // 월, 화, ... 일
   };
   const [progressLoaded, setProgressLoaded] = useState(false);
 
@@ -99,6 +99,7 @@ export default function App() {
   const STREAK_KEY = '@bat_streak';
   const WEEK_ATTENDANCE_KEY = '@bat_week_attendance';
   const MONTHLY_GOAL_KEY = '@bat_monthly_goal';
+  const TYPE_LABEL_KEY = '@bat_type_label';
 
   const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
   const getLevelForExp = (value: number) => {
@@ -170,13 +171,14 @@ export default function App() {
   useEffect(() => {
     const loadProgress = async () => {
       try {
-        const [expRaw, levelRaw, lastAttendRaw, streakRaw, weekRaw, monthlyGoalRaw] = await AsyncStorage.multiGet([
+        const [expRaw, levelRaw, lastAttendRaw, streakRaw, weekRaw, monthlyGoalRaw, typeLabelRaw] = await AsyncStorage.multiGet([
           EXP_KEY,
           LEVEL_KEY,
           LAST_ATTENDANCE_KEY,
           STREAK_KEY,
           WEEK_ATTENDANCE_KEY,
           MONTHLY_GOAL_KEY,
+          TYPE_LABEL_KEY,
         ]);
 
         const expValue = expRaw[1] ? Number(expRaw[1]) : 0;
@@ -190,6 +192,7 @@ export default function App() {
         setLastAttendanceDate(lastAttendRaw[1]);
         setStreak(Number.isFinite(streakValue) ? streakValue : 0);
         setWeekAttendance(Array.isArray(weekValue) ? weekValue : [false, false, false, false, false, false, false]);
+        setTypeLabel(typeLabelRaw[1] ?? '');
         if (monthlyGoalValue && Number.isFinite(monthlyGoalValue)) {
           setMonthlyGoal(monthlyGoalValue);
         }
@@ -214,10 +217,11 @@ export default function App() {
       [STREAK_KEY, String(streak)],
       [WEEK_ATTENDANCE_KEY, JSON.stringify(weekAttendance)],
       [MONTHLY_GOAL_KEY, monthlyGoal != null ? String(monthlyGoal) : ''],
+      [TYPE_LABEL_KEY, typeLabel],
     ]).catch((error) => {
       console.error('출석/XP 저장 실패:', error);
     });
-  }, [exp, level, lastAttendanceDate, streak, weekAttendance, monthlyGoal]);
+  }, [exp, level, lastAttendanceDate, streak, weekAttendance, monthlyGoal, typeLabel]);
 
   useEffect(() => {
     setLevel(getLevelForExp(exp));
@@ -245,6 +249,7 @@ export default function App() {
     checkAutoLogin();
   }, []);
 
+  // 로그인 후 홈에 들어오면: FCM 토큰 생성(Expo) → 백엔드에 전달 (푸시 수신용)
   useEffect(() => {
     if (step !== 'home' || pushTokenSynced) return;
 
@@ -297,15 +302,18 @@ export default function App() {
             }
             setIsSubscribed(!!userState.data.is_subscribed);
           } catch (e) {
-            console.error('유저 상태 동기화 실패:', e);
+            console.error('유저 상태 조회 실패:', e);
           }
           await refreshOcrUsage();
-          // splash 종료 후 바로 홈으로
-          setTimeout(() => setStep('home'), 2000);
+          const storedTypeLabel = (await AsyncStorage.getItem(TYPE_LABEL_KEY))?.trim() ?? '';
+          if (storedTypeLabel) {
+            setTypeLabel(storedTypeLabel);
+          }
+          setTimeout(() => setStep(storedTypeLabel ? 'home' : 'typeIntro'), 2000);
           return;
         }
       }
-      // 토큰 없으면 로그인 화면으로
+      // 토큰이 없으면 로그인 화면으로
       setTimeout(() => setStep('login'), 2000);
     } catch (error) {
       console.error('자동 로그인 확인 오류:', error);
@@ -317,6 +325,7 @@ export default function App() {
     try {
       console.log('로그아웃 시작...');
       await clearAuthData();
+      await AsyncStorage.removeItem(TYPE_LABEL_KEY);
       console.log('로그아웃 완료');
       // 상태 초기화
       setUserEmail('');
@@ -396,7 +405,7 @@ export default function App() {
       .catch((e: any) => {
         if (!cancelled) {
           setScaffoldingPayload(null);
-          setScaffoldingError(e?.message ?? '복습 데이터를 불러오지 못했습니다.');
+          setScaffoldingError(e?.message ?? '복습 퀴즈 데이터를 불러오지 못했습니다.');
         }
       })
       .finally(() => {
@@ -422,12 +431,14 @@ export default function App() {
         setIsSubscribed(!!userState.data.is_subscribed);
       }
     } catch (e) {
-      console.error('유저 상태 동기화 실패:', e);
+      console.error('유저 상태 조회 실패:', e);
     }
     await refreshOcrUsage();
-
-    // 바로 홈 화면으로 이동
-    setStep('home');
+    const storedTypeLabel = (await AsyncStorage.getItem(TYPE_LABEL_KEY))?.trim() ?? '';
+    if (storedTypeLabel) {
+      setTypeLabel(storedTypeLabel);
+    }
+    setStep(storedTypeLabel ? 'home' : 'typeIntro');
   };
 
   // 닉네임 설정 필요 핸들러
@@ -441,7 +452,7 @@ export default function App() {
   const handleNicknameSet = (email: string, userNickname: string) => {
     setUserEmail(email);
     setNickname(userNickname);
-    setStep('goal');  // 신규 유저는 목표 설정으로
+    setStep('typeIntro');
   };
 
   const getTodayKey = () => new Date().toISOString().slice(0, 10);
@@ -512,8 +523,8 @@ export default function App() {
 
   const [currentLeagueTier] = useState<LeagueTier>('iron');  // 우선 아이언으로 시작
   const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
-  const [leagueRemainingText] = useState<string>('남은 시간: 3일 19시간 30분'); // 예시 텍스트
-  // 촬영 결과 임시 저장
+  const [leagueRemainingText] = useState<string>('남은 시간: 3일 19시간 30분'); // 임시 텍스트
+  // 촬영 결과 임시 소스 목록
   const [capturedSources, setCapturedSources] = useState<ImageSourcePropType[]>([]);
 
   const [scaffoldingPayload, setScaffoldingPayload] = useState<ScaffoldingPayload | null>(null);
@@ -525,7 +536,7 @@ export default function App() {
   const [monthlyStats, setMonthlyStats] = useState<any>(undefined);
 
   function buildBlankWordsFromText(text: string, limit = 8) {
-    // 1) 공백/문장부호 기준 분리
+    // 1) 공백/문장부호 기준으로 분리
     const raw = text
       .replace(/[0-9]/g, ' ')
       .replace(/[.,!?()\[\]{}"'`~]/g, ' ')
@@ -574,7 +585,7 @@ export default function App() {
               setMonthlyGoal(goal);
               setStep('typeIntro');
             } catch (error: any) {
-              Alert.alert('목표 저장 실패', error?.message ?? '목표 저장에 실패했습니다.');
+              Alert.alert('목표 설정 실패', error?.message ?? '목표 설정에 실패했습니다.');
             }
           }}
         />
@@ -589,11 +600,12 @@ export default function App() {
 
       {step === 'typeTest' && (
         <TypeTestScreen
-          onFinish={(result) => {
+          onFinish={async (result) => {
             setTypeResult(result);
             // typeKey로 프로필을 찾아 title 사용
             const profile = typeProfiles[result.typeKey];
             setTypeLabel(profile.title);
+            await AsyncStorage.setItem(TYPE_LABEL_KEY, profile.title);
             setStep('result');
           }}
         />
@@ -661,7 +673,7 @@ export default function App() {
               await setStudyGoal(goal);
               setMonthlyGoal(goal);
             } catch (error: any) {
-              Alert.alert('목표 저장 실패', error?.message ?? '목표 저장에 실패했습니다.');
+              Alert.alert('목표 설정 실패', error?.message ?? '목표 설정에 실패했습니다.');
             }
           }}
           onNicknameChange={(newNickname) => setNickname(newNickname)}
@@ -686,6 +698,7 @@ export default function App() {
             setCropInfo(null);
             setIsReviewMode(false);
             setReviewQuizId(null);
+            void AsyncStorage.removeItem(TYPE_LABEL_KEY);
 
             // 로그인 화면으로 이동
             setStep('login');
@@ -715,7 +728,7 @@ export default function App() {
             if (subject) setSubjectName(subject);
             if (cropInfo) setCropInfo(cropInfo);
 
-            // 1) OCR 요청 (필요한 경우만)
+            // 1) OCR 요청 (필요 시 crop 정보 포함)
             const first = finalSources[0] as any;
             const uri = first?.uri as string | undefined;
 
@@ -733,7 +746,7 @@ export default function App() {
               const payload = await runOcr(uri, cropInfo);
               console.log('OCR 성공, payload:', payload);
               setScaffoldingPayload(payload);
-              // 말하기 학습 스킵하고 바로 scaffolding으로
+              // 말하기 학습을 스킵하고 바로 scaffolding으로
               setStep('scaffolding');
             } catch (e: any) {
               const message = e?.message ?? 'OCR 추출에 실패했습니다.';
@@ -766,7 +779,7 @@ export default function App() {
       {step === 'scaffolding' && (
         <ScaffoldingScreen
           onBack={() => {
-            // 복습 모드에서는 복습 화면으로
+            // 복습 모드에서 복습 화면으로
             if (isReviewMode) {
               setIsReviewMode(false);
               setReviewQuizId(null);
@@ -791,7 +804,7 @@ export default function App() {
           loading={scaffoldingLoading}
           error={scaffoldingError}
           initialRound={isReviewMode ? '3-1' : '1-1'} // 복습 모드면 3라운드로 시작
-          reviewQuizId={reviewQuizId} // 복습용 quiz ID 전달
+          reviewQuizId={reviewQuizId} // 복습 퀴즈 ID 전달
           subjectName={subjectName} // 과목명 전달
           onRetry={async () => {
             const first = capturedSources[0] as any;
@@ -858,7 +871,7 @@ export default function App() {
       {step === 'brushup' && (
         <BrushUPScreen
           onBack={() => setStep('home')}
-          // 타입 보정
+          // 복습 보정
           onNavigate={handleSidebarNavigate}
           onLogout={handleLogout}
           onCardPress={(card) => {
@@ -877,7 +890,7 @@ export default function App() {
           onSubscribe={() => {
             setStep('mypage');
             setTimeout(() => {
-              Alert.alert('안내', '추후 업데이트 될 내용입니다');
+              Alert.alert('안내', '추후 업데이트 후 제공됩니다');
             }, 0);
           }}
           onCancelSubscribe={() => {
@@ -916,7 +929,7 @@ export default function App() {
             <View style={stylesSub.modalBody}>
               <Image source={require('./assets/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
               <Text style={stylesSub.modalDesc}>무료 AI 호출 사용량을 모두 사용했어요.</Text>
-              <Text style={stylesSub.modalDesc}>더 깊이 학습하고 싶으시다면</Text>
+              <Text style={stylesSub.modalDesc}>계속 학습하고 싶으시다면</Text>
               <Text style={stylesSub.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>
             </View>
 
@@ -1011,3 +1024,4 @@ const stylesSub = StyleSheet.create({
     height: 58,
   },
 });
+

@@ -283,9 +283,9 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                                     {/* 설명 */}
                                     <Text style={styles.cardDesc} numberOfLines={2}>{card.description}</Text>
 
-                                    {/* 정답률 + 기간 */}
+                                    {/* 기간 */}
                                     <View style={styles.cardFooter}>
-                                        <Text style={styles.cardProgress}>정답률 {card.progress}%</Text>
+                                        <Text ></Text>
                                         <Text style={styles.cardDays}>{card.daysAgo}일 전</Text>
                                     </View>
                                 </Pressable>
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
         borderTopColor: '#F3F4F6',
     },
     cardProgress: {
-        fontSize: fontScale(11),
+        fontSize: fontScale(20),
         fontWeight: '700',
         color: '#5E82FF',
     },
@@ -622,7 +622,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#9CA3AF',
     },
-    // ??젣 紐⑤떖 ?ㅽ???
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -678,7 +677,6 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#FFFFFF',
     },
-    // 寃??紐⑤떖 ?ㅽ???
     searchModalContainer: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
