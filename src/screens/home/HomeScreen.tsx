@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   View,
   Text,
@@ -541,8 +541,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  smallTitle: { fontSize: 25, fontWeight: '500', marginBottom: 4 },
-  smallBody: { fontSize: 12, color: '#4B5563' },
+  smallTitle: { fontSize: fontScale(17), fontWeight: '500', marginBottom: 4 },
+  smallBody: { fontSize: fontScale(12), color: '#4B5563' },
 
   /* 레벨/경험치 */
   levelText: {
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
     marginBottom: scale(8),
   },
   levelLabel: { color: '#000000' },
-  levelValue: { fontSize: 20, color: '#000000', fontWeight: '800' },
+  levelValue: { fontSize: fontScale(20), color: '#000000', fontWeight: '800' },
 
   progressWrapper: {
     marginBottom: 16,
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: -18,
-    fontSize: 12,
+    fontSize: fontScale(12),
     fontWeight: '600',
     color: '#6B7280',
   },
@@ -790,9 +790,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   lineGraphContainer: {
-    minHeight: scale(120),
-    marginTop: scale(8),
-    marginBottom: scale(4),
+    minHeight: scale(180),
+    marginTop: scale(2),
+    marginBottom: scale(-45),
     justifyContent: 'flex-start',
     alignItems: 'center',
   },
