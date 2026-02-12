@@ -6,10 +6,10 @@ import {
   Image,
   ScrollView,
   Pressable,
-  Alert,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
+import { confirmLogout } from '../../lib/auth';
 import Svg, { Polyline, Circle, Defs, LinearGradient, Stop, G, Text as SvgText } from 'react-native-svg';
 
 // 학습 유형 텍스트에 따라 캐릭터 이미지를 매핑
@@ -113,23 +113,10 @@ export default function HomeScreen({
   const hasStreak = streak >= 2; // 2일 이상 연속 출석이면 불 아이콘 색상
 
   const handleLogoutPress = () => {
-    console.log('📍 handleLogoutPress 실행됨 - Alert 호출 준비');
-
-    // Expo web에서 Alert이 작동하지 않을 수 있으므로, 직접 확인 후 실행
-    const confirmed = window.confirm('정말 로그아웃하시겠습니까?');
-    console.log('사용자 확인:', confirmed);
-
-    if (confirmed) {
-      console.log('✅ 로그아웃 확인됨 - onLogout 호출');
-      if (onLogout) {
-        console.log('🔌 App.tsx의 handleLogout 호출');
-        onLogout();
-      } else {
-        console.error('❌ onLogout이 undefined입니다!');
-      }
-    } else {
-      console.log('❌ 사용자가 로그아웃 취소');
-    }
+    confirmLogout(() => {
+      if (onLogout) onLogout();
+      else onNavigate('home');
+    });
   };
 
   return (
