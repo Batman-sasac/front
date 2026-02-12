@@ -495,6 +495,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
             <View style={styles.centerWrap}>
                 <Text style={styles.guide}>원하는 개념 한 가지만 포함되도록 잘라주세요.</Text>
+                <Text> 학습시작 버튼을 누르면 시간이 조금 소요될 수 있어요.</Text>
 
                 {ocrUsage && (
                     <View style={styles.usageChip}>
