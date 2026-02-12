@@ -766,16 +766,6 @@ export default function ScaffoldingScreen({
 
                     {(step === '1-1' || step === '2-1' || step === '3-1') && (
                         <View style={styles.buttonGroup}>
-                            {/* 설명 */}
-                            {!reviewQuizId && (step === '1-1' || step === '2-1' || step === '3-1') && (
-                                <Pressable style={styles.imgBtnWrap} onPress={onReselectWords}>
-                                    <Image
-                                        source={require('../../../assets/study/re-selection-button.png')}
-                                        style={styles.reselectImg}
-                                        resizeMode="contain"
-                                    />
-                                </Pressable>
-                            )}
                             <Pressable style={styles.imgBtnWrap} onPress={onStartLearning}>
                                 <Image
                                     source={require('../../../assets/study/start-study-button.png')}

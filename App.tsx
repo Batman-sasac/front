@@ -848,7 +848,7 @@ export default function App() {
               return acc + (isCorrect ? 1 : 0);
             }, 0);
 
-            await gradeStudy({
+            const gradeResult = await gradeStudy({
               quiz_id: 0,
               correct_answers: keywords,
               answer: keywords,
@@ -863,6 +863,16 @@ export default function App() {
               keywords,
               grade_cnt: gradeCount,
             });
+
+            const nextPoints = Number(gradeResult?.new_points);
+            if (Number.isFinite(nextPoints)) {
+              setExp(nextPoints);
+            } else {
+              const earnedXp = gradeCount * 2;
+              if (earnedXp > 0) {
+                setExp((prev) => prev + earnedXp);
+              }
+            }
           }}
         />
 
