@@ -1,12 +1,12 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Dimensions,
     Image,
     Modal,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
+    useWindowDimensions,
     View,
 } from 'react-native';
 import { fontScale, scale } from '../../lib/layout';
@@ -27,7 +27,7 @@ const BLUE = '#92A6FF';
 const RED = '#D90054';
 
 export default function SubscribeScreen({ isSubscribed, ocrUsage, onBack, onSubscribe, onCancelSubscribe }: Props) {
-    const windowWidth = Dimensions.get('window').width;
+    const { width: windowWidth } = useWindowDimensions();
     const isCompact = windowWidth < 900;
     const [usage, setUsage] = useState<OcrUsageResponse | null>(ocrUsage);
     const [showCancelModal, setShowCancelModal] = useState(false);

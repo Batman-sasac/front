@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   Pressable,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
@@ -91,6 +92,50 @@ export default function HomeScreen({
   onNavigate,
   onLogout,
 }: Props) {
+  const { width: screenWidth } = useWindowDimensions();
+  const homeLayout = useMemo(() => {
+    const DESIGN = {
+      leftWidth: 460,
+      rightWidth: 500,
+      gap: 14,
+      bigCardHeight: 470,
+      growthCardHeight: 207,
+      streakCardHeight: 154,
+      leagueCardHeight: 188,
+      goalCardHeight: 313,
+    };
+
+    const leftRatio = DESIGN.leftWidth / (DESIGN.leftWidth + DESIGN.rightWidth);
+    const rightRatio = DESIGN.rightWidth / (DESIGN.leftWidth + DESIGN.rightWidth);
+    const sidebarWidth = scale(80);
+    const mainHorizontalPadding = 18 * 2;
+    const availableMainWidth = Math.max(320, screenWidth - sidebarWidth - mainHorizontalPadding);
+    const shouldStack = availableMainWidth < 860;
+    const contentWidth = Math.min(availableMainWidth, 1200);
+    const usableWidth = Math.max(320, contentWidth - DESIGN.gap);
+
+    const leftCardWidth = shouldStack ? usableWidth : usableWidth * leftRatio;
+    const rightCardWidth = shouldStack ? usableWidth : usableWidth * rightRatio;
+
+    const scaleHeight = (widthValue: number, baseWidth: number, baseHeight: number) =>
+      Math.round((widthValue * baseHeight) / baseWidth);
+
+    const growthCardHeight = scaleHeight(leftCardWidth, DESIGN.leftWidth, DESIGN.growthCardHeight);
+    const growthChartHeight = Math.max(100, Math.round(growthCardHeight * 0.62));
+
+    return {
+      shouldStack,
+      gap: DESIGN.gap,
+      leftCardWidth,
+      rightCardWidth,
+      bigCardHeight: scaleHeight(leftCardWidth, DESIGN.leftWidth, DESIGN.bigCardHeight),
+      growthCardHeight,
+      streakCardHeight: scaleHeight(rightCardWidth, DESIGN.rightWidth, DESIGN.streakCardHeight),
+      leagueCardHeight: scaleHeight(rightCardWidth, DESIGN.rightWidth, DESIGN.leagueCardHeight),
+      goalCardHeight: scaleHeight(rightCardWidth, DESIGN.rightWidth, DESIGN.goalCardHeight),
+      growthChartHeight,
+    };
+  }, [screenWidth]);
   const characterSource = getCharacterSourceByType(typeLabel);
   const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
   const getLevelBounds = (currentLevel: number) => {
@@ -113,23 +158,9 @@ export default function HomeScreen({
   const hasStreak = streak >= 2; // 2일 이상 연속 출석이면 불 아이콘 색상
 
   const handleLogoutPress = () => {
-    console.log('📍 handleLogoutPress 실행됨 - Alert 호출 준비');
-
     // Expo web에서 Alert이 작동하지 않을 수 있으므로, 직접 확인 후 실행
     const confirmed = window.confirm('정말 로그아웃하시겠습니까?');
-    console.log('사용자 확인:', confirmed);
-
-    if (confirmed) {
-      console.log('✅ 로그아웃 확인됨 - onLogout 호출');
-      if (onLogout) {
-        console.log('🔌 App.tsx의 handleLogout 호출');
-        onLogout();
-      } else {
-        console.error('❌ onLogout이 undefined입니다!');
-      }
-    } else {
-      console.log('❌ 사용자가 로그아웃 취소');
-    }
+    if (confirmed) {      if (onLogout) {        onLogout();
   };
 
   return (
@@ -156,11 +187,11 @@ export default function HomeScreen({
             />
           </Pressable>
         </View>
-        <View style={styles.contentRow}>
+        <View style={[styles.contentRow, { gap: homeLayout.gap }, homeLayout.shouldStack && styles.contentRowCompact]}>
           {/* 왼쪽 컬럼: bigCard + 성장 카드 */}
-          <View style={styles.leftColumn}>
+          <View style={[styles.leftColumn, { width: homeLayout.leftCardWidth }, homeLayout.shouldStack && styles.columnCompact]}>
             {/* 상단 큰 카드 */}
-            <View style={styles.bigCard}>
+            <View style={[styles.bigCard, { minHeight: homeLayout.bigCardHeight }]}>
               {/* Level + 유형 */}
               <Text style={styles.levelText}>
                 <Text style={styles.levelLabel}>Level </Text>
@@ -212,7 +243,7 @@ export default function HomeScreen({
             </View>
 
             {/* 아래 성장 카드 */}
-            <View style={styles.bottomCard}>
+            <View style={[styles.bottomCard, { minHeight: homeLayout.growthCardHeight }]}>
               {/* 요약 메시지 */}
               {weeklyGrowth && weeklyGrowth.data && weeklyGrowth.data.length >= 2 && (
                 <Text style={styles.smallTitle}>
@@ -231,17 +262,17 @@ export default function HomeScreen({
               <View style={styles.lineGraphContainer}>
                 {weeklyGrowth && weeklyGrowth.labels && weeklyGrowth.data ? (
                   <View style={styles.lineChartWrapper}>
-                    <View style={styles.lineChartContainer}>
+                    <View style={[styles.lineChartContainer, { height: homeLayout.growthChartHeight }]}>
                       {/* 그라데이션 배경 영역 */}
                       <View style={styles.graphBackground} />
                       {/* 선과 점 */}
-                      <Svg width="100%" height={scale(200)} style={styles.svgOverlay}>
+                      <Svg width="100%" height={homeLayout.growthChartHeight} style={styles.svgOverlay}>
                         {weeklyGrowth?.data && weeklyGrowth.data.length > 0 && (() => {
                           const data = weeklyGrowth.data;
                           const maxValue = Math.max(...data, 1);
-                          const padding = 20;
-                          const svgWidth = 360;
-                          const svgHeight = 160;
+                          const padding = Math.max(12, Math.round(homeLayout.growthChartHeight * 0.12));
+                          const svgWidth = Math.max(240, Math.round(homeLayout.leftCardWidth - 40));
+                          const svgHeight = homeLayout.growthChartHeight;
                           const chartWidth = svgWidth - padding * 2;
                           const chartHeight = svgHeight - padding * 2;
                           const pointSpacing = chartWidth / Math.max(data.length - 1, 1);
@@ -299,9 +330,9 @@ export default function HomeScreen({
           </View>
 
           {/* 오른쪽 컬럼: 연속 학습 / 리그 / 목표 카드 */}
-          <View style={styles.rightColumn}>
+          <View style={[styles.rightColumn, { width: homeLayout.rightCardWidth }, homeLayout.shouldStack && styles.columnCompact]}>
             {/* 연속 학습 카드 */}
-            <View style={styles.smallCard}>
+            <View style={[styles.smallCard, { minHeight: homeLayout.streakCardHeight }]}>
               <View style={styles.streakRow}>
                 {/* 왼쪽 큰 불 아이콘 */}
                 <Image
@@ -324,7 +355,7 @@ export default function HomeScreen({
                       const checked = weekAttendance[idx];
                       const isToday = idx === todayIndex;
                       return (
-                        <View key={label} style={styles.weekItem}>
+                        <View key={${label}-} style={styles.weekItem}>
                           <View
                             style={[
                               styles.weekCircle,
@@ -352,7 +383,7 @@ export default function HomeScreen({
             {/* 이하 리그 카드 / 목표 카드 그대로 */}
             {/* 리그 카드 (디자인 개선 버전) */}
             <Pressable
-              style={styles.leagueCard}
+              style={[styles.leagueCard, { minHeight: homeLayout.leagueCardHeight }]}
               onPress={() => onNavigate('league')}
             >
 
@@ -389,7 +420,7 @@ export default function HomeScreen({
             </Pressable>
 
 
-            <View style={[styles.bottomCard, styles.rightBottomCard, styles.goalCard]}>
+            <View style={[styles.bottomCard, styles.rightBottomCard, styles.goalCard, { minHeight: homeLayout.goalCardHeight }]}>
               <Text style={styles.goalCardTitle}>이번 달 목표까지 얼마 안 남았어요!</Text>
 
               {/* 이번 달 목표 */}
@@ -502,15 +533,21 @@ const styles = StyleSheet.create({
   /* 좌/우 컬럼 레이아웃 */
   contentRow: {
     flexDirection: 'row',
-    gap: 14,
     alignItems: 'flex-start',
   },
+  contentRowCompact: {
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
   leftColumn: {
-    flex: 1,
+    gap: scale(14),
   },
   rightColumn: {
-    flex: 1,
-    gap: 8,
+    gap: scale(8),
+  },
+  columnCompact: {
+    width: '100%',
+    maxWidth: 640,
   },
   /* 카드들 */
   bigCard: {
@@ -518,7 +555,7 @@ const styles = StyleSheet.create({
     borderRadius: scale(24),
     padding: scale(18),
     elevation: 3,
-    marginBottom: scale(14),
+    marginBottom: 0,
   },
   smallCard: {
     backgroundColor: '#ffffff',
@@ -526,7 +563,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     paddingHorizontal: 14,
     elevation: 2,
-    marginBottom: scale(12),
+    marginBottom: 0,
   },
   bottomCard: {
     backgroundColor: '#ffffff',
@@ -541,7 +578,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  smallTitle: { fontSize: 25, fontWeight: '500', marginBottom: 4 },
+  smallTitle: { fontSize: 16, fontWeight: '500', marginBottom: 4 },
   smallBody: { fontSize: 12, color: '#4B5563' },
 
   /* 레벨/경험치 */
@@ -721,7 +758,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     elevation: 2,
-    marginBottom: scale(12),
+    marginBottom: 0,
   },
 
   leagueTitle: {
@@ -990,3 +1027,13 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
 });
+
+
+
+
+
+
+
+
+
+
