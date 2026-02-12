@@ -273,6 +273,40 @@ export async function updateNickname(
 }
 
 /**
+ * 홈 화면 통계 조회
+ */
+export async function getHomeStats(token: string): Promise<{
+    status: string;
+    data: {
+        points: number;
+        monthly_goal: number | null;
+    };
+}> {
+    const endpoint = `${API_BASE_URL}/auth/home/stats`;
+    const res = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!res.ok) {
+        throw new Error(`홈 통계 조회 실패 (${res.status})`);
+    }
+
+    const json = await res.json();
+    const raw = json?.data ?? json ?? {};
+    return {
+        status: json?.status ?? 'success',
+        data: {
+            points: Number(raw.points ?? raw.total_points ?? raw.exp ?? 0),
+            monthly_goal: raw.monthly_goal ?? raw.target_count ?? null,
+        },
+    };
+}
+
+/**
  * 사용자 통계 조회
  */
 export async function getUserStats(token: string): Promise<{

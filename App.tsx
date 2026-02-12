@@ -28,7 +28,7 @@ import { updateFcmToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
-import { getUserStats } from './src/api/auth';
+import { getHomeStats, getUserStats } from './src/api/auth';
 
 type SocialProvider = 'kakao' | 'naver';
 type Step =
@@ -293,13 +293,14 @@ export default function App() {
           setUserEmail(userInfo.email);
           setNickname(userInfo.nickname);
           try {
+            const homeStats = await getHomeStats(token);
+            if (typeof homeStats.data.points === 'number' && Number.isFinite(homeStats.data.points)) {
+              setExp(homeStats.data.points);
+            }
+            if (typeof homeStats.data.monthly_goal === 'number' && homeStats.data.monthly_goal > 0) {
+              setMonthlyGoal(homeStats.data.monthly_goal);
+            }
             const userState = await getUserStats(token);
-            if (typeof userState.data.total_points === 'number' && Number.isFinite(userState.data.total_points)) {
-              setExp(userState.data.total_points);
-            }
-            if (typeof userState.data.monthly_goal === 'number' && userState.data.monthly_goal > 0) {
-              setMonthlyGoal(userState.data.monthly_goal);
-            }
             setIsSubscribed(!!userState.data.is_subscribed);
           } catch (e) {
             console.error('유저 상태 조회 실패:', e);
@@ -325,14 +326,12 @@ export default function App() {
     try {
       console.log('로그아웃 시작...');
       await clearAuthData();
-      await AsyncStorage.removeItem(TYPE_LABEL_KEY);
       console.log('로그아웃 완료');
       // 상태 초기화
       setUserEmail('');
       setNickname('');
       setUserSocialId('');
       setTypeResult(null);
-      setTypeLabel('');
       setIsSubscribed(false);
       setOcrUsage(null);
       setShowUsageExhaustedModal(false);
@@ -421,13 +420,14 @@ export default function App() {
     try {
       const token = await getToken();
       if (token) {
+        const homeStats = await getHomeStats(token);
+        if (typeof homeStats.data.points === 'number' && Number.isFinite(homeStats.data.points)) {
+          setExp(homeStats.data.points);
+        }
+        if (typeof homeStats.data.monthly_goal === 'number' && homeStats.data.monthly_goal > 0) {
+          setMonthlyGoal(homeStats.data.monthly_goal);
+        }
         const userState = await getUserStats(token);
-        if (typeof userState.data.total_points === 'number' && Number.isFinite(userState.data.total_points)) {
-          setExp(userState.data.total_points);
-        }
-        if (typeof userState.data.monthly_goal === 'number' && userState.data.monthly_goal > 0) {
-          setMonthlyGoal(userState.data.monthly_goal);
-        }
         setIsSubscribed(!!userState.data.is_subscribed);
       }
     } catch (e) {
