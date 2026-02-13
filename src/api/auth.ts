@@ -1,16 +1,12 @@
-import { Platform } from 'react-native';
 import config from '../lib/config';
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
 
 // API Base URL - 실제 백엔드 서버 주소
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
-const ENV_KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? '';
+const ENV_KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY ?? '';
 const ENV_NAVER_CLIENT_ID = process.env.EXPO_PUBLIC_NAVER_CLIENT_ID ?? '';
 const ENV_KAKAO_REDIRECT_URI = process.env.EXPO_PUBLIC_KAKAO_REDIRECT_URI ?? '';
 const ENV_NAVER_REDIRECT_URI = process.env.EXPO_PUBLIC_NAVER_REDIRECT_URI ?? '';
-
-/** 앱(네이티브)에서 카카오 로그인 시 사용할 리다이렉트 URI (app.json scheme과 일치) */
-const KAKAO_MOBILE_REDIRECT_URI = 'bat://oauth-callback';
 
 export interface LoginResponse {
     status: 'success' | 'nickname_required' | 'NICKNAME_REQUIRED';
@@ -103,25 +99,16 @@ export async function fetchOAuthConfig(): Promise<OAuthConfig> {
  * OAuth URL 생성 (.env/config fallback)
  */
 export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
-    const isNative = Platform.OS !== 'web';
     let kakaoRestApiKey = ENV_KAKAO_REST_API_KEY;
     let naverClientId = ENV_NAVER_CLIENT_ID;
-    // 모바일 앱에서는 앱 스킴(bat://oauth-callback) 사용, 웹/미설정 시 서버 URL fallback
-    let kakaoRedirectUri =
-        ENV_KAKAO_REDIRECT_URI ||
-        (isNative ? KAKAO_MOBILE_REDIRECT_URI : null) ||
-        `${API_BASE_URL}/auth/kakao/mobile`;
+    let kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || `${API_BASE_URL}/auth/kakao/mobile`;
     let naverRedirectUri = ENV_NAVER_REDIRECT_URI || `${API_BASE_URL}/auth/naver/mobile`;
 
-    if (!kakaoRestApiKey || !naverClientId || (!ENV_KAKAO_REDIRECT_URI && !isNative) || !ENV_NAVER_REDIRECT_URI) {
+    if (!kakaoRestApiKey || !naverClientId || !ENV_KAKAO_REDIRECT_URI || !ENV_NAVER_REDIRECT_URI) {
         const serverConfig = await fetchOAuthConfig();
         kakaoRestApiKey = kakaoRestApiKey || serverConfig.kakao_rest_api_key || '';
         naverClientId = naverClientId || serverConfig.naver_client_id || '';
-        kakaoRedirectUri =
-            ENV_KAKAO_REDIRECT_URI ||
-            (isNative ? KAKAO_MOBILE_REDIRECT_URI : null) ||
-            serverConfig.kakao_redirect_uri ||
-            kakaoRedirectUri;
+        kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || serverConfig.kakao_redirect_uri || kakaoRedirectUri;
         naverRedirectUri = ENV_NAVER_REDIRECT_URI || serverConfig.naver_redirect_uri || naverRedirectUri;
     }
 
