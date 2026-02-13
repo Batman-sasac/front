@@ -7,13 +7,16 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "bat",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.batman.bat",
+      "infoPlist": { "ITSAppUsesNonExemptEncryption": false }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,8 +26,9 @@
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.frontend"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "web": { "favicon": "./assets/favicon.png" },
+    "extra": { "eas": { "projectId": "e9972864-6164-4023-9020-a4b1f3c766a4" } },
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": { "url": "https://u.expo.dev/e9972864-6164-4023-9020-a4b1f3c766a4" }
   }
 }
