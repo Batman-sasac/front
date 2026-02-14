@@ -66,26 +66,31 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
     const handlePickFromGallery = async () => {
         if (hasMediaPermission !== true) return;
-
-        const res = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images', 'videos'] as const,
-            quality: 1,
-            allowsMultipleSelection: true,
-            selectionLimit: 10,
-        });
-
-        if (res.canceled) return;
-
-        const sources = res.assets.map((a) => {
-            console.log('🖼️ 갤러리 선택:', a.uri);
-            return { uri: a.uri } as ImageSourcePropType;
-        });
-        console.log('🖼️ 갤러리 선택 완료, 파일 수:', sources.length);
-        setShots((prev) => {
-            const updated = [...prev, ...sources];
-            console.log('🖼️ 업데이트 후 shots:', updated.length);
-            return updated;
-        });
+    
+        try {
+            const res = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'], // 크롭은 이미지만 가능합니다.
+                allowsEditing: true,    // ★ 자르기 기능 활성화
+                quality: 0.2,           // ★ 화질을 낮춰 메모리 부족 튕김 방지
+                // aspect: [4, 3],      // 이 줄이 없어야 '자유 비율' 자르기가 됩니다.
+            });
+    
+            if (res.canceled) return;
+    
+            // 크롭된 사진 1장을 가져와서 shots 배열에 추가합니다.
+            const source = { uri: res.assets[0].uri } as ImageSourcePropType;
+            
+            console.log('🖼️ 자르기 완료:', source.uri);
+    
+            setShots((prev) => {
+                const updated = [...prev, source]; // 기존 사진들 뒤에 새로 자른 사진 추가
+                console.log('🖼️ 현재 모인 사진 수:', updated.length);
+                return updated;
+            });
+        } catch (error) {
+            console.error('갤러리 선택 중 에러:', error);
+            alert('이미지를 처리하는 중 문제가 발생했습니다.');
+        }
     };
 
     const handlePickDocument = async () => {
@@ -177,7 +182,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
             const cam: any = cameraRef.current;
             const photo = await cam.takePictureAsync({
-                quality: 1,
+                quality: 0.5,
                 skipProcessing: Platform.OS === 'android' ? false : false,
             });
 
