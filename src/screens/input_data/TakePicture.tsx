@@ -4,6 +4,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { scale, fontScale } from '../../lib/layout';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 type Props = {
     onBack: () => void;
@@ -64,34 +65,49 @@ export default function TakePicture({ onBack, onDone }: Props) {
         setFacing((prev) => (prev === 'back' ? 'front' : 'back'));
     };
 
+    const [isCameraActive, setIsCameraActive] = useState<boolean>(true);
+
     const handlePickFromGallery = async () => {
         if (hasMediaPermission !== true) return;
     
-        try {
-            const res = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'], // 크롭은 이미지만 가능합니다.
-                allowsEditing: true,    // ★ 자르기 기능 활성화
-                quality: 0.2,           // ★ 화질을 낮춰 메모리 부족 튕김 방지
-                // aspect: [4, 3],      // 이 줄이 없어야 '자유 비율' 자르기가 됩니다.
-            });
+        // 카메라 꺼서 메모리 확보
+        setIsCameraActive(false);
     
-            if (res.canceled) return;
+        // 카메라가 언마운트될 시간을 잠시 줍니다
+        setTimeout(async () => {
+            try {
+                const res = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['images'],
+                    allowsEditing: false, // 커스텀 편집 화면을 쓸 것이므로 false
+                    quality: 1,           // 일단 고화질로 가져오되 아래서 줄임
+                });
     
-            // 크롭된 사진 1장을 가져와서 shots 배열에 추가합니다.
-            const source = { uri: res.assets[0].uri } as ImageSourcePropType;
-            
-            console.log('🖼️ 자르기 완료:', source.uri);
+                if (!res.canceled) {
+                    const originalUri = res.assets[0].uri;
     
-            setShots((prev) => {
-                const updated = [...prev, source]; // 기존 사진들 뒤에 새로 자른 사진 추가
-                console.log('🖼️ 현재 모인 사진 수:', updated.length);
-                return updated;
-            });
-        } catch (error) {
-            console.error('갤러리 선택 중 에러:', error);
-            alert('이미지를 처리하는 중 문제가 발생했습니다.');
-        }
+                    // [강조] 이 부분이 핵심입니다! 사진 크기를 강제로 줄여서 메모리를 확보합니다.
+                    const manipulated = await ImageManipulator.manipulateAsync(
+                        originalUri,
+                        [{ resize: { width: 1200 } }], // 가로를 1200px로 축소 (비율 자동 유지)
+                        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+                    );
+    
+                    // 리사이징된 이미지의 URI를 사용합니다.
+                    const source = { uri: manipulated.uri } as ImageSourcePropType;
+                    setShots((prev) => [...prev, source]);
+                    
+                    console.log('✅ 리사이징 완료:', manipulated.uri);
+                }
+            } catch (e) {
+                console.error('갤러리 처리 에러:', e);
+            } finally {
+                // 작업이 끝나면 상황에 따라 카메라를 켭니다. 
+                // 바로 편집화면으로 넘어간다면 여기서는 true를 안 해도 됩니다.
+                setIsCameraActive(true);
+            }
+        }, 200);
     };
+
 
     const handlePickDocument = async () => {
         try {
@@ -182,7 +198,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
             const cam: any = cameraRef.current;
             const photo = await cam.takePictureAsync({
-                quality: 0.5,
+                quality: 1,
                 skipProcessing: Platform.OS === 'android' ? false : false,
             });
 
