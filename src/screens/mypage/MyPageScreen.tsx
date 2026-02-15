@@ -18,11 +18,9 @@ import {
     connectAccount,
     disconnectAccount,
     getOAuthUrl,
-    getUserStats,
     updateNickname as apiUpdateNickname,
     withdrawAccount,
 } from '../../api/auth';
-import { getMonthlyStats } from '../../api/ocr';
 
 type Screen = 'home' | 'league' | 'alarm' | 'mypage' | 'takePicture' | 'brushup';
 
@@ -97,6 +95,19 @@ export default function MyPageScreen({
         run();
     }, []);
 
+    useEffect(() => {
+        setTotalStudyCountState(totalStudyCount);
+    }, [totalStudyCount]);
+
+    useEffect(() => {
+        setContinuousDaysState(continuousDays);
+    }, [continuousDays]);
+
+    useEffect(() => {
+        setMonthlyGoalState(monthlyGoal);
+        setTempGoal(monthlyGoal || 20);
+    }, [monthlyGoal]);
+
     const loadAccountInfo = async () => {
         try {
             const token = await getToken();
@@ -108,17 +119,6 @@ export default function MyPageScreen({
             const stored = await getStoredUserInfo();
             setKakaoEmail(stored.email ?? null);
             setNaverEmail(null);
-
-            const [stats, monthlyStats] = await Promise.all([getUserStats(token), getMonthlyStats()]);
-
-            const monthlyGoalValue = stats.data.monthly_goal ?? monthlyStats?.compare?.target_count;
-            const fallbackGoal = typeof monthlyGoal === 'number' ? monthlyGoal : null;
-            const resolvedGoal = monthlyGoalValue && monthlyGoalValue > 0 ? monthlyGoalValue : fallbackGoal ?? monthlyGoalValue;
-
-            setTotalStudyCountState(stats.data.total_learning_count);
-            setContinuousDaysState(stats.data.consecutive_days);
-            setMonthlyGoalState(resolvedGoal ?? 0);
-            setTempGoal(resolvedGoal ?? 20);
         } catch (error) {
             console.error('계정 정보 로드 실패:', error);
             Alert.alert('오류', '계정 정보를 불러오지 못했습니다.');

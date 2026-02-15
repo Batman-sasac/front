@@ -231,9 +231,14 @@ export default function App() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const stats = await getMonthlyStats();
-        setTotalStudyCount(stats.compare?.this_month_count || 0);
-        setContinuousDays(stats.compare?.diff || 0);
+        const token = await getToken();
+        if (!token) return;
+        const userState = await getUserStats(token);
+        setTotalStudyCount(Number(userState.data.total_learning_count || 0));
+        setContinuousDays(Number(userState.data.consecutive_days || 0));
+        if (typeof userState.data.monthly_goal === 'number' && userState.data.monthly_goal > 0) {
+          setMonthlyGoal(userState.data.monthly_goal);
+        }
       } catch (error) {
         console.error('학습 통계 불러오기 실패:', error);
       }
@@ -302,6 +307,11 @@ export default function App() {
             }
             const userState = await getUserStats(token);
             setIsSubscribed(!!userState.data.is_subscribed);
+            setTotalStudyCount(Number(userState.data.total_learning_count || 0));
+            setContinuousDays(Number(userState.data.consecutive_days || 0));
+            if (typeof userState.data.monthly_goal === 'number' && userState.data.monthly_goal > 0) {
+              setMonthlyGoal(userState.data.monthly_goal);
+            }
           } catch (e) {
             console.error('유저 상태 조회 실패:', e);
           }
@@ -429,6 +439,11 @@ export default function App() {
         }
         const userState = await getUserStats(token);
         setIsSubscribed(!!userState.data.is_subscribed);
+        setTotalStudyCount(Number(userState.data.total_learning_count || 0));
+        setContinuousDays(Number(userState.data.consecutive_days || 0));
+        if (typeof userState.data.monthly_goal === 'number' && userState.data.monthly_goal > 0) {
+          setMonthlyGoal(userState.data.monthly_goal);
+        }
       }
     } catch (e) {
       console.error('유저 상태 조회 실패:', e);
