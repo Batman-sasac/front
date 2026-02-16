@@ -198,12 +198,17 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
             const cam: any = cameraRef.current;
             const photo = await cam.takePictureAsync({
-                quality: 1,
+                quality: 0.8,
                 skipProcessing: Platform.OS === 'android' ? false : false,
             });
 
             if (photo?.uri) {
-                setShots((prev) => [{ uri: photo.uri } as ImageSourcePropType, ...prev]);
+                const manipulated = await ImageManipulator.manipulateAsync(
+                    photo.uri,
+                    [{ resize: { width: 1440 } }],
+                    { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG }
+                );
+                setShots((prev) => [{ uri: manipulated.uri } as ImageSourcePropType, ...prev]);
             }
         } catch (e) {
             console.log('촬영 실패:', e);
@@ -242,6 +247,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
             return;
         }
         console.log('✅ onDone 호출, 소스 개수:', shots.length);
+        setIsCameraActive(false);
         onDone(shots);
     };
 
@@ -303,13 +309,15 @@ export default function TakePicture({ onBack, onDone }: Props) {
     return (
         <View style={styles.root}>
             <View style={styles.cameraWrap}>
-                <CameraView
-                    ref={cameraRef}
-                    style={StyleSheet.absoluteFillObject}
-                    facing={facing}
-                    flash={flash}
-                    ratio="16:9"
-                />
+                {isCameraActive && (
+                    <CameraView
+                        ref={cameraRef}
+                        style={StyleSheet.absoluteFillObject}
+                        facing={facing}
+                        flash={flash}
+                        ratio="16:9"
+                    />
+                )}
 
                 <View style={styles.topBar}>
                     <Pressable style={styles.backChip} onPress={onBack}>
