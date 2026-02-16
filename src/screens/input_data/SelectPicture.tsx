@@ -11,6 +11,7 @@ import {
     PanResponderInstance,
     TextInput,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { getOcrUsage } from '../../api/ocr';
@@ -449,6 +450,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     };
 
     useEffect(() => {
+        if (Platform.OS !== 'web') return;
         if (typeof window === 'undefined') return;
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
