@@ -384,7 +384,7 @@ export default function MyPageScreen({
                         )}
                     </View>
 
-                    <View style={[styles.accountContainer, naverConnected && styles.accountContainerConnectedNaver]}>
+                    <View style={[styles.accountContainer, naverConnected && styles.accountContainerConnectedNaver, { display: 'none' }]}>
                         <View style={[styles.accountBox, styles.naverBox]}>
                             <View style={styles.accountRow}>
                                 <View style={styles.providerInfo}>
