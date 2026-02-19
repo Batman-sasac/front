@@ -102,7 +102,7 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
 
         {/* 네이버 로그인 */}
         <Pressable
-          style={[styles.button, styles.naver]}
+          style={[styles.button, styles.naver, { display: 'none' }]}
           onPress={() => handleSocialLogin('naver')}
         >
           <Text style={styles.naverIcon}>N</Text>
