@@ -29,6 +29,7 @@ import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 import { getHomeStats, getUserStats } from './src/api/auth';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 type SocialProvider = 'kakao' | 'naver';
 type Step =
@@ -555,8 +556,12 @@ export default function App() {
     return uniq;
   }
 
+  const safeAreaEdges = step === 'takePicture' || step === 'selectPicture' ? ([] as const) : (['top'] as const);
+
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaProvider>
+      <SafeAreaView style={{ flex: 1 }} edges={safeAreaEdges}>
+        <View style={{ flex: 1 }}>
       {step === 'splash' && (
         <Splash duration={1500} onDone={() => { }} />
       )}
@@ -964,7 +969,9 @@ export default function App() {
 
 
 
-    </View>
+        </View>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
