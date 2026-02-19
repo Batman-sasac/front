@@ -80,10 +80,6 @@ export default function ScaffoldingScreen({
     const isReviewMode = reviewQuizId != null;
 
     // 설명
-    // 설명
-
-    // 설명
-    // 설명
     const [activeBlankId, setActiveBlankId] = useState<number | null>(null);
     const [answers, setAnswers] = useState<Record<number, string>>({}); // instanceId 기반
     const [graded, setGraded] = useState<Record<number, GradeState>>({}); // blankId 기반
@@ -944,22 +940,27 @@ export default function ScaffoldingScreen({
                                             >
                                                 <View style={{ position: 'relative' }}>
                                                     <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
-                                                    <TextInput
-                                                        ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
-                                                        value={userValue}
-                                                        onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
-                                                        style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
-                                                        blurOnSubmit
-                                                        onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
-                                                        maxFontSizeMultiplier={1.0}
-                                                    />
+                                                    {isActive ? (
+                                                        <TextInput
+                                                            ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
+                                                            value={userValue}
+                                                            onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
+                                                            style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
+                                                            blurOnSubmit
+                                                            onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
+                                                            maxFontSizeMultiplier={1.0}
+                                                        />
+                                                    ) : (
+                                                        <Text style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}>
+                                                            {userValue}
+                                                        </Text>
+                                                    )}
                                                 </View>
                                             </Pressable>
                                         </View>
                                     );
                                 }
 
-                                // 설명
                                 // 설명
                                 if (!isSelected) {
                                     return (

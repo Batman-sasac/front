@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { scale, fontScale } from '../../lib/layout';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
     onBack: () => void;
@@ -19,6 +20,7 @@ const BG = '#0B0F1A';
 
 export default function TakePicture({ onBack, onDone }: Props) {
     const cameraRef = useRef<CameraView | null>(null);
+    const insets = useSafeAreaInsets();
 
     const [cameraPermission, requestCameraPermission] = useCameraPermissions();
     const [hasMediaPermission, setHasMediaPermission] = useState<boolean | null>(null);
@@ -319,7 +321,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                     />
                 )}
 
-                <View style={styles.topBar}>
+                <View style={[styles.topBar, { top: insets.top + scale(8) }]}>
                     <Pressable style={styles.backChip} onPress={onBack}>
                         <Image
                             source={require('../../../assets/shift.png')}
@@ -378,7 +380,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                     </Pressable>
 
                     {/* 최신 사진 썸네일 */}
-                    {shots.length > 0 && (
+                    {false && shots.length > 0 && (
                         <View style={styles.thumbnailContainer}>
                             <Image source={shots[0]} style={styles.thumbnailImage} />
                         </View>
@@ -386,16 +388,26 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
                     {/* 갤러리 선택 버튼 */}
                     <Pressable style={styles.iconBtn} onPress={handlePickFromGallery}>
+                        {shots.length > 0 ? (
+                            <View style={styles.thumbnailContainer}>
+                                <Image source={shots[0]} style={styles.thumbnailImage} />
+                            </View>
+                        ) : (
+                            <Image
+                                source={require('../../../assets/take-picture/select_photo.png')}
+                                style={styles.icon}
+                                resizeMode="contain"
+                            />
+                        )}
+                    </Pressable>
+
+                    {/* 문서/PDF 선택 버튼 */}
+                    <Pressable style={styles.iconBtn} onPress={handlePickDocument}>
                         <Image
                             source={require('../../../assets/take-picture/select_folder.png')}
                             style={styles.icon}
                             resizeMode="contain"
                         />
-                    </Pressable>
-
-                    {/* 문서/PDF 선택 버튼 */}
-                    <Pressable style={styles.iconBtn} onPress={handlePickDocument}>
-                        <Text style={styles.documentIcon}>📁</Text>
                     </Pressable>
 
 
@@ -526,7 +538,9 @@ const styles = StyleSheet.create({
     },
 
     documentIcon: {
-        fontSize: fontScale(32),
+        fontSize: 0,
+        width: 0,
+        height: 0,
     },
 
     bottomThumbs: {
