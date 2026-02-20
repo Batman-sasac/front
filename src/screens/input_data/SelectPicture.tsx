@@ -11,6 +11,7 @@ import {
     PanResponderInstance,
     TextInput,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { getOcrUsage } from '../../api/ocr';
@@ -230,8 +231,8 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         const anySrc: any = selectedSource;
         const uri = typeof anySrc?.uri === 'string' ? (anySrc.uri as string) : null;
 
-        if (!uri || !uri.startsWith('file://')) {
-            // 더미 이미지는 그대로 진행
+        if (!uri) {
+            // 더미 이미지(uri 없음)만 OCR 생략
             onStartLearning(sources, false, subjectName);
             return;
         }
@@ -449,6 +450,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     };
 
     useEffect(() => {
+        if (Platform.OS !== 'web') return;
         if (typeof window === 'undefined') return;
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
@@ -495,6 +497,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
             <View style={styles.centerWrap}>
                 <Text style={styles.guide}>원하는 개념 한 가지만 포함되도록 잘라주세요.</Text>
+                <Text> 학습시작 버튼을 누르면 시간이 조금 소요될 수 있어요.</Text>
 
                 {ocrUsage && (
                     <View style={styles.usageChip}>

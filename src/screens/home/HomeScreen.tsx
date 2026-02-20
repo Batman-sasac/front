@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,10 @@ import {
   Image,
   ScrollView,
   Pressable,
-  Alert,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
+import { confirmLogout } from '../../lib/auth';
 import Svg, { Polyline, Circle, Defs, LinearGradient, Stop, G, Text as SvgText } from 'react-native-svg';
 
 // 학습 유형 텍스트에 따라 캐릭터 이미지를 매핑
@@ -113,23 +113,10 @@ export default function HomeScreen({
   const hasStreak = streak >= 2; // 2일 이상 연속 출석이면 불 아이콘 색상
 
   const handleLogoutPress = () => {
-    console.log('📍 handleLogoutPress 실행됨 - Alert 호출 준비');
-
-    // Expo web에서 Alert이 작동하지 않을 수 있으므로, 직접 확인 후 실행
-    const confirmed = window.confirm('정말 로그아웃하시겠습니까?');
-    console.log('사용자 확인:', confirmed);
-
-    if (confirmed) {
-      console.log('✅ 로그아웃 확인됨 - onLogout 호출');
-      if (onLogout) {
-        console.log('🔌 App.tsx의 handleLogout 호출');
-        onLogout();
-      } else {
-        console.error('❌ onLogout이 undefined입니다!');
-      }
-    } else {
-      console.log('❌ 사용자가 로그아웃 취소');
-    }
+    confirmLogout(() => {
+      if (onLogout) onLogout();
+      else onNavigate('home');
+    });
   };
 
   return (
@@ -541,8 +528,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  smallTitle: { fontSize: 25, fontWeight: '500', marginBottom: 4 },
-  smallBody: { fontSize: 12, color: '#4B5563' },
+  smallTitle: { fontSize: fontScale(17), fontWeight: '500', marginBottom: 4 },
+  smallBody: { fontSize: fontScale(12), color: '#4B5563' },
 
   /* 레벨/경험치 */
   levelText: {
@@ -551,7 +538,7 @@ const styles = StyleSheet.create({
     marginBottom: scale(8),
   },
   levelLabel: { color: '#000000' },
-  levelValue: { fontSize: 20, color: '#000000', fontWeight: '800' },
+  levelValue: { fontSize: fontScale(20), color: '#000000', fontWeight: '800' },
 
   progressWrapper: {
     marginBottom: 16,
@@ -572,7 +559,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: -18,
-    fontSize: 12,
+    fontSize: fontScale(12),
     fontWeight: '600',
     color: '#6B7280',
   },
@@ -790,9 +777,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   lineGraphContainer: {
-    minHeight: scale(120),
-    marginTop: scale(8),
-    marginBottom: scale(4),
+    minHeight: scale(180),
+    marginTop: scale(2),
+    marginBottom: scale(-45),
     justifyContent: 'flex-start',
     alignItems: 'center',
   },

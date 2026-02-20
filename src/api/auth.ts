@@ -1,8 +1,18 @@
 import config from '../lib/config';
+<<<<<<< HEAD
 
 const API_BASE_URL = config.apiBaseUrl;
 
+=======
+>>>>>>> origin/main
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
+
+// API Base URL - 실제 백엔드 서버 주소
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
+const ENV_KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY ?? '';
+const ENV_NAVER_CLIENT_ID = process.env.EXPO_PUBLIC_NAVER_CLIENT_ID ?? '';
+const ENV_KAKAO_REDIRECT_URI = process.env.EXPO_PUBLIC_KAKAO_REDIRECT_URI ?? '';
+const ENV_NAVER_REDIRECT_URI = process.env.EXPO_PUBLIC_NAVER_REDIRECT_URI ?? '';
 
 export interface LoginResponse {
     status: 'success' | 'nickname_required' | 'NICKNAME_REQUIRED';
@@ -21,20 +31,17 @@ export interface SetNicknameResponse {
     message: string;
 }
 
-/**
- * 백엔드 OAuth 엔드포인트에 인가 코드 전송
- */
 export async function loginWithOAuth(
     provider: 'kakao' | 'naver',
     code: string
 ): Promise<LoginResponse> {
-    if (provider === 'naver') {
-        throw new Error('현재 네이버 로그인은 지원되지 않습니다.');
-    }
     const endpoint = `${API_BASE_URL}/auth/${provider}/mobile`;
 
     const formData = new FormData();
     formData.append('code', code);
+    if (provider === 'naver') {
+        formData.append('state', 'naver_mobile');
+    }
 
     const response = await fetch(endpoint, {
         method: 'POST',
@@ -50,7 +57,6 @@ export async function loginWithOAuth(
     return await response.json();
 }
 
-
 export async function setNickname(
     nickname: string,
     email: string,
@@ -60,6 +66,7 @@ export async function setNickname(
     if (!token) {
         throw new Error('로그인이 필요합니다. 토큰이 없습니다.');
     }
+
     const endpoint = `${API_BASE_URL}/auth/set-nickname`;
     const response = await fetch(endpoint, {
         method: 'POST',
@@ -75,40 +82,24 @@ export async function setNickname(
     });
 
     if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.message || error.error || '닉네임 설정 실패');
     }
 
     return await response.json();
 }
 
-/**
- * 토큰 검증
- */
-export async function verifyToken(token: string): Promise<{
-    status: string;
-    email: string;
-    social_id: string;
-}> {
-    const response = await fetch(`${API_BASE_URL}/auth/user-info`, {
-        method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
-    });
+export interface OAuthConfig {
+    kakao_rest_api_key?: string;
+    kakao_redirect_uri?: string;
+    naver_client_id?: string;
+    naver_redirect_uri?: string;
+}
 
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || error.message || '토큰 검증 실패');
-    }
-
-    const data = await response.json();
-    return {
-        status: 'success',
-        email: data.email ?? '',
-        social_id: data.social_id ?? '',
-    };
+export async function fetchOAuthConfig(): Promise<OAuthConfig> {
+    const res = await fetch(`${API_BASE_URL}/config`);
+    if (!res.ok) throw new Error('OAuth 설정 정보를 불러오지 못했습니다.');
+    return res.json();
 }
 
 /** /config API 응답 타입 */
@@ -127,6 +118,7 @@ export async function fetchOAuthConfig(): Promise<OAuthConfig> {
 }
 
 /**
+<<<<<<< HEAD
  * OAuth URL 생성 (.env 또는 /config API 활용)
  */
 export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
@@ -148,6 +140,35 @@ export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> 
     }
 
     return `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(kakaoRestApiKey)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code`;
+=======
+ * OAuth URL 생성 (.env/config fallback)
+ */
+export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
+    let kakaoRestApiKey = ENV_KAKAO_REST_API_KEY;
+    let naverClientId = ENV_NAVER_CLIENT_ID;
+    let kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || `${API_BASE_URL}/auth/kakao/mobile`;
+    let naverRedirectUri = ENV_NAVER_REDIRECT_URI || `${API_BASE_URL}/auth/naver/mobile`;
+
+    if (!kakaoRestApiKey || !naverClientId || !ENV_KAKAO_REDIRECT_URI || !ENV_NAVER_REDIRECT_URI) {
+        const serverConfig = await fetchOAuthConfig();
+        kakaoRestApiKey = kakaoRestApiKey || serverConfig.kakao_rest_api_key || '';
+        naverClientId = naverClientId || serverConfig.naver_client_id || '';
+        kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || serverConfig.kakao_redirect_uri || kakaoRedirectUri;
+        naverRedirectUri = ENV_NAVER_REDIRECT_URI || serverConfig.naver_redirect_uri || naverRedirectUri;
+    }
+
+    if (provider === 'kakao') {
+        if (!kakaoRestApiKey) {
+            throw new Error('KAKAO_REST_API_KEY가 없습니다. .env 파일 또는 서버 설정을 확인하세요.');
+        }
+        return `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(kakaoRestApiKey)}&redirect_uri=${encodeURIComponent(kakaoRedirectUri)}&response_type=code`;
+    }
+
+    if (!naverClientId) {
+        throw new Error('NAVER_CLIENT_ID가 없습니다. .env 파일 또는 서버 설정을 확인하세요.');
+    }
+    return `https://nid.naver.com/oauth2.0/authorize?client_id=${encodeURIComponent(naverClientId)}&redirect_uri=${encodeURIComponent(naverRedirectUri)}&response_type=code&state=naver_mobile`;
+>>>>>>> origin/main
 }
 
 /**
@@ -202,7 +223,7 @@ export async function getUserInfo(token: string): Promise<{
 }
 
 /**
- * 소셜 계정 연동
+ * 외부 계정 연동
  */
 export async function connectAccount(
     token: string,
@@ -213,11 +234,8 @@ export async function connectAccount(
     message: string;
     connected_email: string;
 }> {
-    if (provider === 'naver') {
-        throw new Error('현재 네이버 계정 연동은 지원되지 않습니다.');
-    }
     void token;
-    // 백엔드에는 connect-account가 없어서 OAuth 로그인 엔드포인트를 그대로 사용
+    // 백엔드에 connect-account가 없어 OAuth 로그인 엔드포인트를 그대로 사용
     const result = await loginWithOAuth(provider, code);
 
     if (result.status !== 'success') {
@@ -232,7 +250,7 @@ export async function connectAccount(
 }
 
 /**
- * 소셜 계정 연동 해제
+ * 외부 계정 연동 해제
  */
 export async function disconnectAccount(
     token: string,
@@ -266,7 +284,7 @@ export async function logout(): Promise<{
 }> {
     return {
         status: 'success',
-        message: '로그아웃은 클라이언트에서 처리됩니다.',
+        message: '로그아웃은 클라이언트에서 처리합니다.',
     };
 }
 
@@ -300,6 +318,40 @@ export async function updateNickname(
 }
 
 /**
+ * 홈 화면 통계 조회
+ */
+export async function getHomeStats(token: string): Promise<{
+    status: string;
+    data: {
+        points: number;
+        monthly_goal: number | null;
+    };
+}> {
+    const endpoint = `${API_BASE_URL}/auth/home/stats`;
+    const res = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!res.ok) {
+        throw new Error(`홈 통계 조회 실패 (${res.status})`);
+    }
+
+    const json = await res.json();
+    const raw = json?.data ?? json ?? {};
+    return {
+        status: json?.status ?? 'success',
+        data: {
+            points: Number(raw.points ?? raw.total_points ?? raw.exp ?? 0),
+            monthly_goal: raw.monthly_goal ?? raw.target_count ?? null,
+        },
+    };
+}
+
+/**
  * 사용자 통계 조회
  */
 export async function getUserStats(token: string): Promise<{
@@ -308,22 +360,46 @@ export async function getUserStats(token: string): Promise<{
         total_learning_count: number;
         consecutive_days: number;
         monthly_goal: number | null;
+        total_points: number;
+        is_subscribed: boolean;
     };
 }> {
-    const endpoint = `${API_BASE_URL}/auth/user/stats`;
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+    };
 
-    const response = await fetch(endpoint, {
+    const parseResponse = (json: any) => {
+        const raw = json?.data ?? json ?? {};
+        return {
+            status: json?.status ?? 'success',
+            data: {
+                total_learning_count: Number(raw.total_learning_count ?? raw.total_count ?? 0),
+                consecutive_days: Number(raw.consecutive_days ?? raw.continuous_days ?? 0),
+                monthly_goal: raw.monthly_goal ?? raw.target_count ?? null,
+                total_points: Number(raw.total_points ?? raw.exp ?? 0),
+                is_subscribed: Boolean(
+                    raw.is_subscribed ??
+                    raw.subscribed ??
+                    raw.is_premium ??
+                    raw.premium ??
+                    raw.plan_active ??
+                    (typeof raw.plan_status === 'string' && raw.plan_status.toLowerCase() === 'subscribed')
+                ),
+            },
+        };
+    };
+
+    const endpoint = `${API_BASE_URL}/auth/user/stats`;
+    const res = await fetch(endpoint, {
         method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
+        headers,
     });
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '사용자 통계 조회 실패');
+    if (!res.ok) {
+        throw new Error(`사용자 상태 조회 실패 (${res.status})`);
     }
 
-    return await response.json();
+    const json = await res.json();
+    return parseResponse(json);
 }

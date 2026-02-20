@@ -4,6 +4,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { scale, fontScale } from '../../lib/layout';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
     onBack: () => void;
@@ -18,6 +20,7 @@ const BG = '#0B0F1A';
 
 export default function TakePicture({ onBack, onDone }: Props) {
     const cameraRef = useRef<CameraView | null>(null);
+    const insets = useSafeAreaInsets();
 
     const [cameraPermission, requestCameraPermission] = useCameraPermissions();
     const [hasMediaPermission, setHasMediaPermission] = useState<boolean | null>(null);
@@ -64,29 +67,49 @@ export default function TakePicture({ onBack, onDone }: Props) {
         setFacing((prev) => (prev === 'back' ? 'front' : 'back'));
     };
 
+    const [isCameraActive, setIsCameraActive] = useState<boolean>(true);
+
     const handlePickFromGallery = async () => {
         if (hasMediaPermission !== true) return;
-
-        const res = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images', 'videos'] as const,
-            quality: 1,
-            allowsMultipleSelection: true,
-            selectionLimit: 10,
-        });
-
-        if (res.canceled) return;
-
-        const sources = res.assets.map((a) => {
-            console.log('🖼️ 갤러리 선택:', a.uri);
-            return { uri: a.uri } as ImageSourcePropType;
-        });
-        console.log('🖼️ 갤러리 선택 완료, 파일 수:', sources.length);
-        setShots((prev) => {
-            const updated = [...prev, ...sources];
-            console.log('🖼️ 업데이트 후 shots:', updated.length);
-            return updated;
-        });
+    
+        // 카메라 꺼서 메모리 확보
+        setIsCameraActive(false);
+    
+        // 카메라가 언마운트될 시간을 잠시 줍니다
+        setTimeout(async () => {
+            try {
+                const res = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['images'],
+                    allowsEditing: false, // 커스텀 편집 화면을 쓸 것이므로 false
+                    quality: 1,           // 일단 고화질로 가져오되 아래서 줄임
+                });
+    
+                if (!res.canceled) {
+                    const originalUri = res.assets[0].uri;
+    
+                    // [강조] 이 부분이 핵심입니다! 사진 크기를 강제로 줄여서 메모리를 확보합니다.
+                    const manipulated = await ImageManipulator.manipulateAsync(
+                        originalUri,
+                        [{ resize: { width: 1200 } }], // 가로를 1200px로 축소 (비율 자동 유지)
+                        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+                    );
+    
+                    // 리사이징된 이미지의 URI를 사용합니다.
+                    const source = { uri: manipulated.uri } as ImageSourcePropType;
+                    setShots((prev) => [...prev, source]);
+                    
+                    console.log('✅ 리사이징 완료:', manipulated.uri);
+                }
+            } catch (e) {
+                console.error('갤러리 처리 에러:', e);
+            } finally {
+                // 작업이 끝나면 상황에 따라 카메라를 켭니다. 
+                // 바로 편집화면으로 넘어간다면 여기서는 true를 안 해도 됩니다.
+                setIsCameraActive(true);
+            }
+        }, 200);
     };
+
 
     const handlePickDocument = async () => {
         try {
@@ -177,12 +200,17 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
             const cam: any = cameraRef.current;
             const photo = await cam.takePictureAsync({
-                quality: 1,
+                quality: 0.8,
                 skipProcessing: Platform.OS === 'android' ? false : false,
             });
 
             if (photo?.uri) {
-                setShots((prev) => [{ uri: photo.uri } as ImageSourcePropType, ...prev]);
+                const manipulated = await ImageManipulator.manipulateAsync(
+                    photo.uri,
+                    [{ resize: { width: 1440 } }],
+                    { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG }
+                );
+                setShots((prev) => [{ uri: manipulated.uri } as ImageSourcePropType, ...prev]);
             }
         } catch (e) {
             console.log('촬영 실패:', e);
@@ -221,6 +249,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
             return;
         }
         console.log('✅ onDone 호출, 소스 개수:', shots.length);
+        setIsCameraActive(false);
         onDone(shots);
     };
 
@@ -282,15 +311,17 @@ export default function TakePicture({ onBack, onDone }: Props) {
     return (
         <View style={styles.root}>
             <View style={styles.cameraWrap}>
-                <CameraView
-                    ref={cameraRef}
-                    style={StyleSheet.absoluteFillObject}
-                    facing={facing}
-                    flash={flash}
-                    ratio="16:9"
-                />
+                {isCameraActive && (
+                    <CameraView
+                        ref={cameraRef}
+                        style={StyleSheet.absoluteFillObject}
+                        facing={facing}
+                        flash={flash}
+                        ratio="16:9"
+                    />
+                )}
 
-                <View style={styles.topBar}>
+                <View style={[styles.topBar, { top: insets.top + scale(8) }]}>
                     <Pressable style={styles.backChip} onPress={onBack}>
                         <Image
                             source={require('../../../assets/shift.png')}
@@ -349,7 +380,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                     </Pressable>
 
                     {/* 최신 사진 썸네일 */}
-                    {shots.length > 0 && (
+                    {false && shots.length > 0 && (
                         <View style={styles.thumbnailContainer}>
                             <Image source={shots[0]} style={styles.thumbnailImage} />
                         </View>
@@ -357,16 +388,26 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
                     {/* 갤러리 선택 버튼 */}
                     <Pressable style={styles.iconBtn} onPress={handlePickFromGallery}>
+                        {shots.length > 0 ? (
+                            <View style={styles.thumbnailContainer}>
+                                <Image source={shots[0]} style={styles.thumbnailImage} />
+                            </View>
+                        ) : (
+                            <Image
+                                source={require('../../../assets/take-picture/select_photo.png')}
+                                style={styles.icon}
+                                resizeMode="contain"
+                            />
+                        )}
+                    </Pressable>
+
+                    {/* 문서/PDF 선택 버튼 */}
+                    <Pressable style={styles.iconBtn} onPress={handlePickDocument}>
                         <Image
                             source={require('../../../assets/take-picture/select_folder.png')}
                             style={styles.icon}
                             resizeMode="contain"
                         />
-                    </Pressable>
-
-                    {/* 문서/PDF 선택 버튼 */}
-                    <Pressable style={styles.iconBtn} onPress={handlePickDocument}>
-                        <Text style={styles.documentIcon}>📁</Text>
                     </Pressable>
 
 
@@ -497,7 +538,9 @@ const styles = StyleSheet.create({
     },
 
     documentIcon: {
-        fontSize: fontScale(32),
+        fontSize: 0,
+        width: 0,
+        height: 0,
     },
 
     bottomThumbs: {

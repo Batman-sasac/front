@@ -1,15 +1,15 @@
 // src/lib/layout.ts
 import { Dimensions } from 'react-native';
 
-const { width } = Dimensions.get('window');
+const guidelineBaseWidth = 1024;
 
-const guidelineBaseWidth = 900;
+const getWindowWidth = () => Dimensions.get('window').width;
 
-export const scale = (size: number) => (width / guidelineBaseWidth) * size;
+export const scale = (size: number) => (getWindowWidth() / guidelineBaseWidth) * size;
 
-// 폰트는 너무 커지지 않게 살짝만 반영
+// Keep font growth softer than element scaling.
 export const fontScale = (size: number) => {
-    const factor = 0.35; // 0~1 사이에서 조절
+    const factor = 0.25;
     const scaled = scale(size);
     return size + (scaled - size) * factor;
 };
