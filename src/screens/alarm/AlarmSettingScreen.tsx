@@ -1,5 +1,5 @@
 // src/screens/alarm/AlarmSettingScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -7,10 +7,15 @@ import {
     Pressable,
     Switch,
     Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { getToken } from '../../lib/storage';
-import { updateNotificationSettings } from '../../api/notification';
+import {
+    updateNotificationSettings,
+    registerAndSyncPushToken,
+    sendTestNotification,
+} from '../../api/notification';
 
 type Time = {
     ampm: '오전' | '오후';
@@ -53,6 +58,15 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
     // 모달에서 임시로 조작할 시간
     const [picker, setPicker] = useState<ActivePicker>(null);
     const [tempTime, setTempTime] = useState<Time>(reviewTime);
+    const [testSending, setTestSending] = useState(false);
+
+    // 알림 설정 화면 진입 시 FCM 토큰 한 번 더 동기화 (권한 나중에 허용한 경우 대비)
+    useEffect(() => {
+        (async () => {
+            const token = await getToken();
+            if (token) registerAndSyncPushToken(token).catch(() => {});
+        })();
+    }, []);
 
     const formatTime = (t: Time) => {
         const mm = t.minute.toString().padStart(2, '0');
@@ -174,6 +188,33 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                             <Text style={styles.timeText}>{formatTime(reviewTime)}</Text>
                         </Pressable>
                     </View>
+
+                    <Pressable
+                        style={[styles.timeChip, styles.testButton]}
+                        onPress={async () => {
+                            const token = await getToken();
+                            if (!token) {
+                                Alert.alert('알림', '로그인이 필요합니다.');
+                                return;
+                            }
+                            setTestSending(true);
+                            try {
+                                await sendTestNotification(token);
+                                Alert.alert('테스트 알림', '발송했습니다. 기기에서 알림이 오는지 확인하세요.');
+                            } catch (e: any) {
+                                Alert.alert('테스트 실패', e?.message ?? 'FCM 토큰이 없거나 발송에 실패했습니다.');
+                            } finally {
+                                setTestSending(false);
+                            }
+                        }}
+                        disabled={testSending}
+                    >
+                        {testSending ? (
+                            <ActivityIndicator size="small" color="#5E82FF" />
+                        ) : (
+                            <Text style={styles.timeText}>테스트 알림 받기</Text>
+                        )}
+                    </Pressable>
                 </View>
 
                 {/* 리그 알림 */}
@@ -355,6 +396,10 @@ const styles = StyleSheet.create({
     timeText: {
         fontSize: fontScale(13),
         fontWeight: '600',
+    },
+    testButton: {
+        marginTop: scale(8),
+        alignSelf: 'flex-start',
     },
 
     modalOverlay: {
