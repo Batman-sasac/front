@@ -1,10 +1,4 @@
 import config from '../lib/config';
-<<<<<<< HEAD
-
-const API_BASE_URL = config.apiBaseUrl;
-
-=======
->>>>>>> origin/main
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
 
 // API Base URL - 실제 백엔드 서버 주소
@@ -96,12 +90,6 @@ export interface OAuthConfig {
     naver_redirect_uri?: string;
 }
 
-export async function fetchOAuthConfig(): Promise<OAuthConfig> {
-    const res = await fetch(`${API_BASE_URL}/config`);
-    if (!res.ok) throw new Error('OAuth 설정 정보를 불러오지 못했습니다.');
-    return res.json();
-}
-
 /** /config API 응답 타입 */
 export interface OAuthConfig {
     kakao_rest_api_key?: string;
@@ -118,29 +106,6 @@ export async function fetchOAuthConfig(): Promise<OAuthConfig> {
 }
 
 /**
-<<<<<<< HEAD
- * OAuth URL 생성 (.env 또는 /config API 활용)
- */
-export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
-    if (provider === 'naver') {
-        throw new Error('현재 네이버 로그인은 지원되지 않습니다.');
-    }
-
-    let kakaoRestApiKey = config.kakaoRestApiKey;
-    let redirectUri = config.kakaoRedirectUri || `${config.apiBaseUrl}/auth/kakao/mobile`;
-
-    if (!kakaoRestApiKey) {
-        const serverConfig = await fetchOAuthConfig();
-        kakaoRestApiKey = serverConfig.kakao_rest_api_key || '';
-        redirectUri = serverConfig.kakao_redirect_uri || redirectUri;
-    }
-
-    if (!kakaoRestApiKey) {
-        throw new Error('KAKAO_REST_API_KEY를 .env 또는 백엔드 설정에 추가해주세요.');
-    }
-
-    return `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(kakaoRestApiKey)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code`;
-=======
  * OAuth URL 생성 (.env/config fallback)
  */
 export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
@@ -168,7 +133,6 @@ export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> 
         throw new Error('NAVER_CLIENT_ID가 없습니다. .env 파일 또는 서버 설정을 확인하세요.');
     }
     return `https://nid.naver.com/oauth2.0/authorize?client_id=${encodeURIComponent(naverClientId)}&redirect_uri=${encodeURIComponent(naverRedirectUri)}&response_type=code&state=naver_mobile`;
->>>>>>> origin/main
 }
 
 /**
