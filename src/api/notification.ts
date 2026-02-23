@@ -94,20 +94,25 @@ export async function registerAndSyncPushToken(authToken: string): Promise<boole
         console.log('[FCM] 알림 권한 거부 —', permission.status);
         return false;
     }
-    console.log('[FCM] 알림 권한 허용됨, 디바이스 토큰 요청 중...');
+    console.log('[FCM] 알림 권한 허용됨, 푸시 토큰 요청 중...');
     if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
             name: 'default',
             importance: Notifications.AndroidImportance.DEFAULT,
         });
     }
-    const deviceToken = await Notifications.getDevicePushTokenAsync();
-    if (!deviceToken?.data) {
-        console.log('[FCM] 디바이스 토큰 없음 —', deviceToken);
+    // iOS: getDevicePushTokenAsync()는 APNs 토큰을 반환해 FCM과 호환되지 않음 → Expo 푸시 토큰 사용 (백엔드가 Expo API로 발송)
+    // Android: FCM 토큰 사용 (getDevicePushTokenAsync)
+    const pushToken =
+        Platform.OS === 'ios'
+            ? (await Notifications.getExpoPushTokenAsync()).data
+            : (await Notifications.getDevicePushTokenAsync()).data;
+    if (!pushToken) {
+        console.log('[FCM] 푸시 토큰 없음 —', Platform.OS, pushToken);
         return false;
     }
-    console.log('[FCM] 디바이스 토큰 발급됨, 백엔드로 전달 중...');
-    await updateFcmToken(authToken, deviceToken.data);
+    console.log('[FCM] 푸시 토큰 발급됨, 백엔드로 전달 중...');
+    await updateFcmToken(authToken, pushToken);
     console.log('[FCM] 푸시 토큰 등록·전달 완료');
     return true;
 }
