@@ -52,6 +52,8 @@ type Props = {
     initialRound?: Step; // 초기 라운드 설정 (복습용)
     reviewQuizId?: number | null; // 복습용 quiz ID
     subjectName?: string; // 과목명
+    currentStudyIndex?: number;
+    totalStudyCount?: number;
 };
 
 const BG = '#F6F7FB';
@@ -75,6 +77,8 @@ export default function ScaffoldingScreen({
     onSave,
     initialRound = '1-1', // 기본값 1라운드
     reviewQuizId = null, // 복습 quiz ID
+    currentStudyIndex = 0,
+    totalStudyCount = 1,
 }: Props) {
     const [step, setStep] = useState<Step>(initialRound);
     const isReviewMode = reviewQuizId != null;
@@ -839,8 +843,16 @@ export default function ScaffoldingScreen({
                                         }
                                     }
                                     const earnedXp = correctCount * 2;
-                                    setPopupTitle('축하합니다');
-                                    setPopupMessage(`학습을 완료해서 ${earnedXp}xp를 획득했어요`);
+                                    const isLastStudy = currentStudyIndex >= totalStudyCount - 1;
+                                    if (isLastStudy) {
+                                        setPopupTitle('축하합니다');
+                                        setPopupMessage(`학습을 완료해서 ${earnedXp}xp를 획득했어요`);
+                                    } else {
+                                        setPopupTitle('다음 학습으로 이동');
+                                        setPopupMessage(
+                                            `${currentStudyIndex + 1}번 학습을 완료했습니다. ${currentStudyIndex + 2}번 학습을 시작합니다.`
+                                        );
+                                    }
                                     setPopupOnConfirm(() => () => {
                                         if (onBackFromCompletion) {
                                             onBackFromCompletion();

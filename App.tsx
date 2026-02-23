@@ -69,7 +69,8 @@ export default function App() {
   const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습 퀴즈 ID
   const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
   const [subjectName, setSubjectName] = useState('');
-  const [cropInfo, setCropInfo] = useState<{ px: number; py: number; pw: number; ph: number } | null>(null);
+  const [cropBySourceIndex, setCropBySourceIndex] = useState<Record<number, { px: number; py: number; pw: number; ph: number }>>({});
+  const [batchEarnedXp, setBatchEarnedXp] = useState(0);
   const [rewardState, setRewardState] = useState({
     baseXP: 0,
     bonusXP: 0,
@@ -532,6 +533,47 @@ export default function App() {
   const [scaffoldingLoading, setScaffoldingLoading] = useState(false);
   const [scaffoldingError, setScaffoldingError] = useState<string | null>(null);
 
+  const loadScaffoldingForIndex = async (
+    sources: ImageSourcePropType[],
+    index: number,
+    cropMap: Record<number, { px: number; py: number; pw: number; ph: number }>,
+  ) => {
+    const target = sources[index] as any;
+    const uri = target?.uri as string | undefined;
+
+    if (!uri) {
+      setScaffoldingError('이미지 URI를 찾을 수 없습니다.');
+      setScaffoldingPayload(null);
+      setStep('home');
+      return;
+    }
+
+    setSelectedSourceIndex(index);
+    setScaffoldingLoading(true);
+    setScaffoldingError(null);
+
+    try {
+      const payload = await runOcr(uri, cropMap[index]);
+      setScaffoldingPayload(payload);
+      setStep('scaffolding');
+    } catch (e: any) {
+      const message = e?.message ?? 'OCR 추출에 실패했습니다.';
+      setScaffoldingPayload(null);
+      setScaffoldingError(message);
+
+      if (typeof message === 'string' && message.includes('무료 횟수')) {
+        Alert.alert('OCR 사용 한도', message);
+        setStep('home');
+        return;
+      }
+
+      Alert.alert('OCR 오류', message);
+      setStep('home');
+    } finally {
+      setScaffoldingLoading(false);
+    }
+  };
+
   // 홈 화면 통계 데이터
   const [weeklyGrowth, setWeeklyGrowth] = useState<{ labels: string[]; data: number[] } | undefined>();
   const [monthlyStats, setMonthlyStats] = useState<any>(undefined);
@@ -700,7 +742,8 @@ export default function App() {
             setCapturedSources([]);
             setSelectedSourceIndex(0);
             setSubjectName('');
-            setCropInfo(null);
+            setCropBySourceIndex({});
+            setBatchEarnedXp(0);
             setIsReviewMode(false);
             setReviewQuizId(null);
             void AsyncStorage.removeItem(TYPE_LABEL_KEY);
@@ -728,48 +771,22 @@ export default function App() {
         <SelectPicture
           sources={capturedSources}
           onBack={() => setStep('takePicture')}
-          onStartLearning={async (finalSources, isOcrNeeded, subject, cropInfo) => {
+          onStartLearning={async (finalSources, isOcrNeeded, subject, cropMap) => {
+            void isOcrNeeded;
             setCapturedSources(finalSources);
             if (subject) setSubjectName(subject);
-            if (cropInfo) setCropInfo(cropInfo);
+            const nextCropMap = cropMap ?? {};
+            setCropBySourceIndex(nextCropMap);
+            setBatchEarnedXp(0);
 
-            // 1) OCR 요청 (필요 시 crop 정보 포함)
-            const first = finalSources[0] as any;
-            const uri = first?.uri as string | undefined;
-
-            if (!uri) {
-              setScaffoldingError('이미지 URI를 찾을 수 없습니다.');
+            if (!finalSources.length) {
+              setScaffoldingError('학습할 이미지가 없습니다.');
               setScaffoldingPayload(null);
-              setStep('talkingStudy');
+              setStep('home');
               return;
             }
 
-            setScaffoldingLoading(true);
-            setScaffoldingError(null);
-
-            try {
-              const payload = await runOcr(uri, cropInfo);
-              console.log('OCR 성공, payload:', payload);
-              setScaffoldingPayload(payload);
-              // 말하기 학습을 스킵하고 바로 scaffolding으로
-              setStep('scaffolding');
-            } catch (e: any) {
-              const message = e?.message ?? 'OCR 추출에 실패했습니다.';
-              console.error('OCR 실패:', e);
-              setScaffoldingPayload(null);
-              setScaffoldingError(message);
-
-              if (typeof message === 'string' && message.includes('무료 횟수')) {
-                Alert.alert('OCR 사용 한도', message);
-                return;
-              }
-
-              Alert.alert('OCR 오류', message);
-              // OCR 실패 시 홈으로 이동
-              setStep('home');
-            } finally {
-              setScaffoldingLoading(false);
-            }
+            await loadScaffoldingForIndex(finalSources, 0, nextCropMap);
           }}
         />
       )}
@@ -783,6 +800,7 @@ export default function App() {
 
       {step === 'scaffolding' && (
         <ScaffoldingScreen
+          key={`study-${isReviewMode ? `review-${reviewQuizId ?? 'none'}` : `new-${selectedSourceIndex}`}`}
           onBack={() => {
             // 복습 모드에서 복습 화면으로
             if (isReviewMode) {
@@ -794,9 +812,17 @@ export default function App() {
             }
           }}
           onBackFromCompletion={async () => {
-            // 학습 완료 후 홈으로
+            if (!isReviewMode && selectedSourceIndex < capturedSources.length - 1) {
+              const nextIndex = selectedSourceIndex + 1;
+              await loadScaffoldingForIndex(capturedSources, nextIndex, cropBySourceIndex);
+              return;
+            }
+
+            // 전체 학습 완료 후 홈 이동
             setIsReviewMode(false);
             setReviewQuizId(null);
+            setBatchEarnedXp(0);
+            setCropBySourceIndex({});
             setStep('home');
             const usage = await refreshOcrUsage();
             if (!isSubscribed && isUsageLimitReached(usage)) {
@@ -811,15 +837,17 @@ export default function App() {
           initialRound={isReviewMode ? '3-1' : '1-1'} // 복습 모드면 3라운드로 시작
           reviewQuizId={reviewQuizId} // 복습 퀴즈 ID 전달
           subjectName={subjectName} // 과목명 전달
+          currentStudyIndex={selectedSourceIndex}
+          totalStudyCount={capturedSources.length}
           onRetry={async () => {
-            const first = capturedSources[0] as any;
-            const uri = first?.uri as string | undefined;
+            const current = capturedSources[selectedSourceIndex] as any;
+            const uri = current?.uri as string | undefined;
             if (!uri) return;
 
             setScaffoldingLoading(true);
             setScaffoldingError(null);
             try {
-              const payload = await runOcr(uri);
+              const payload = await runOcr(uri, cropBySourceIndex[selectedSourceIndex]);
               setScaffoldingPayload(payload);
             } catch (e: any) {
               setScaffoldingPayload(null);
@@ -869,13 +897,22 @@ export default function App() {
               grade_cnt: gradeCount,
             });
 
+            const isLastInBatch = selectedSourceIndex >= capturedSources.length - 1;
             const nextPoints = Number(gradeResult?.new_points);
             if (Number.isFinite(nextPoints)) {
-              setExp(nextPoints);
+              if (isLastInBatch) {
+                setExp(nextPoints);
+              }
             } else {
               const earnedXp = gradeCount * 2;
-              if (earnedXp > 0) {
-                setExp((prev) => prev + earnedXp);
+              if (isLastInBatch) {
+                const totalEarned = batchEarnedXp + earnedXp;
+                if (totalEarned > 0) {
+                  setExp((prev) => prev + totalEarned);
+                }
+                setBatchEarnedXp(0);
+              } else if (earnedXp > 0) {
+                setBatchEarnedXp((prev) => prev + earnedXp);
               }
             }
           }}
@@ -1041,4 +1078,3 @@ const stylesSub = StyleSheet.create({
     height: 58,
   },
 });
-

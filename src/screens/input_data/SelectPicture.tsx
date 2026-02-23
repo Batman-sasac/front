@@ -12,6 +12,7 @@ import {
     TextInput,
     ActivityIndicator,
     Platform,
+    Alert,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { getOcrUsage } from '../../api/ocr';
@@ -19,7 +20,12 @@ import { getOcrUsage } from '../../api/ocr';
 type Props = {
     sources: ImageSourcePropType[];
     onBack: () => void;
-    onStartLearning: (finalSources: ImageSourcePropType[], ocrLoading?: boolean, subjectName?: string, cropInfo?: { px: number; py: number; pw: number; ph: number }) => void;
+    onStartLearning: (
+        finalSources: ImageSourcePropType[],
+        ocrLoading?: boolean,
+        subjectName?: string,
+        cropByIndex?: Record<number, { px: number; py: number; pw: number; ph: number }>
+    ) => void;
 };
 
 const BG = '#F6F7FB';
@@ -57,7 +63,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         return sources[Math.min(selectedIndex, sources.length - 1)];
     }, [sources, selectedIndex]);
 
-    const recent4 = useMemo(() => (sources || []).slice(0, 4), [sources]);
+    const allSources = useMemo(() => (sources || []), [sources]);
 
     const [containerW, setContainerW] = useState(0);
     const [containerH, setContainerH] = useState(0);
@@ -70,6 +76,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     }, [containerW, containerH, imageW, imageH]);
 
     const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, w: 0, h: 0 });
+    const [cropByIndex, setCropByIndex] = useState<Record<number, { px: number; py: number; pw: number; ph: number }>>({});
 
     const cropRef = useRef<CropRect>(crop);
     const displayRef = useRef<DisplayRect>(displayRect);
@@ -174,6 +181,16 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     useEffect(() => {
         if (displayRect.dw <= 0 || displayRect.dh <= 0) return;
 
+        const saved = cropByIndex[selectedIndex];
+        if (saved && imageW > 0 && imageH > 0) {
+            const x = displayRect.dx + (saved.px / imageW) * displayRect.dw;
+            const y = displayRect.dy + (saved.py / imageH) * displayRect.dh;
+            const w = (saved.pw / imageW) * displayRect.dw;
+            const h = (saved.ph / imageH) * displayRect.dh;
+            setCrop({ x, y, w, h });
+            return;
+        }
+
         const w = displayRect.dw * 0.62;
         const h = displayRect.dh * 0.56;
         const x = displayRect.dx + (displayRect.dw - w) / 2;
@@ -184,7 +201,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         // containerRef도 함께 업데이트
         containerRef.current = { w: containerW, h: containerH };
         console.log('🖼️ Crop 초기화:', { x, y, w, h }, 'Container:', { w: containerW, h: containerH });
-    }, [displayRect.dx, displayRect.dy, displayRect.dw, displayRect.dh, selectedIndex, containerW, containerH]);
+    }, [displayRect.dx, displayRect.dy, displayRect.dw, displayRect.dh, selectedIndex, containerW, containerH, imageW, imageH, cropByIndex]);
 
     const getPixelCrop = () => {
         const d = displayRef.current;
@@ -210,6 +227,20 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     };
 
     const [isCropping, setIsCropping] = useState(false);
+
+    const persistCurrentCropForIndex = (idx: number) => {
+        const pixelCrop = getPixelCrop();
+        if (!pixelCrop) return;
+        setCropByIndex((prev) => ({
+            ...prev,
+            [idx]: {
+                px: pixelCrop.px,
+                py: pixelCrop.py,
+                pw: pixelCrop.pw,
+                ph: pixelCrop.ph,
+            },
+        }));
+    };
 
     const cropImage = async () => {
         if (!selectedSource) return;
@@ -239,10 +270,26 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
         try {
             setIsCropping(true);
-            console.log('Crop 좌표:', pixelCrop);
+            const nextCropByIndex = {
+                ...cropByIndex,
+                [selectedIndex]: {
+                    px: pixelCrop.px,
+                    py: pixelCrop.py,
+                    pw: pixelCrop.pw,
+                    ph: pixelCrop.ph,
+                },
+            };
 
-            // crop 정보를 onStartLearning에 함께 전달
-            onStartLearning(sources, true, subjectName, pixelCrop);
+            const missingIndex = sources.findIndex((_, idx) => !nextCropByIndex[idx]);
+            if (missingIndex >= 0) {
+                Alert.alert('안내', '모든 사진을 한 번씩 선택해 크롭 영역을 확인해 주세요.');
+                setCropByIndex(nextCropByIndex);
+                setSelectedIndex(missingIndex);
+                return;
+            }
+
+            // 이미지별 crop 정보를 onStartLearning에 전달
+            onStartLearning(sources, true, subjectName, nextCropByIndex);
         } catch (error) {
             console.error('Crop 에러:', error);
             alert('사진 자르기에 실패했습니다.');
@@ -608,12 +655,15 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.recentRow}
                     >
-                        {recent4.map((src, idx) => {
+                        {allSources.map((src, idx) => {
                             const active = idx === selectedIndex;
                             return (
                                 <Pressable
                                     key={String(idx)}
-                                    onPress={() => setSelectedIndex(idx)}
+                                    onPress={() => {
+                                        persistCurrentCropForIndex(selectedIndex);
+                                        setSelectedIndex(idx);
+                                    }}
                                     style={[styles.thumbBtn, active && styles.thumbBtnActive]}
                                 >
                                     <Image source={src} style={styles.thumb} />
