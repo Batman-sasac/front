@@ -314,7 +314,7 @@ export async function submitReviewStudy(payload: ReviewStudyRequest) {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/review-study`, {
+    const res = await fetch(`${API_BASE}/study/review-study`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -369,6 +369,5 @@ export async function getMonthlyStats(): Promise<MonthlyStatsResponse> {
     if (!res.ok) throw new Error(`Monthly Stats HTTP ${res.status}`);
     return res.json();
 }
-
 
 

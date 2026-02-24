@@ -22,7 +22,7 @@ import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse } from './src/api/ocr';
+import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy } from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
@@ -838,6 +838,16 @@ export default function App() {
           onSave={async (userAnswers) => {
             // 복습 모드에서는 저장하지 않음
             if (isReviewMode) {
+              if (reviewQuizId != null) {
+                const reviewResult = await submitReviewStudy({
+                  quiz_id: reviewQuizId,
+                  user_answers: userAnswers,
+                });
+                const nextPoints = Number(reviewResult?.new_points);
+                if (Number.isFinite(nextPoints)) {
+                  setExp(nextPoints);
+                }
+              }
               setIsReviewMode(false);
               setReviewQuizId(null);
               setStep('home');
