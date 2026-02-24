@@ -79,40 +79,40 @@ export async function updateFcmToken(token: string, fcmToken: string) {
 }
 
 /**
- * FCM 푸시 토큰 생성(Expo) 후 백엔드로 전달.
+ * FCM 푸시 토큰 생성 후 백엔드로 전달.
  * - 홈 진입 시(App.tsx) + 알림 설정 화면 진입 시 재시도용으로 사용.
  * - 웹이면 스킵. 권한 거부 시 false. 성공 시 true.
  */
 export async function registerAndSyncPushToken(authToken: string): Promise<boolean> {
-    console.log('[FCM] 푸시 토큰 등록 시작');
-    if (Platform.OS === 'web') {
-        console.log('[FCM] 웹 환경 — 스킵');
+    try {
+        
+        alert('FCM 프로세스 시작됨!'); 
+
+        console.log('[FCM] 푸시 토큰 등록 시작');
+        if (Platform.OS === 'web') return false;
+
+        const permission = await Notifications.requestPermissionsAsync();
+        if (permission.status !== 'granted') {
+            alert('알림 권한이 거부된 상태입니다.');
+            console.log('[FCM] 권한 없음');
+            return false;
+        }
+
+        // iOS/Android 모두 기기 고유 토큰 요청
+        const tokenResponse = await Notifications.getDevicePushTokenAsync();
+        const pushToken = tokenResponse.data;
+
+        if (!pushToken) {
+            throw new Error('토큰 데이터가 비어있음');
+        }
+
+        // 전체 토큰 로그 출력 (테스트 시 복사해서 Firebase 콘솔에 직접 넣어보세요)
+        console.log('[FCM] 발급된 실제 토큰:', pushToken); 
+
+        await updateFcmToken(authToken, pushToken);
+        return true;
+    } catch (error) {
+        console.error('[FCM] 등록 과정 중 치명적 에러:', error);
         return false;
     }
-    const permission = await Notifications.requestPermissionsAsync();
-    if (permission.status !== 'granted') {
-        console.log('[FCM] 알림 권한 거부 —', permission.status);
-        return false;
-    }
-    console.log('[FCM] 알림 권한 허용됨, 푸시 토큰 요청 중...');
-    if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
-            importance: Notifications.AndroidImportance.DEFAULT,
-        });
-    }
-    // iOS: getDevicePushTokenAsync()는 APNs 토큰을 반환해 FCM과 호환되지 않음 → Expo 푸시 토큰 사용 (백엔드가 Expo API로 발송)
-    // Android: FCM 토큰 사용 (getDevicePushTokenAsync)
-    const pushToken =
-        Platform.OS === 'ios'
-            ? (await Notifications.getExpoPushTokenAsync()).data
-            : (await Notifications.getDevicePushTokenAsync()).data;
-    if (!pushToken) {
-        console.log('[FCM] 푸시 토큰 없음 —', Platform.OS, pushToken);
-        return false;
-    }
-    console.log('[FCM] 푸시 토큰 발급됨, 백엔드로 전달 중...');
-    await updateFcmToken(authToken, pushToken);
-    console.log('[FCM] 푸시 토큰 등록·전달 완료');
-    return true;
 }
