@@ -16,6 +16,7 @@
       "buildNumber": "21",
       "supportsTablet": true,
       "bundleIdentifier": "com.batman.bat",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
@@ -25,7 +26,6 @@
         "NSPhotoLibraryUsageDescription": "이미지 선택을 위해 사진 라이브러리 접근 권한이 필요합니다.",
         "NSPhotoLibraryAdditionsUsageDescription": "이미지를 저장하기 위해 사진 라이브러리 저장 권한이 필요합니다.",
         "UIBackgroundModes": ["fetch", "remote-notification"],
-
         "LSApplicationQueriesSchemes": [
           "kakaokompassauth",
           "kakaolink",
@@ -34,9 +34,7 @@
         ],
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": [
-              "kakaoe365864e7fe56bb2f65a88afd873b33d" 
-            ]
+            "CFBundleURLSchemes": ["kakaoe365864e7fe56bb2f65a88afd873b33d"]
           }
         ]
       }
@@ -48,8 +46,21 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.frontend",
+      "googleServicesFile": "./google-services.json",
       "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]
     },
+    "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useHooks": true
+          }
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },

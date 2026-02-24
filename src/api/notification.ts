@@ -58,7 +58,8 @@ export async function updateNotificationSettings(token: string, payload: Notific
 
 export async function updateFcmToken(token: string, fcmToken: string) {
     const truncated = fcmToken.length > 20 ? `${fcmToken.slice(0, 10)}...${fcmToken.slice(-8)}` : fcmToken;
-    console.log('[FCM] 토큰 전달 중 —', truncated);
+    const tokenKind = fcmToken.startsWith('ExponentPushToken[') ? 'Expo' : 'FCM';
+    console.log('[Push] 토큰 전달 중 —', tokenKind, truncated);
     const response = await fetch(`${API_BASE_URL}/firebase/user/update-fcm-token`, {
         method: 'POST',
         headers: {
@@ -80,9 +81,8 @@ export async function updateFcmToken(token: string, fcmToken: string) {
 
 /**
  * 푸시 토큰 생성 후 백엔드로 전달.
- * - iOS: ExponentPushToken (getExpoPushTokenAsync) → 백엔드가 Expo Push API로 발송
- * - Android: FCM 토큰 (getDevicePushTokenAsync) → 백엔드가 FCM으로 발송
- * - 홈 진입 시(App.tsx) + 알림 설정 화면 진입 시 재시도용으로 사용.
+ * - 가능하면 @react-native-firebase/messaging 의 getToken() 사용 (진짜 FCM 토큰, iOS/Android 공통).
+ * - Firebase 미사용 시: iOS → ExponentPushToken(Expo), Android → getDevicePushTokenAsync(FCM).
  * - 웹이면 스킵. 권한 거부 시 false. 성공 시 true.
  */
 export async function registerAndSyncPushToken(authToken: string): Promise<boolean> {
@@ -103,17 +103,37 @@ export async function registerAndSyncPushToken(authToken: string): Promise<boole
             });
         }
 
-        // iOS: ExponentPushToken → 백엔드 Expo API. Android: FCM 토큰 → 백엔드 FCM.
-        const pushToken =
-            Platform.OS === 'ios'
-                ? (await Notifications.getExpoPushTokenAsync()).data
-                : (await Notifications.getDevicePushTokenAsync()).data;
+        let pushToken: string | null = null;
+        try {
+            const messaging = (await import('@react-native-firebase/messaging')).default;
+            const authStatus = await messaging().requestPermission();
+            const enabled =
+                authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+                authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+            if (!enabled) {
+                console.log('[Push] Firebase 알림 권한 없음, Expo 토큰으로 fallback');
+            } else {
+                pushToken = await messaging().getToken();
+                if (pushToken) console.log('[Push] Firebase FCM 토큰 사용 (진짜 FCM)');
+            }
+        } catch (_) {
+            console.log('[Push] @react-native-firebase/messaging 없음 또는 오류 → Expo/디바이스 토큰 사용');
+        }
+
+        if (!pushToken) {
+            // Fallback: iOS → Expo, Android → FCM(디바이스)
+            pushToken =
+                Platform.OS === 'ios'
+                    ? (await Notifications.getExpoPushTokenAsync()).data
+                    : (await Notifications.getDevicePushTokenAsync()).data;
+        }
 
         if (!pushToken) {
             throw new Error('토큰 데이터가 비어있음');
         }
 
-        console.log('[Push] 발급된 토큰:', pushToken);
+        const tokenType = pushToken.startsWith('ExponentPushToken[') ? 'Expo(iOS용)' : 'FCM';
+        console.log('[Push] 플랫폼:', Platform.OS, '| 토큰 형식:', tokenType, '| 앞 50자:', pushToken.slice(0, 50) + (pushToken.length > 50 ? '...' : ''));
 
         await updateFcmToken(authToken, pushToken);
         return true;
