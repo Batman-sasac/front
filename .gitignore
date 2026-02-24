@@ -42,3 +42,6 @@ yarn-error.*
 .expo/ 
 
 .env
+
+google-services.json
+GoogleService-Info.plist
