@@ -99,7 +99,7 @@ export async function registerAndSyncPushToken(authToken: string): Promise<boole
         }
 
         // iOS/Android 모두 기기 고유 토큰 요청
-        const tokenResponse = await Notifications.getDevicePushTokenAsync();
+        const tokenResponse = await Notifications.getExpoPushTokenAsync();
         const pushToken = tokenResponse.data;
 
         if (!pushToken) {
