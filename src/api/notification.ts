@@ -79,40 +79,46 @@ export async function updateFcmToken(token: string, fcmToken: string) {
 }
 
 /**
- * FCM 푸시 토큰 생성 후 백엔드로 전달.
+ * 푸시 토큰 생성 후 백엔드로 전달.
+ * - iOS: ExponentPushToken (getExpoPushTokenAsync) → 백엔드가 Expo Push API로 발송
+ * - Android: FCM 토큰 (getDevicePushTokenAsync) → 백엔드가 FCM으로 발송
  * - 홈 진입 시(App.tsx) + 알림 설정 화면 진입 시 재시도용으로 사용.
  * - 웹이면 스킵. 권한 거부 시 false. 성공 시 true.
  */
 export async function registerAndSyncPushToken(authToken: string): Promise<boolean> {
     try {
-        
-        alert('FCM 프로세스 시작됨!'); 
-
-        console.log('[FCM] 푸시 토큰 등록 시작');
+        console.log('[Push] 푸시 토큰 등록 시작');
         if (Platform.OS === 'web') return false;
 
         const permission = await Notifications.requestPermissionsAsync();
         if (permission.status !== 'granted') {
-            alert('알림 권한이 거부된 상태입니다.');
-            console.log('[FCM] 권한 없음');
+            console.log('[Push] 권한 없음');
             return false;
         }
 
-        // iOS/Android 모두 기기 고유 토큰 요청
-        const tokenResponse = await Notifications.getExpoPushTokenAsync();
-        const pushToken = tokenResponse.data;
+        if (Platform.OS === 'android') {
+            await Notifications.setNotificationChannelAsync('default', {
+                name: 'default',
+                importance: Notifications.AndroidImportance.DEFAULT,
+            });
+        }
+
+        // iOS: ExponentPushToken → 백엔드 Expo API. Android: FCM 토큰 → 백엔드 FCM.
+        const pushToken =
+            Platform.OS === 'ios'
+                ? (await Notifications.getExpoPushTokenAsync()).data
+                : (await Notifications.getDevicePushTokenAsync()).data;
 
         if (!pushToken) {
             throw new Error('토큰 데이터가 비어있음');
         }
 
-        // 전체 토큰 로그 출력 (테스트 시 복사해서 Firebase 콘솔에 직접 넣어보세요)
-        console.log('[FCM] 발급된 실제 토큰:', pushToken); 
+        console.log('[Push] 발급된 토큰:', pushToken);
 
         await updateFcmToken(authToken, pushToken);
         return true;
     } catch (error) {
-        console.error('[FCM] 등록 과정 중 치명적 에러:', error);
+        console.error('[Push] 등록 과정 중 에러:', error);
         return false;
     }
 }
