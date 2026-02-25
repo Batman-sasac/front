@@ -45,13 +45,11 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.frontend",
-      "googleServicesFile": "./google-services.json",
+      "package": "com.batman.bat",
       "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]
     },
     "plugins": [
-      "@react-native-firebase/app",
-      "@react-native-firebase/messaging",
+      "expo-notifications", 
       [
         "expo-build-properties",
         {
