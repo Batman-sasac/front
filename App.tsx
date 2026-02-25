@@ -250,7 +250,7 @@ export default function App() {
     checkAutoLogin();
   }, []);
 
-  // 로그인 후 홈에 들어오면: 푸시 토큰 생성(iOS=Expo/Android=FCM) → 백엔드에 전달
+  // 로그인 후 홈에 들어오면: iOS만 Expo 푸시 토큰 생성 후 백엔드에 전달
   useEffect(() => {
     if (step !== 'home' || pushTokenSynced) return;
 
