@@ -517,10 +517,11 @@ export default function App() {
   const [capturedSources, setCapturedSources] = useState<ImageSourcePropType[]>([]);
 
   const [scaffoldingPayload, setScaffoldingPayload] = useState<ScaffoldingPayload | null>(null);
+  const [scaffoldingPayloads, setScaffoldingPayloads] = useState<ScaffoldingPayload[]>([]);
   const [scaffoldingLoading, setScaffoldingLoading] = useState(false);
   const [scaffoldingError, setScaffoldingError] = useState<string | null>(null);
 
-  const loadScaffoldingForIndex = async (
+  const runOcrForIndex = async (
     sources: ImageSourcePropType[],
     index: number,
     cropMap: Record<number, { px: number; py: number; pw: number; ph: number }>,
@@ -529,20 +530,31 @@ export default function App() {
     const uri = target?.uri as string | undefined;
 
     if (!uri) {
-      setScaffoldingError('이미지 URI를 찾을 수 없습니다.');
-      setScaffoldingPayload(null);
-      setStep('home');
-      return;
+      throw new Error(`${index + 1}번째 이미지 URI를 찾을 수 없습니다.`);
     }
 
-    setSelectedSourceIndex(index);
+    return runOcr(uri, cropMap[index]);
+  };
+
+  const preloadScaffoldingPayloads = async (
+    sources: ImageSourcePropType[],
+    cropMap: Record<number, { px: number; py: number; pw: number; ph: number }>,
+  ) => {
     setScaffoldingLoading(true);
     setScaffoldingError(null);
+    let shouldEnterScaffolding = false;
 
     try {
-      const payload = await runOcr(uri, cropMap[index]);
-      setScaffoldingPayload(payload);
-      setStep('scaffolding');
+      const nextPayloads: ScaffoldingPayload[] = [];
+      for (let i = 0; i < sources.length; i += 1) {
+        const payload = await runOcrForIndex(sources, i, cropMap);
+        nextPayloads.push(payload);
+      }
+
+      setScaffoldingPayloads(nextPayloads);
+      setSelectedSourceIndex(0);
+      setScaffoldingPayload(nextPayloads[0] ?? null);
+      shouldEnterScaffolding = true;
     } catch (e: any) {
       const message = e?.message ?? 'OCR 추출에 실패했습니다.';
       setScaffoldingPayload(null);
@@ -558,6 +570,10 @@ export default function App() {
       setStep('home');
     } finally {
       setScaffoldingLoading(false);
+    }
+
+    if (shouldEnterScaffolding) {
+      setStep('scaffolding');
     }
   };
 
@@ -591,414 +607,460 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={{ flex: 1 }} edges={safeAreaEdges}>
         <View style={{ flex: 1 }}>
-      {step === 'splash' && (
-        <Splash duration={1500} onDone={() => { }} />
-      )}
+          {step === 'splash' && (
+            <Splash duration={1500} onDone={() => { }} />
+          )}
 
-      {step === 'login' && (
-        <LoginScreen
-          onLoginSuccess={handleLoginSuccess}
-          onNicknameRequired={handleNicknameRequired}
-        />
-      )}
-
-
-      {step === 'nickname' && (
-        <NicknameScreen
-          email={userEmail}
-          socialId={userSocialId}
-          onNicknameSet={handleNicknameSet}
-        />
-      )}
-
-      {step === 'goal' && (
-        <GoalSettingScreen
-          onSubmit={async (goal) => {
-            try {
-              await setStudyGoal(goal);
-              setMonthlyGoal(goal);
-              setStep('typeIntro');
-            } catch (error: any) {
-              Alert.alert('목표 설정 실패', error?.message ?? '목표 설정에 실패했습니다.');
-            }
-          }}
-        />
-      )}
-
-      {step === 'typeIntro' && (
-        <TypeIntroScreen
-          nickname={nickname}
-          onStartTest={() => setStep('typeTest')}
-        />
-      )}
-
-      {step === 'typeTest' && (
-        <TypeTestScreen
-          onFinish={async (result) => {
-            setTypeResult(result);
-            // typeKey로 프로필을 찾아 title 사용
-            const profile = typeProfiles[result.typeKey];
-            setTypeLabel(profile.title);
-            await AsyncStorage.setItem(TYPE_LABEL_KEY, profile.title);
-            setStep('result');
-          }}
-        />
-      )}
-
-      {step === 'result' && typeResult && (
-        <TypeResultScreen
-          nickname={nickname}
-          result={typeResult}
-          onGoHome={() => setStep('home')}
-        />
-      )}
-
-      {step === 'home' && (
-        <HomeScreen
-          nickname={nickname}
-          typeLabel={typeLabel}
-          level={level}
-          exp={exp}
-          streak={streak}
-          hasCheckedInToday={hasCheckedInToday}
-          onCheckIn={handleDailyCheckIn}
-          rewardState={rewardState}
-          onCloseBaseReward={handleCloseBaseReward}
-          onCloseBonusReward={handleCloseBonusReward}
-          weekAttendance={weekAttendance}
-          weeklyGrowth={weeklyGrowth}
-          monthlyStats={monthlyStats}
-          monthlyGoal={monthlyGoal}
-          onNavigate={handleMainNavigate}
-          onLogout={handleLogout}
-        />
-      )}
-
-      {step === 'league' && (
-        <LeagueScreen
-          onNavigate={handleSidebarNavigate}
-          onLogout={handleLogout}
-          currentTier={currentLeagueTier}
-          users={leagueUsers}
-          remainingText={leagueRemainingText}
-        />
-      )}
-      {step === 'alarm' && (
-        <AlarmScreen
-          onNavigate={(screen) => setStep(screen)}
-        />
-      )}
-      {step === 'alarmSetting' && (
-        <AlarmSettingScreen
-          onNavigate={(screen) => setStep(screen as Step)}
-        />
-      )}
-      {step === 'mypage' && (
-        <MyPageScreen
-          nickname={nickname}
-          typeLabel={typeLabel}
-          level={level}
-          totalStudyCount={totalStudyCount}
-          continuousDays={continuousDays}
-          monthlyGoal={monthlyGoal}
-          onNavigate={handleMainNavigate}
-          onMonthlyGoalChange={async (goal) => {
-            try {
-              await setStudyGoal(goal);
-              setMonthlyGoal(goal);
-            } catch (error: any) {
-              Alert.alert('목표 설정 실패', error?.message ?? '목표 설정에 실패했습니다.');
-            }
-          }}
-          onNicknameChange={(newNickname) => setNickname(newNickname)}
-          onLogout={handleLogout}
-          isSubscribed={isSubscribed}
-          onPlanManage={handlePlanManageOpen}
-          onWithdraw={() => {
-            // 모든 상태 초기화
-            setNickname('');
-            setUserEmail('');
-            setUserSocialId('');
-            setTypeResult(null);
-            setTypeLabel('');
-            setLevel(1);
-            setExp(0);
-            setMonthlyGoal(null);
-            setStreak(0);
-            setLastAttendanceDate(null);
-            setCapturedSources([]);
-            setSelectedSourceIndex(0);
-            setSubjectName('');
-            setCropBySourceIndex({});
-            setBatchEarnedXp(0);
-            setIsReviewMode(false);
-            setReviewQuizId(null);
-            void AsyncStorage.removeItem(TYPE_LABEL_KEY);
-
-            // 로그인 화면으로 이동
-            setStep('login');
-          }}
-        />
-      )}
-
-      {/* 자료 입력: 촬영 화면 */}
-      {step === 'takePicture' && (
-        <TakePicture
-          onBack={() => setStep('home')}
-          onDone={(sources) => {
-            setCapturedSources(sources);
-            setStep('selectPicture');
-          }}
-        />
-      )}
+          {step === 'login' && (
+            <LoginScreen
+              onLoginSuccess={handleLoginSuccess}
+              onNicknameRequired={handleNicknameRequired}
+            />
+          )}
 
 
-      {/* 자료 입력: 선택/미리보기 화면 */}
-      {step === 'selectPicture' && (
-        <SelectPicture
-          sources={capturedSources}
-          onBack={() => setStep('takePicture')}
-          onStartLearning={async (finalSources, isOcrNeeded, subject, cropMap) => {
-            void isOcrNeeded;
-            setCapturedSources(finalSources);
-            if (subject) setSubjectName(subject);
-            const nextCropMap = cropMap ?? {};
-            setCropBySourceIndex(nextCropMap);
-            setBatchEarnedXp(0);
+          {step === 'nickname' && (
+            <NicknameScreen
+              email={userEmail}
+              socialId={userSocialId}
+              onNicknameSet={handleNicknameSet}
+            />
+          )}
 
-            if (!finalSources.length) {
-              setScaffoldingError('학습할 이미지가 없습니다.');
-              setScaffoldingPayload(null);
-              setStep('home');
-              return;
-            }
-
-            await loadScaffoldingForIndex(finalSources, 0, nextCropMap);
-          }}
-        />
-      )}
-      {step === 'talkingStudy' && (
-        <TalkingStudyScreen
-          onBack={() => setStep('selectPicture')}
-          onSkip={() => setStep('scaffolding')}
-          onDone={() => setStep('scaffolding')}
-        />
-      )}
-
-      {step === 'scaffolding' && (
-        <ScaffoldingScreen
-          key={`study-${isReviewMode ? `review-${reviewQuizId ?? 'none'}` : `new-${selectedSourceIndex}`}`}
-          onBack={() => {
-            // 복습 모드에서 복습 화면으로
-            if (isReviewMode) {
-              setIsReviewMode(false);
-              setReviewQuizId(null);
-              setStep('brushup');
-            } else {
-              setStep('selectPicture');
-            }
-          }}
-          onBackFromCompletion={async () => {
-            if (!isReviewMode && selectedSourceIndex < capturedSources.length - 1) {
-              const nextIndex = selectedSourceIndex + 1;
-              await loadScaffoldingForIndex(capturedSources, nextIndex, cropBySourceIndex);
-              return;
-            }
-
-            // 전체 학습 완료 후 홈 이동
-            setIsReviewMode(false);
-            setReviewQuizId(null);
-            setBatchEarnedXp(0);
-            setCropBySourceIndex({});
-            setStep('home');
-            const usage = await refreshOcrUsage();
-            if (!isSubscribed && isUsageLimitReached(usage)) {
-              setShowUsageExhaustedModal(true);
-            }
-          }}
-          sources={capturedSources}
-          selectedIndex={selectedSourceIndex}
-          payload={scaffoldingPayload}
-          loading={scaffoldingLoading}
-          error={scaffoldingError}
-          initialRound={isReviewMode ? '3-1' : '1-1'} // 복습 모드면 3라운드로 시작
-          reviewQuizId={reviewQuizId} // 복습 퀴즈 ID 전달
-          subjectName={subjectName} // 과목명 전달
-          currentStudyIndex={selectedSourceIndex}
-          totalStudyCount={capturedSources.length}
-          onRetry={async () => {
-            const current = capturedSources[selectedSourceIndex] as any;
-            const uri = current?.uri as string | undefined;
-            if (!uri) return;
-
-            setScaffoldingLoading(true);
-            setScaffoldingError(null);
-            try {
-              const payload = await runOcr(uri, cropBySourceIndex[selectedSourceIndex]);
-              setScaffoldingPayload(payload);
-            } catch (e: any) {
-              setScaffoldingPayload(null);
-              setScaffoldingError(e?.message ?? '재시도에 실패했습니다.');
-            } finally {
-              setScaffoldingLoading(false);
-            }
-          }}
-          onSave={async (userAnswers) => {
-            // 복습 모드에서는 저장하지 않음
-            if (isReviewMode) {
-              if (reviewQuizId != null) {
-                const reviewResult = await submitReviewStudy({
-                  quiz_id: reviewQuizId,
-                  user_answers: userAnswers,
-                });
-                const nextPoints = Number(reviewResult?.new_points);
-                if (Number.isFinite(nextPoints)) {
-                  setExp(nextPoints);
+          {step === 'goal' && (
+            <GoalSettingScreen
+              onSubmit={async (goal) => {
+                try {
+                  await setStudyGoal(goal);
+                  setMonthlyGoal(goal);
+                  setStep('typeIntro');
+                } catch (error: any) {
+                  Alert.alert('목표 설정 실패', error?.message ?? '목표 설정에 실패했습니다.');
                 }
-              }
-              setIsReviewMode(false);
-              setReviewQuizId(null);
-              setStep('home');
-              return;
-            }
+              }}
+            />
+          )}
 
-            if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
+          {step === 'typeIntro' && (
+            <TypeIntroScreen
+              nickname={nickname}
+              onStartTest={() => setStep('typeTest')}
+            />
+          )}
 
-            const blanks = scaffoldingPayload.blanks ?? [];
-            const keywords = blanks.map((b) => b.word);
+          {step === 'typeTest' && (
+            <TypeTestScreen
+              onFinish={async (result) => {
+                setTypeResult(result);
+                // typeKey로 프로필을 찾아 title 사용
+                const profile = typeProfiles[result.typeKey];
+                setTypeLabel(profile.title);
+                await AsyncStorage.setItem(TYPE_LABEL_KEY, profile.title);
+                setStep('result');
+              }}
+            />
+          )}
 
-            const ocrText = {
-              pages: [{ original_text: scaffoldingPayload.extractedText, keywords }],
-              blanks: blanks.map((b, i) => ({ blank_index: i, word: b.word, page_index: 0 })),
-              quiz: { raw: scaffoldingPayload.extractedText },
-            };
+          {step === 'result' && typeResult && (
+            <TypeResultScreen
+              nickname={nickname}
+              result={typeResult}
+              onGoHome={() => setStep('home')}
+            />
+          )}
 
-            const gradeCount = userAnswers.reduce((acc, ua, idx) => {
-              const isCorrect = (ua ?? '').trim().toLowerCase() === (keywords[idx] ?? '').trim().toLowerCase();
-              return acc + (isCorrect ? 1 : 0);
-            }, 0);
+          {step === 'home' && (
+            <HomeScreen
+              nickname={nickname}
+              typeLabel={typeLabel}
+              level={level}
+              exp={exp}
+              streak={streak}
+              hasCheckedInToday={hasCheckedInToday}
+              onCheckIn={handleDailyCheckIn}
+              rewardState={rewardState}
+              onCloseBaseReward={handleCloseBaseReward}
+              onCloseBonusReward={handleCloseBonusReward}
+              weekAttendance={weekAttendance}
+              weeklyGrowth={weeklyGrowth}
+              monthlyStats={monthlyStats}
+              monthlyGoal={monthlyGoal}
+              onNavigate={handleMainNavigate}
+              onLogout={handleLogout}
+            />
+          )}
 
-            const gradeResult = await gradeStudy({
-              quiz_id: 0,
-              correct_answers: keywords,
-              answer: keywords,
-              user_answer: userAnswers,
-              quiz_html: scaffoldingPayload.extractedText,
-              ocr_text: ocrText,
-              // backend compatibility
-              user_answers: userAnswers,
-              subject_name: scaffoldingPayload.title,
-              study_name: scaffoldingPayload.title,
-              original_text: [scaffoldingPayload.extractedText],
-              keywords,
-              grade_cnt: gradeCount,
-            });
-
-            const isLastInBatch = selectedSourceIndex >= capturedSources.length - 1;
-            const nextPoints = Number(gradeResult?.new_points);
-            if (Number.isFinite(nextPoints)) {
-              if (isLastInBatch) {
-                setExp(nextPoints);
-              }
-            } else {
-              const earnedXp = gradeCount * 2;
-              if (isLastInBatch) {
-                const totalEarned = batchEarnedXp + earnedXp;
-                if (totalEarned > 0) {
-                  setExp((prev) => prev + totalEarned);
+          {step === 'league' && (
+            <LeagueScreen
+              onNavigate={handleSidebarNavigate}
+              onLogout={handleLogout}
+              currentTier={currentLeagueTier}
+              users={leagueUsers}
+              remainingText={leagueRemainingText}
+            />
+          )}
+          {step === 'alarm' && (
+            <AlarmScreen
+              onNavigate={(screen) => setStep(screen)}
+            />
+          )}
+          {step === 'alarmSetting' && (
+            <AlarmSettingScreen
+              onNavigate={(screen) => setStep(screen as Step)}
+            />
+          )}
+          {step === 'mypage' && (
+            <MyPageScreen
+              nickname={nickname}
+              typeLabel={typeLabel}
+              level={level}
+              totalStudyCount={totalStudyCount}
+              continuousDays={continuousDays}
+              monthlyGoal={monthlyGoal}
+              onNavigate={handleMainNavigate}
+              onMonthlyGoalChange={async (goal) => {
+                try {
+                  await setStudyGoal(goal);
+                  setMonthlyGoal(goal);
+                } catch (error: any) {
+                  Alert.alert('목표 설정 실패', error?.message ?? '목표 설정에 실패했습니다.');
                 }
+              }}
+              onNicknameChange={(newNickname) => setNickname(newNickname)}
+              onLogout={handleLogout}
+              isSubscribed={isSubscribed}
+              onPlanManage={handlePlanManageOpen}
+              onWithdraw={() => {
+                // 모든 상태 초기화
+                setNickname('');
+                setUserEmail('');
+                setUserSocialId('');
+                setTypeResult(null);
+                setTypeLabel('');
+                setLevel(1);
+                setExp(0);
+                setMonthlyGoal(null);
+                setStreak(0);
+                setLastAttendanceDate(null);
+                setCapturedSources([]);
+                setSelectedSourceIndex(0);
+                setSubjectName('');
+                setCropBySourceIndex({});
                 setBatchEarnedXp(0);
-              } else if (earnedXp > 0) {
-                setBatchEarnedXp((prev) => prev + earnedXp);
-              }
-            }
-          }}
-        />
+                setIsReviewMode(false);
+                setReviewQuizId(null);
+                void AsyncStorage.removeItem(TYPE_LABEL_KEY);
 
-      )}
+                // 로그인 화면으로 이동
+                setStep('login');
+              }}
+            />
+          )}
 
-      {step === 'brushup' && (
-        <BrushUPScreen
-          onBack={() => setStep('home')}
-          // 복습 보정
-          onNavigate={handleSidebarNavigate}
-          onLogout={handleLogout}
-          onCardPress={(card) => {
-            setIsReviewMode(true);
-            setReviewQuizId(card.quiz_id || null);
-            setStep('scaffolding');
-          }}
-        />
-      )}
+          {/* 자료 입력: 촬영 화면 */}
+          {step === 'takePicture' && (
+            <TakePicture
+              onBack={() => setStep('home')}
+              onDone={(sources) => {
+                setCapturedSources(sources);
+                setSelectedSourceIndex(0);
+                setScaffoldingPayloads([]);
+                setScaffoldingPayload(null);
+                setScaffoldingError(null);
+                setStep('selectPicture');
+              }}
+            />
+          )}
 
-      {step === 'subscribe' && (
-        <SubscribeScreen
-          isSubscribed={isSubscribed}
-          ocrUsage={ocrUsage}
-          onBack={() => setStep('mypage')}
-          onSubscribe={() => {
-            setStep('mypage');
-            setTimeout(() => {
-              Alert.alert('안내', '추후 업데이트 후 제공됩니다');
-            }, 0);
-          }}
-          onCancelSubscribe={() => {
-            setIsSubscribed(false);
-            setStep('mypage');
-          }}
-        />
-      )}
 
-      {step === 'error' && (
-        <ErrorScreen
-          onGoHome={() => setStep('home')}
-          onRetry={() => {
-            if (Platform.OS === 'web' && typeof window !== 'undefined') {
-              window.location.reload();
-              return;
-            }
-            setStep('home');
-          }}
-          onSubmitReport={(message) => {
-            console.log('[오류 제보]', message);
-          }}
-        />
-      )}
+          {/* 자료 입력: 선택/미리보기 화면 */}
+          {step === 'selectPicture' && (
+            <SelectPicture
+              sources={capturedSources}
+              onBack={() => setStep('takePicture')}
+              onStartLearning={async (finalSources, isOcrNeeded, subject, cropMap) => {
+                void isOcrNeeded;
+                setCapturedSources(finalSources);
+                if (subject) setSubjectName(subject);
+                const nextCropMap = cropMap ?? {};
+                setCropBySourceIndex(nextCropMap);
+                setBatchEarnedXp(0);
 
-      <Modal visible={showUsageExhaustedModal} transparent animationType="fade" onRequestClose={() => setShowUsageExhaustedModal(false)}>
-        <View style={stylesSub.modalBackdrop}>
-          <View style={stylesSub.modalCard}>
-            <View style={stylesSub.modalHeader}>
-              <Text style={stylesSub.modalTitle}>사용량 소진 안내</Text>
-              <Pressable onPress={() => setShowUsageExhaustedModal(false)}>
-                <Image source={require('./assets/subscribe/close.png')} style={stylesSub.closeIcon} resizeMode="contain" />
-              </Pressable>
+                if (!finalSources.length) {
+                  setScaffoldingError('학습할 이미지가 없습니다.');
+                  setScaffoldingPayload(null);
+                  setStep('home');
+                  return;
+                }
+
+                await preloadScaffoldingPayloads(finalSources, nextCropMap);
+              }}
+            />
+          )}
+          {step === 'talkingStudy' && (
+            <TalkingStudyScreen
+              onBack={() => setStep('selectPicture')}
+              onSkip={() => setStep('scaffolding')}
+              onDone={() => setStep('scaffolding')}
+            />
+          )}
+
+          {step === 'scaffolding' && (
+            <ScaffoldingScreen
+              key={`study-${isReviewMode ? `review-${reviewQuizId ?? 'none'}` : `new-${selectedSourceIndex}`}`}
+              onBack={() => {
+                // 복습 모드에서 복습 화면으로
+                if (isReviewMode) {
+                  setIsReviewMode(false);
+                  setReviewQuizId(null);
+                  setStep('brushup');
+                } else {
+                  setStep('selectPicture');
+                }
+              }}
+              onBackFromCompletion={async () => {
+                if (!isReviewMode && selectedSourceIndex < capturedSources.length - 1) {
+                  const nextIndex = selectedSourceIndex + 1;
+                  const nextPayload = scaffoldingPayloads[nextIndex];
+                  if (nextPayload) {
+                    setSelectedSourceIndex(nextIndex);
+                    setScaffoldingPayload(nextPayload);
+                    setScaffoldingError(null);
+                    return;
+                  }
+
+                  setScaffoldingLoading(true);
+                  setScaffoldingError(null);
+                  try {
+                    const payload = await runOcrForIndex(capturedSources, nextIndex, cropBySourceIndex);
+                    setSelectedSourceIndex(nextIndex);
+                    setScaffoldingPayload(payload);
+                    setScaffoldingPayloads((prev) => {
+                      const next = [...prev];
+                      next[nextIndex] = payload;
+                      return next;
+                    });
+                  } catch (e: any) {
+                    const message = e?.message ?? 'OCR 추출에 실패했습니다.';
+                    setScaffoldingPayload(null);
+                    setScaffoldingError(message);
+
+                    if (typeof message === 'string' && message.includes('무료 횟수')) {
+                      Alert.alert('OCR 사용 한도', message);
+                      setStep('home');
+                      return;
+                    }
+
+                    Alert.alert('OCR 오류', message);
+                  } finally {
+                    setScaffoldingLoading(false);
+                  }
+                  return;
+                }
+
+                // 전체 학습 완료 후 홈 이동
+                setIsReviewMode(false);
+                setReviewQuizId(null);
+                setBatchEarnedXp(0);
+                setCropBySourceIndex({});
+                setScaffoldingPayloads([]);
+                setStep('home');
+                const usage = await refreshOcrUsage();
+                if (!isSubscribed && isUsageLimitReached(usage)) {
+                  setShowUsageExhaustedModal(true);
+                }
+              }}
+              sources={capturedSources}
+              selectedIndex={selectedSourceIndex}
+              payload={scaffoldingPayload}
+              loading={scaffoldingLoading}
+              error={scaffoldingError}
+              initialRound={isReviewMode ? '3-1' : '1-1'} // 복습 모드면 3라운드로 시작
+              reviewQuizId={reviewQuizId} // 복습 퀴즈 ID 전달
+              subjectName={subjectName} // 과목명 전달
+              currentStudyIndex={selectedSourceIndex}
+              totalStudyCount={capturedSources.length}
+              onRetry={async () => {
+                setScaffoldingLoading(true);
+                setScaffoldingError(null);
+                try {
+                  const payload = await runOcrForIndex(capturedSources, selectedSourceIndex, cropBySourceIndex);
+                  setScaffoldingPayload(payload);
+                  setScaffoldingPayloads((prev) => {
+                    const next = [...prev];
+                    next[selectedSourceIndex] = payload;
+                    return next;
+                  });
+                } catch (e: any) {
+                  setScaffoldingPayload(null);
+                  setScaffoldingError(e?.message ?? '재시도에 실패했습니다.');
+                } finally {
+                  setScaffoldingLoading(false);
+                }
+              }}
+              onSave={async (userAnswers) => {
+                // 복습 모드에서는 저장하지 않음
+                if (isReviewMode) {
+                  if (reviewQuizId != null) {
+                    const reviewResult = await submitReviewStudy({
+                      quiz_id: reviewQuizId,
+                      user_answers: userAnswers,
+                    });
+                    const nextPoints = Number(reviewResult?.new_points);
+                    if (Number.isFinite(nextPoints)) {
+                      setExp(nextPoints);
+                    }
+                  }
+                  setIsReviewMode(false);
+                  setReviewQuizId(null);
+                  setStep('home');
+                  return;
+                }
+
+                if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
+
+                const blanks = scaffoldingPayload.blanks ?? [];
+                const keywords = blanks.map((b) => b.word);
+                const pages = scaffoldingPayload.pages && scaffoldingPayload.pages.length > 0
+                  ? scaffoldingPayload.pages
+                  : [{ original_text: scaffoldingPayload.extractedText, keywords }];
+                const blankItems = scaffoldingPayload.blankItems && scaffoldingPayload.blankItems.length > 0
+                  ? scaffoldingPayload.blankItems
+                  : blanks.map((b, i) => ({ blank_index: i, word: b.word, page_index: 0 }));
+                const rawText = pages.map((p) => p.original_text ?? '').join('\n\n');
+
+                const ocrText = {
+                  pages,
+                  blanks: blankItems,
+                  quiz: { raw: rawText },
+                };
+
+                const gradeCount = userAnswers.reduce((acc, ua, idx) => {
+                  const isCorrect = (ua ?? '').trim().toLowerCase() === (keywords[idx] ?? '').trim().toLowerCase();
+                  return acc + (isCorrect ? 1 : 0);
+                }, 0);
+
+                const gradeResult = await gradeStudy({
+                  quiz_id: 0,
+                  correct_answers: keywords,
+                  answer: keywords,
+                  user_answer: userAnswers,
+                  quiz_html: rawText,
+                  ocr_text: ocrText,
+                  // backend compatibility
+                  user_answers: userAnswers,
+                  subject_name: scaffoldingPayload.title,
+                  study_name: scaffoldingPayload.title,
+                  original_text: pages.map((p) => p.original_text ?? ''),
+                  keywords,
+                  grade_cnt: gradeCount,
+                });
+
+                const isLastInBatch = selectedSourceIndex >= capturedSources.length - 1;
+                const nextPoints = Number(gradeResult?.new_points);
+                if (Number.isFinite(nextPoints)) {
+                  if (isLastInBatch) {
+                    setExp(nextPoints);
+                  }
+                } else {
+                  const earnedXp = gradeCount * 2;
+                  if (isLastInBatch) {
+                    const totalEarned = batchEarnedXp + earnedXp;
+                    if (totalEarned > 0) {
+                      setExp((prev) => prev + totalEarned);
+                    }
+                    setBatchEarnedXp(0);
+                  } else if (earnedXp > 0) {
+                    setBatchEarnedXp((prev) => prev + earnedXp);
+                  }
+                }
+              }}
+            />
+
+          )}
+
+          {step === 'brushup' && (
+            <BrushUPScreen
+              onBack={() => setStep('home')}
+              // 복습 보정
+              onNavigate={handleSidebarNavigate}
+              onLogout={handleLogout}
+              onCardPress={(card) => {
+                setIsReviewMode(true);
+                setReviewQuizId(card.quiz_id || null);
+                setStep('scaffolding');
+              }}
+            />
+          )}
+
+          {step === 'subscribe' && (
+            <SubscribeScreen
+              isSubscribed={isSubscribed}
+              ocrUsage={ocrUsage}
+              onBack={() => setStep('mypage')}
+              onSubscribe={() => {
+                setStep('mypage');
+                setTimeout(() => {
+                  Alert.alert('안내', '추후 업데이트 후 제공됩니다');
+                }, 0);
+              }}
+              onCancelSubscribe={() => {
+                setIsSubscribed(false);
+                setStep('mypage');
+              }}
+            />
+          )}
+
+          {step === 'error' && (
+            <ErrorScreen
+              onGoHome={() => setStep('home')}
+              onRetry={() => {
+                if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                  window.location.reload();
+                  return;
+                }
+                setStep('home');
+              }}
+              onSubmitReport={(message) => {
+                console.log('[오류 제보]', message);
+              }}
+            />
+          )}
+
+          <Modal visible={showUsageExhaustedModal} transparent animationType="fade" onRequestClose={() => setShowUsageExhaustedModal(false)}>
+            <View style={stylesSub.modalBackdrop}>
+              <View style={stylesSub.modalCard}>
+                <View style={stylesSub.modalHeader}>
+                  <Text style={stylesSub.modalTitle}>사용량 소진 안내</Text>
+                  <Pressable onPress={() => setShowUsageExhaustedModal(false)}>
+                    <Image source={require('./assets/subscribe/close.png')} style={stylesSub.closeIcon} resizeMode="contain" />
+                  </Pressable>
+                </View>
+
+                <View style={stylesSub.modalBody}>
+                  <Image source={require('./assets/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
+                  <Text style={stylesSub.modalDesc}>무료 AI 호출 사용량을 모두 사용했어요.</Text>
+                  <Text style={stylesSub.modalDesc}>계속 학습하고 싶으시다면</Text>
+                  <Text style={stylesSub.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>
+                </View>
+
+                <View style={stylesSub.modalButtons}>
+                  <Pressable style={stylesSub.modalBtn} onPress={() => setShowUsageExhaustedModal(false)}>
+                    <Image source={require('./assets/subscribe/popup-cancel.png')} style={stylesSub.modalBtnImg} resizeMode="stretch" />
+                  </Pressable>
+                  <Pressable
+                    style={stylesSub.modalBtn}
+                    onPress={() => {
+                      setShowUsageExhaustedModal(false);
+                      setStep('subscribe');
+                    }}
+                  >
+                    <Image source={require('./assets/subscribe/popup-subscribe.png')} style={stylesSub.modalBtnImg} resizeMode="stretch" />
+                  </Pressable>
+                </View>
+              </View>
             </View>
-
-            <View style={stylesSub.modalBody}>
-              <Image source={require('./assets/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
-              <Text style={stylesSub.modalDesc}>무료 AI 호출 사용량을 모두 사용했어요.</Text>
-              <Text style={stylesSub.modalDesc}>계속 학습하고 싶으시다면</Text>
-              <Text style={stylesSub.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>
-            </View>
-
-            <View style={stylesSub.modalButtons}>
-              <Pressable style={stylesSub.modalBtn} onPress={() => setShowUsageExhaustedModal(false)}>
-                <Image source={require('./assets/subscribe/popup-cancel.png')} style={stylesSub.modalBtnImg} resizeMode="stretch" />
-              </Pressable>
-              <Pressable
-                style={stylesSub.modalBtn}
-                onPress={() => {
-                  setShowUsageExhaustedModal(false);
-                  setStep('subscribe');
-                }}
-              >
-                <Image source={require('./assets/subscribe/popup-subscribe.png')} style={stylesSub.modalBtnImg} resizeMode="stretch" />
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+          </Modal>
 
 
 
