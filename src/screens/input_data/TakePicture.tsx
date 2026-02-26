@@ -81,24 +81,31 @@ export default function TakePicture({ onBack, onDone }: Props) {
                 const res = await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: ['images'],
                     allowsEditing: false, // 커스텀 편집 화면을 쓸 것이므로 false
+                    allowsMultipleSelection: true,
+                    selectionLimit: 20,
                     quality: 1,           // 일단 고화질로 가져오되 아래서 줄임
                 });
     
-                if (!res.canceled) {
-                    const originalUri = res.assets[0].uri;
-    
-                    // [강조] 이 부분이 핵심입니다! 사진 크기를 강제로 줄여서 메모리를 확보합니다.
-                    const manipulated = await ImageManipulator.manipulateAsync(
-                        originalUri,
-                        [{ resize: { width: 1200 } }], // 가로를 1200px로 축소 (비율 자동 유지)
-                        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-                    );
-    
-                    // 리사이징된 이미지의 URI를 사용합니다.
-                    const source = { uri: manipulated.uri } as ImageSourcePropType;
-                    setShots((prev) => [...prev, source]);
-                    
-                    console.log('✅ 리사이징 완료:', manipulated.uri);
+                if (!res.canceled && res.assets?.length) {
+                    const resizedSources: ImageSourcePropType[] = [];
+
+                    for (const asset of res.assets) {
+                        if (!asset.uri) continue;
+
+                        // [강조] 이 부분이 핵심입니다! 사진 크기를 강제로 줄여서 메모리를 확보합니다.
+                        const manipulated = await ImageManipulator.manipulateAsync(
+                            asset.uri,
+                            [{ resize: { width: 1200 } }], // 가로를 1200px로 축소 (비율 자동 유지)
+                            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+                        );
+
+                        resizedSources.push({ uri: manipulated.uri } as ImageSourcePropType);
+                        console.log('✅ 리사이징 완료:', manipulated.uri);
+                    }
+
+                    if (resizedSources.length > 0) {
+                        setShots((prev) => [...prev, ...resizedSources]);
+                    }
                 }
             } catch (e) {
                 console.error('갤러리 처리 에러:', e);
