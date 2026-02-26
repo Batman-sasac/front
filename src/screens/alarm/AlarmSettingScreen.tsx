@@ -10,7 +10,7 @@ import {
     Image,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
-import { getToken } from '../../lib/storage';
+import { getToken, getCachedNotificationStatus, setCachedNotificationStatus } from '../../lib/storage';
 import {
     getMyNotificationStatus,
     updateNotificationSettings,
@@ -75,19 +75,28 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
     const [picker, setPicker] = useState<ActivePicker>(null);
     const [tempTime, setTempTime] = useState<Time>(reviewTime);
 
-    // 알림 설정 화면 진입 시: DB에 저장된 복습 알림 시간·on/off 조회 후 표시, FCM 토큰 동기화
+    // 캐시 먼저 표시(즉각 반응) → API로 최신값 갱신
     useEffect(() => {
         (async () => {
-            const token = await getToken();
+            const [token, cached] = await Promise.all([getToken(), getCachedNotificationStatus()]);
             if (!token) return;
+            // 이전에 저장해 둔 값이 있으면 즉시 적용 (수십 ms)
+            if (cached) {
+                setReviewEnabled(cached.is_notify);
+                setReviewTime(parseRemindTimeToTime(cached.remind_time));
+            }
             registerAndSyncPushToken(token).catch(() => {});
             try {
                 const res = await getMyNotificationStatus(token);
                 setReviewEnabled(Boolean(res?.is_notify));
                 const raw = res?.remind_time != null ? String(res.remind_time) : null;
                 setReviewTime(parseRemindTimeToTime(raw));
+                await setCachedNotificationStatus({
+                    is_notify: Boolean(res?.is_notify),
+                    remind_time: raw ?? null,
+                });
             } catch (_e) {
-                // 조회 실패 시 기본값(오후 7:30) 유지
+                // 조회 실패 시 캐시/기본값 유지
             }
         })();
     }, []);
@@ -113,6 +122,10 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                 return;
             }
             await updateNotificationSettings(token, {
+                is_notify: enabled,
+                remind_time: to24HourString(time),
+            });
+            await setCachedNotificationStatus({
                 is_notify: enabled,
                 remind_time: to24HourString(time),
             });
