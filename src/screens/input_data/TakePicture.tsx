@@ -71,10 +71,9 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
     const handlePickFromGallery = async () => {
         if (hasMediaPermission !== true) return;
-    
         // 카메라 꺼서 메모리 확보
         setIsCameraActive(false);
-    
+
         // 카메라가 언마운트될 시간을 잠시 줍니다
         setTimeout(async () => {
             try {
@@ -85,7 +84,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                     selectionLimit: 20,
                     quality: 1,           // 일단 고화질로 가져오되 아래서 줄임
                 });
-    
+
                 if (!res.canceled && res.assets?.length) {
                     const resizedSources: ImageSourcePropType[] = [];
 
