@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -100,11 +100,16 @@ export default function HomeScreen({
     return { min, max };
   };
 
-  const { min: levelMin, max: levelMax } = getLevelBounds(level);
+  // 임시: 사용자 points(exp)가 100 이상이면 레벨 2로 취급해서 날개 커짐 + 화면 표시
+  const effectiveLevel = exp >= 100 ? Math.max(level, 2) : level;
+
+  const { min: levelMin, max: levelMax } = getLevelBounds(effectiveLevel);
   const expClamped = Math.max(levelMin, Math.min(exp, levelMax));
   const expInLevel = expClamped - levelMin;
   const expNeeded = Math.max(levelMax - levelMin, 1);
   const expProgress = levelMax === levelMin ? 1 : Math.min(expInLevel / expNeeded, 1);
+  // 레벨에 따라 날개 스케일 (레벨 1: 0.9, 2: 1.05, 3: 1.2, 4: 1.35, 5: 1.5)
+  const characterScale = 0.9 + (Math.min(Math.max(effectiveLevel, 1), 5) - 1) * 0.15;
   const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
   const todayIndex = (() => {
     const jsDay = new Date().getDay();
@@ -151,7 +156,7 @@ export default function HomeScreen({
               {/* Level + 유형 */}
               <Text style={styles.levelText}>
                 <Text style={styles.levelLabel}>Level </Text>
-                <Text style={styles.levelValue}>{level} </Text>
+                <Text style={styles.levelValue}>{effectiveLevel} </Text>
                 {typeLabel || '학습 유형 미지정'}
               </Text>
 
@@ -172,7 +177,7 @@ export default function HomeScreen({
               <View style={styles.characterWrapper}>
                 <Image
                   source={characterSource}
-                  style={styles.characterImage}
+                  style={[styles.characterImage, { transform: [{ scale: characterScale }] }]}
                 />
               </View>
 
