@@ -47,12 +47,16 @@ export default function AlarmScreen({ onNavigate }: Props) {
         <View style={styles.root}>
             {/* 헤더 */}
             <View style={styles.header}>
-                {/* 뒤로가기: < 기호 버튼 */}
+                {/* 뒤로가기 */}
                 <Pressable
                     style={styles.backButton}
                     onPress={() => onNavigate('home')}
                 >
-                    <Text style={styles.backIcon}>{'<'}</Text>
+                    <Image
+                        source={require('../../../assets/shift.png')}
+                        style={styles.backIcon}
+                        resizeMode="contain"
+                    />
                 </Pressable>
 
                 {/* 제목: 알림함 */}
@@ -154,8 +158,9 @@ const styles = StyleSheet.create({
         paddingLeft: 0,
     },
     backIcon: {
-        fontSize: fontScale(22),
-        fontWeight: '700',
+        width: scale(18),
+        height: scale(18),
+        transform: [{ rotate: '180deg' }],
     },
     headerTitle: {
         flex: 1,
@@ -236,4 +241,3 @@ const styles = StyleSheet.create({
         tintColor: '#9CA3AF',
     },
 });
-
