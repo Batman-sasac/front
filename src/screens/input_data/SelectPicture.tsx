@@ -25,7 +25,7 @@ type Props = {
         ocrLoading?: boolean,
         subjectName?: string,
         cropByIndex?: Record<number, { px: number; py: number; pw: number; ph: number }>
-    ) => void;
+    ) => Promise<void>;
 };
 
 const BG = '#F6F7FB';
@@ -268,7 +268,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
         if (!uri) {
             // 더미 이미지(uri 없음)만 OCR 생략
-            onStartLearning(sources, false, subjectName);
+            await onStartLearning(sources, false, subjectName);
             return;
         }
 
@@ -293,7 +293,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             }
 
             // 이미지별 crop 정보를 onStartLearning에 전달
-            onStartLearning(sources, true, subjectName, nextCropByIndex);
+            await onStartLearning(sources, true, subjectName, nextCropByIndex);
         } catch (error) {
             console.error('Crop 에러:', error);
             alert('사진 자르기에 실패했습니다.');
@@ -693,6 +693,13 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                     />
                 )}
             </Pressable>
+
+            {isCropping && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#FFFFFF" />
+                    <Text style={styles.loadingOverlayText}>OCR 분석 중입니다. 잠시만 기다려 주세요.</Text>
+                </View>
+            )}
         </View>
     );
 }
@@ -1005,5 +1012,18 @@ const styles = StyleSheet.create({
     fabImage: {
         width: '100%',
         height: '100%',
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(17,24,39,0.45)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: scale(12),
+        zIndex: 50,
+    },
+    loadingOverlayText: {
+        color: '#FFFFFF',
+        fontSize: fontScale(14),
+        fontWeight: '700',
     },
 });
