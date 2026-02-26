@@ -121,6 +121,10 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     useEffect(() => {
         if (!selectedSource) return;
 
+        // 이미지 전환 시 이전 이미지 크기를 즉시 비워, crop 복원이 잘못된 크기로 계산되지 않도록 함
+        setImageW(0);
+        setImageH(0);
+
         const anySrc: any = selectedSource;
         const uri = typeof anySrc?.uri === 'string' ? (anySrc.uri as string) : null;
 
