@@ -5,10 +5,24 @@ export type BlankItem = {
     meaningLong?: string;
 };
 
+// ocr_app.py의 /ocr/save 스펙: 페이지, 빈칸, 사용자 답변 모두 JSON
+export type PageItem = {
+    original_text: string;
+    keywords: string[];
+};
+
+export type BlankItemSave = {
+    blank_index: number;
+    word: string;
+    page_index: number;
+};
+
 export type ScaffoldingPayload = {
     title: string;
     extractedText: string;
     blanks: BlankItem[];
+    pages?: PageItem[];
+    blankItems?: BlankItemSave[];
 };
 
 export type OcrResponse =
@@ -93,36 +107,69 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
 
     const inner = data.data ?? data;
 
+    let pages: PageItem[] = [];
     let originalText: string;
-    let keywords: string[];
+    let blankItems: BlankItemSave[] = [];
+    const normalizeKeyword = (value: unknown) => String(value ?? '').trim();
 
     // 백엔드가 pages 배열 반환 (PDF/다중 이미지)
     if (Array.isArray(inner.pages) && inner.pages.length > 0) {
-        originalText = inner.pages
-            .map((p: { original_text?: string }) => p?.original_text ?? '')
+        pages = inner.pages.map((p: { original_text?: string; keywords?: string[] }) => ({
+            original_text: p?.original_text ?? '',
+            keywords: Array.isArray(p?.keywords)
+                ? p.keywords.map(normalizeKeyword).filter(Boolean)
+                : [],
+        }));
+
+        originalText = pages
+            .map((p) => p.original_text ?? '')
             .join('\n\n');
+
         const kwSet = new Set<string>();
-        for (const p of inner.pages) {
-            const kws = Array.isArray(p.keywords) ? p.keywords : [];
-            kws.forEach((w: string) => kwSet.add(String(w).trim()));
+        for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+            const page = pages[pageIndex];
+            for (const word of page.keywords) {
+                if (kwSet.has(word)) continue;
+                kwSet.add(word);
+                blankItems.push({
+                    blank_index: blankItems.length,
+                    word,
+                    page_index: pageIndex,
+                });
+            }
         }
-        keywords = Array.from(kwSet).filter(Boolean);
     } else {
         // 하위 호환: 단일 original_text, keywords
         originalText = inner.original_text ?? '';
-        keywords = Array.isArray(inner.keywords) ? inner.keywords : [];
+        const rawKeywords = Array.isArray(inner.keywords)
+            ? inner.keywords.map(normalizeKeyword).filter(Boolean)
+            : [];
+        const kwSet = new Set<string>();
+        const keywords = rawKeywords.filter((word: string) => {
+            if (kwSet.has(word)) return false;
+            kwSet.add(word);
+            return true;
+        });
+        pages = [{ original_text: originalText, keywords }];
+        blankItems = keywords.map((word: string, idx: number) => ({
+            blank_index: idx,
+            word,
+            page_index: 0,
+        }));
     }
 
-    const blanks = keywords.map((word, idx) => ({
-        id: idx,
-        word: word,
-        meaningLong: `${word} 뜻 (AI 생성 예정)`,
+    const blanks = blankItems.map((blank) => ({
+        id: blank.blank_index,
+        word: blank.word,
+        meaningLong: `${blank.word} 뜻 (AI 생성 예정)`,
     }));
 
     return {
         title: '학습 자료',
         extractedText: originalText,
         blanks: blanks,
+        pages,
+        blankItems,
     };
 }
 
@@ -145,20 +192,6 @@ export async function getOcrUsage(): Promise<OcrUsageResponse> {
 
     return res.json();
 }
-
-
-
-// ocr_app.py의 /ocr/save 스펙: 페이지, 빈칸, 사용자 답변 모두 JSON
-export type PageItem = {
-    original_text: string;
-    keywords: string[];
-};
-
-export type BlankItemSave = {
-    blank_index: number;
-    word: string;
-    page_index: number;
-};
 
 export type SaveTestRequest = {
     subject_name: string;
@@ -369,5 +402,4 @@ export async function getMonthlyStats(): Promise<MonthlyStatsResponse> {
     if (!res.ok) throw new Error(`Monthly Stats HTTP ${res.status}`);
     return res.json();
 }
-
 
