@@ -22,19 +22,6 @@ export async function getMyNotificationStatus(authToken: string) {
     return res.json();
 }
 
-/** 테스트 푸시 1통 발송 — 메시지 전달 여부 확인용 */
-export async function sendTestNotification(authToken: string) {
-    const res = await fetch(`${API_BASE_URL}/notification-push/test`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${authToken}` },
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail ?? err.message ?? '테스트 발송 실패');
-    }
-    return res.json();
-}
-
 export async function updateNotificationSettings(token: string, payload: NotificationSettingsPayload) {
     const formData = new FormData();
     formData.append('is_notify', String(payload.is_notify));
