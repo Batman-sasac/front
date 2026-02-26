@@ -289,6 +289,7 @@ export async function getHomeStats(token: string): Promise<{
     data: {
         points: number;
         monthly_goal: number | null;
+        this_month_count: number;
     };
 }> {
     const endpoint = `${API_BASE_URL}/auth/home/stats`;
@@ -311,6 +312,7 @@ export async function getHomeStats(token: string): Promise<{
         data: {
             points: Number(raw.points ?? raw.total_points ?? raw.exp ?? 0),
             monthly_goal: raw.monthly_goal ?? raw.target_count ?? null,
+            this_month_count: Number(raw.this_month_count ?? 0),
         },
     };
 }

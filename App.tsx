@@ -327,17 +327,25 @@ export default function App() {
     if (step === 'home' && progressLoaded) {
       handleDailyCheckIn();   // 홈 진입 시 자동 출석
 
-      // 통계 데이터 로드
+      // 통계 데이터 로드 (당월 학습 횟수는 /auth/home/stats에서 study_logs 기준으로 가져옴)
       (async () => {
         try {
-          const [weekly, monthly] = await Promise.all([
+          const token = await getToken();
+          const [weekly, monthly, homeStats] = await Promise.all([
             getWeeklyGrowth(),
             getMonthlyStats(),
+            token ? getHomeStats(token).catch(() => null) : Promise.resolve(null),
           ]);
           setWeeklyGrowth(weekly);
-          setMonthlyStats(monthly.compare);
-          if (monthly.compare?.target_count > 0) {
-            setMonthlyGoal(monthly.compare.target_count);
+          const compare = monthly.compare ?? {};
+          setMonthlyStats({
+            ...compare,
+            this_month_count: homeStats?.data?.this_month_count ?? compare.this_month_count ?? 0,
+          });
+          if (homeStats?.data?.monthly_goal != null && homeStats.data.monthly_goal > 0) {
+            setMonthlyGoal(homeStats.data.monthly_goal);
+          } else if (compare?.target_count > 0) {
+            setMonthlyGoal(compare.target_count);
           }
         } catch (e) {
           console.error('통계 데이터 로드 실패:', e);
