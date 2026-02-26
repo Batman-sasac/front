@@ -7,6 +7,7 @@ import {
     Pressable,
     Switch,
     Alert,
+    Image,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { getToken } from '../../lib/storage';
@@ -144,7 +145,11 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                     style={styles.backButton}
                     onPress={() => onNavigate('alarm')}
                 >
-                    <Text style={styles.backIcon}>{'<'}</Text>
+                    <Image
+                        source={require('../../../assets/shift.png')}
+                        style={styles.backIcon}
+                        resizeMode="contain"
+                    />
                 </Pressable>
                 <Text style={styles.headerTitle}>알림설정</Text>
                 {/* 오른쪽 비우기(중앙 정렬 맞추기용) */}
@@ -319,8 +324,9 @@ const styles = StyleSheet.create({
         paddingVertical: scale(4),
     },
     backIcon: {
-        fontSize: fontScale(22),
-        fontWeight: '700',
+        width: scale(18),
+        height: scale(18),
+        transform: [{ rotate: '180deg' }],
     },
     headerTitle: {
         flex: 1,
