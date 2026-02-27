@@ -23,7 +23,7 @@ export type LeagueUser = {
     id: string;         // 유저 고유 ID (백엔드 ID 사용)
     nickname: string;   // 닉네임
     xp: number;         // 누적 XP
-    minutesAgo: number; // 마지막 활동 후 지난 시간 (분 단위)
+    minutesAgo?: number; // 마지막 활동 후 지난 시간 (분 단위, 백엔드 제공 시에만 표시)
 };
 
 type Props = {
@@ -185,12 +185,14 @@ export default function LeagueScreen({
                                         <Text style={styles.nickname}>{user.nickname}</Text>
                                     </View>
 
-                                    {/* 오른쪽: XP + 시간 */}
+                                    {/* 오른쪽: XP (+ 시간은 백엔드 제공 시에만 표시) */}
                                     <View style={styles.rightCol}>
                                         <Text style={styles.xpText}>{user.xp}XP</Text>
-                                        <Text style={styles.timeText}>
-                                            {user.minutesAgo}분 전
-                                        </Text>
+                                        {user.minutesAgo != null && (
+                                            <Text style={styles.timeText}>
+                                                {user.minutesAgo}분 전
+                                            </Text>
+                                        )}
                                     </View>
                                 </View>
                             </View>
