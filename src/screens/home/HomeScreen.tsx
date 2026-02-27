@@ -100,8 +100,7 @@ export default function HomeScreen({
     return { min, max };
   };
 
-  // 임시: 사용자 points(exp)가 100 이상이면 레벨 2로 취급해서 날개 커짐 + 화면 표시
-  const effectiveLevel = exp >= 100 ? Math.max(level, 2) : level;
+  const effectiveLevel = level;
 
   const { min: levelMin, max: levelMax } = getLevelBounds(effectiveLevel);
   const expClamped = Math.max(levelMin, Math.min(exp, levelMax));
