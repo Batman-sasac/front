@@ -308,6 +308,9 @@ export default function ScaffoldingScreen({
         const label = substep === '1' ? '단어 확인' : substep === '2' ? '빈칸 학습' : '학습 채점';
         return `Round ${roundNum} - ${label}`;
     }, [step]);
+    const safeTotalStudyCount = Math.max(totalStudyCount, 1);
+    const safeCurrentStudyIndex = Math.min(Math.max(currentStudyIndex, 0), safeTotalStudyCount - 1);
+    const pageIndicatorLabel = `${safeCurrentStudyIndex + 1}/${safeTotalStudyCount}`;
 
     useEffect(() => {
         setDragConfirm(null);
@@ -1033,6 +1036,9 @@ export default function ScaffoldingScreen({
                     )}
                 </View>
             </View>
+            <View pointerEvents="none" style={styles.pageIndicatorWrap}>
+                <Text style={styles.pageIndicatorText}>{pageIndicatorLabel}</Text>
+            </View>
 
             {/* 설명 */}
             {hintWord !== null && (
@@ -1292,6 +1298,19 @@ const styles = StyleSheet.create({
     bar: { flex: 1, height: scale(10), borderRadius: scale(3) },
 
     content: { flex: 1, flexDirection: 'row', gap: scale(12) },
+    pageIndicatorWrap: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: scale(8),
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    pageIndicatorText: {
+        color: '#6B7280',
+        fontSize: fontScale(14),
+        fontWeight: '900',
+    },
 
     leftCard: {
         width: scale(170),
