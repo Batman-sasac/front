@@ -184,9 +184,10 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
     useEffect(() => {
         if (displayRect.dw <= 0 || displayRect.dh <= 0) return;
+        if (imageW <= 0 || imageH <= 0) return;
 
         const saved = cropByIndex[selectedIndex];
-        if (saved && imageW > 0 && imageH > 0) {
+        if (saved) {
             const x = displayRect.dx + (saved.px / imageW) * displayRect.dw;
             const y = displayRect.dy + (saved.py / imageH) * displayRect.dh;
             const w = (saved.pw / imageW) * displayRect.dw;
@@ -584,48 +585,50 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                         >
                             <Image source={selectedSource} style={[styles.previewImage, { transform: [{ rotate: `${rotation}deg` }] }]} resizeMode="contain" />
 
-                            <View style={styles.cropArea}>
-                                <View style={[styles.maskTop, overlayStyles.top, { pointerEvents: 'none' }]} />
-                                <View style={[styles.maskBottom, overlayStyles.bottom, { pointerEvents: 'none' }]} />
-                                <View style={[styles.maskLeft, overlayStyles.left, { pointerEvents: 'none' }]} />
-                                <View style={[styles.maskRight, overlayStyles.right, { pointerEvents: 'none' }]} />
+                            {imageW > 0 && imageH > 0 && (
+                                <View style={styles.cropArea}>
+                                    <View style={[styles.maskTop, overlayStyles.top, { pointerEvents: 'none' }]} />
+                                    <View style={[styles.maskBottom, overlayStyles.bottom, { pointerEvents: 'none' }]} />
+                                    <View style={[styles.maskLeft, overlayStyles.left, { pointerEvents: 'none' }]} />
+                                    <View style={[styles.maskRight, overlayStyles.right, { pointerEvents: 'none' }]} />
 
-                                <View style={[styles.cropFrame, overlayStyles.frame, { pointerEvents: 'none' }]}>
-                                    <View style={[styles.cropCornerTL, { pointerEvents: 'none' }]} />
-                                    <View style={[styles.cropCornerTR, { pointerEvents: 'none' }]} />
-                                    <View style={[styles.cropCornerBL, { pointerEvents: 'none' }]} />
-                                    <View style={[styles.cropCornerBR, { pointerEvents: 'none' }]} />
-                                </View>
+                                    <View style={[styles.cropFrame, overlayStyles.frame, { pointerEvents: 'none' }]}>
+                                        <View style={[styles.cropCornerTL, { pointerEvents: 'none' }]} />
+                                        <View style={[styles.cropCornerTR, { pointerEvents: 'none' }]} />
+                                        <View style={[styles.cropCornerBL, { pointerEvents: 'none' }]} />
+                                        <View style={[styles.cropCornerBR, { pointerEvents: 'none' }]} />
+                                    </View>
 
-                                {/* 크롭 프레임 이동 영역 (투명한 내부 영역) */}
-                                <View style={[styles.cropMoveArea, overlayStyles.frame]} {...moveResponder.panHandlers} />
+                                    {/* 크롭 프레임 이동 영역 (투명한 내부 영역) */}
+                                    <View style={[styles.cropMoveArea, overlayStyles.frame]} {...moveResponder.panHandlers} />
 
-                                {/* 핸들들을 cropFrame 밖에 독립적으로 배치 */}
-                                <View
-                                    style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top - 12 }]}
-                                    {...tlResponder.panHandlers}
-                                >
-                                    <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                    {/* 핸들들을 cropFrame 밖에 독립적으로 배치 */}
+                                    <View
+                                        style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top - 12 }]}
+                                        {...tlResponder.panHandlers}
+                                    >
+                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                    </View>
+                                    <View
+                                        style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top - 12 }]}
+                                        {...trResponder.panHandlers}
+                                    >
+                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                    </View>
+                                    <View
+                                        style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
+                                        {...blResponder.panHandlers}
+                                    >
+                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                    </View>
+                                    <View
+                                        style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
+                                        {...brResponder.panHandlers}
+                                    >
+                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                    </View>
                                 </View>
-                                <View
-                                    style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top - 12 }]}
-                                    {...trResponder.panHandlers}
-                                >
-                                    <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                </View>
-                                <View
-                                    style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
-                                    {...blResponder.panHandlers}
-                                >
-                                    <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                </View>
-                                <View
-                                    style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
-                                    {...brResponder.panHandlers}
-                                >
-                                    <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                </View>
-                            </View>
+                            )}
                         </View>
                     ) : (
                         <View style={styles.empty}>
