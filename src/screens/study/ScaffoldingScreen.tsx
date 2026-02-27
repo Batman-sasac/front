@@ -906,7 +906,7 @@ export default function ScaffoldingScreen({
                                             <Pressable
                                                 key={idx}
                                                 onPress={() => onToggleBlankSelection(instanceId)}
-                                                style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}
+                                                style={[styles.wordPill, styles.blankTokenSpacing, { backgroundColor: HIGHLIGHT_BG }]}
                                                 onLayout={recordTokenLayout(idx)}
                                             >
                                                 <View style={{ position: 'relative' }}>
@@ -920,7 +920,7 @@ export default function ScaffoldingScreen({
                                             <Pressable
                                                 key={idx}
                                                 onPress={() => onToggleBlankSelection(instanceId)}
-                                                style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]}
+                                                style={[styles.wordPill, styles.blankTokenSpacing, { backgroundColor: HIGHLIGHT_BG }]}
                                                 onLayout={recordTokenLayout(idx)}
                                             >
                                                 <Text style={styles.wordText}>{t.value}</Text>
@@ -950,7 +950,7 @@ export default function ScaffoldingScreen({
                                                 onPress={() => onPressBlank(instanceId)}
                                                 onLongPress={() => onLongPressBlank(instanceId)}
                                                 delayLongPress={450}
-                                                style={[styles.wordPill, styles.blankBoxBase, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
+                                                style={[styles.wordPill, styles.blankTokenSpacing, styles.blankBoxBase, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
                                                 onLayout={recordTokenLayout(idx)}
                                             >
                                                 <View style={{ position: 'relative' }}>
@@ -994,7 +994,7 @@ export default function ScaffoldingScreen({
                                 return (
                                     <View
                                         key={idx}
-                                        style={[styles.wordPill, { backgroundColor: bg }]}
+                                        style={[styles.wordPill, styles.blankTokenSpacing, { backgroundColor: bg }]}
                                         onLayout={recordTokenLayout(idx)}
                                     >
                                         <Text style={styles.wordText}>{t.value}</Text>
@@ -1377,6 +1377,7 @@ const styles = StyleSheet.create({
     bodyText: { fontSize: fontScale(14), lineHeight: fontScale(22), fontWeight: '600', color: '#111827' },
 
     wordPill: { paddingHorizontal: 0, paddingVertical: 0, borderRadius: scale(4), marginVertical: 0 },
+    blankTokenSpacing: { marginHorizontal: scale(3), paddingHorizontal: scale(4) },
     wordText: { fontSize: fontScale(13), lineHeight: fontScale(20), fontWeight: '600', color: '#111827' },
 
     blankBox: { paddingHorizontal: 0, paddingVertical: 0, borderRadius: scale(4), marginVertical: 0, justifyContent: 'center' },
