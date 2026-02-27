@@ -10,11 +10,28 @@ import {
     Image,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
-import { getToken } from '../../lib/storage';
+import { getToken, getCachedNotificationStatus, setCachedNotificationStatus } from '../../lib/storage';
 import {
+    getMyNotificationStatus,
     updateNotificationSettings,
     registerAndSyncPushToken,
 } from '../../api/notification';
+
+/** DB에 저장된 24시간 "HH:MM" / "HH:MM:SS" → 화면용 Time (오전/오후, 1~12시, 5분 단위) */
+function parseRemindTimeToTime(remindTime: string | null | undefined): Time {
+    const def: Time = { ampm: '오후', hour: 7, minute: 30 };
+    if (!remindTime || typeof remindTime !== 'string') return def;
+    const part = String(remindTime).trim().split(':');
+    const h = parseInt(part[0], 10);
+    const m = part.length >= 2 ? parseInt(part[1], 10) : 0;
+    if (Number.isNaN(h)) return def;
+    const hour24 = Math.max(0, Math.min(23, h));
+    const minute = Number.isNaN(m) ? 0 : Math.max(0, Math.min(59, Math.floor(m / 5) * 5));
+    if (hour24 === 0) return { ampm: '오전', hour: 12, minute };
+    if (hour24 < 12) return { ampm: '오전', hour: hour24, minute };
+    if (hour24 === 12) return { ampm: '오후', hour: 12, minute };
+    return { ampm: '오후', hour: hour24 - 12, minute };
+}
 
 type Time = {
     ampm: '오전' | '오후';
@@ -58,11 +75,29 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
     const [picker, setPicker] = useState<ActivePicker>(null);
     const [tempTime, setTempTime] = useState<Time>(reviewTime);
 
-    // 알림 설정 화면 진입 시 FCM 토큰 한 번 더 동기화 (권한 나중에 허용한 경우 대비)
+    // 캐시 먼저 표시(즉각 반응) → API로 최신값 갱신
     useEffect(() => {
         (async () => {
-            const token = await getToken();
-            if (token) registerAndSyncPushToken(token).catch(() => {});
+            const [token, cached] = await Promise.all([getToken(), getCachedNotificationStatus()]);
+            if (!token) return;
+            // 이전에 저장해 둔 값이 있으면 즉시 적용 (수십 ms)
+            if (cached) {
+                setReviewEnabled(cached.is_notify);
+                setReviewTime(parseRemindTimeToTime(cached.remind_time));
+            }
+            registerAndSyncPushToken(token).catch(() => {});
+            try {
+                const res = await getMyNotificationStatus(token);
+                setReviewEnabled(Boolean(res?.is_notify));
+                const raw = res?.remind_time != null ? String(res.remind_time) : null;
+                setReviewTime(parseRemindTimeToTime(raw));
+                await setCachedNotificationStatus({
+                    is_notify: Boolean(res?.is_notify),
+                    remind_time: raw ?? null,
+                });
+            } catch (_e) {
+                // 조회 실패 시 캐시/기본값 유지
+            }
         })();
     }, []);
 
@@ -87,6 +122,10 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                 return;
             }
             await updateNotificationSettings(token, {
+                is_notify: enabled,
+                remind_time: to24HourString(time),
+            });
+            await setCachedNotificationStatus({
                 is_notify: enabled,
                 remind_time: to24HourString(time),
             });
