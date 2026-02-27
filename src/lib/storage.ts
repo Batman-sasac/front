@@ -121,3 +121,39 @@ export async function setCachedNotificationStatus(data: NotificationStatusCache)
         console.error('알림 설정 캐시 저장 실패:', error);
     }
 }
+
+const MYPAGE_STATS_CACHE_KEY = '@bat_mypage_stats';
+
+export type MyPageStatsCache = {
+    totalStudyCount: number;
+    continuousDays: number;
+    monthlyGoal: number | null;
+};
+
+/** 마이페이지 통계 캐시 조회 (총 학습 횟수, 연속 학습일, 월간 목표) */
+export async function getCachedMyPageStats(): Promise<MyPageStatsCache | null> {
+    try {
+        const raw = await AsyncStorage.getItem(MYPAGE_STATS_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as MyPageStatsCache;
+        if (typeof parsed.totalStudyCount !== 'number' || typeof parsed.continuousDays !== 'number') {
+            return null;
+        }
+        return {
+            totalStudyCount: parsed.totalStudyCount,
+            continuousDays: parsed.continuousDays,
+            monthlyGoal: typeof parsed.monthlyGoal === 'number' ? parsed.monthlyGoal : null,
+        };
+    } catch {
+        return null;
+    }
+}
+
+/** 마이페이지 통계 캐시 저장 */
+export async function setCachedMyPageStats(data: MyPageStatsCache): Promise<void> {
+    try {
+        await AsyncStorage.setItem(MYPAGE_STATS_CACHE_KEY, JSON.stringify(data));
+    } catch (error) {
+        console.error('마이페이지 통계 캐시 저장 실패:', error);
+    }
+}
