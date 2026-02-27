@@ -542,7 +542,10 @@ export default function App() {
   ) => {
     setScaffoldingLoading(true);
     setScaffoldingError(null);
-    let shouldEnterScaffolding = false;
+    setScaffoldingPayload(null);
+    setScaffoldingPayloads([]);
+    setSelectedSourceIndex(0);
+    setStep('scaffolding');
 
     try {
       const nextPayloads: ScaffoldingPayload[] = [];
@@ -554,7 +557,6 @@ export default function App() {
       setScaffoldingPayloads(nextPayloads);
       setSelectedSourceIndex(0);
       setScaffoldingPayload(nextPayloads[0] ?? null);
-      shouldEnterScaffolding = true;
     } catch (e: any) {
       const message = e?.message ?? 'OCR 추출에 실패했습니다.';
       setScaffoldingPayload(null);
@@ -570,10 +572,6 @@ export default function App() {
       setStep('home');
     } finally {
       setScaffoldingLoading(false);
-    }
-
-    if (shouldEnterScaffolding) {
-      setStep('scaffolding');
     }
   };
 
