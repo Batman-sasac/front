@@ -12,7 +12,7 @@ import {
 import { fontScale, scale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
 import OAuthWebView from '../../components/OAuthWebView';
-import { clearAuthData, getToken, getUserInfo as getStoredUserInfo, getCachedMyPageStats, setCachedMyPageStats } from '../../lib/storage';
+import { clearAuthData, getToken, getUserInfo as getStoredUserInfo, getCachedMyPageStats, setCachedMyPageStats, saveAuthData } from '../../lib/storage';
 import { confirmLogout } from '../../lib/auth';
 import {
     connectAccount,
@@ -257,6 +257,12 @@ export default function MyPageScreen({
             }
 
             await apiUpdateNickname(token, newNickname);
+
+            // 서버 닉네임 변경 후 로컬 캐시(토큰/이메일/닉네임)도 최신 값으로 동기화
+            const stored = await getStoredUserInfo();
+            const email = stored.email ?? '';
+            await saveAuthData(token, email, newNickname);
+
             setCurrentNickname(newNickname);
             onNicknameChange?.(newNickname);
             Alert.alert('성공', '닉네임이 변경되었습니다.');

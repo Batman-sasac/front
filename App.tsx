@@ -26,8 +26,8 @@ import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrow
 import { registerAndSyncPushToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
-import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
-import { getHomeStats, getUserStats } from './src/api/auth';
+import { getToken, saveAuthData, clearAuthData } from './src/lib/storage';
+import { getHomeStats, getUserStats, getUserInfo as getServerUserInfo } from './src/api/auth';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 type SocialProvider = 'kakao' | 'naver';
@@ -269,10 +269,14 @@ export default function App() {
     try {
       const token = await getToken();
       if (token) {
-        const userInfo = await getUserInfo();
+        const userInfo = await getServerUserInfo(token);
         if (userInfo.email && userInfo.nickname) {
           setUserEmail(userInfo.email);
           setNickname(userInfo.nickname);
+
+          // 서버 기준 최신 닉네임을 로컬 캐시에도 동기화
+          await saveAuthData(token, userInfo.email, userInfo.nickname);
+
           try {
             const homeStats = await getHomeStats(token);
             if (typeof homeStats.data.points === 'number' && Number.isFinite(homeStats.data.points)) {
