@@ -364,7 +364,6 @@ export default function App() {
               id: `user_${idx}`,
               nickname: item.nickname,
               xp: item.total_reward,
-              minutesAgo: 0, // 백엔드에서 미제공
             }));
             setLeagueUsers(users);
           }
