@@ -523,7 +523,7 @@ export default function ScaffoldingScreen({
         return (
             <View style={[styles.root, styles.center]}>
                 <ActivityIndicator size="large" color="#5E82FF" />
-                <Text style={styles.loadingText}>OCR 결과를 불러오는 중입니다.</Text>
+                <Text style={styles.loadingText}>학습화면 불러오는 중입니다...</Text>
             </View>
         );
     }
@@ -958,6 +958,10 @@ export default function ScaffoldingScreen({
                                                             value={userValue}
                                                             onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
                                                             style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
+                                                            selectTextOnFocus
+                                                            autoCapitalize="none"
+                                                            autoCorrect={false}
+                                                            spellCheck={false}
                                                             blurOnSubmit
                                                             onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
                                                             maxFontSizeMultiplier={1.0}
@@ -1361,11 +1365,12 @@ const styles = StyleSheet.create({
     blankBoxActive: { borderColor: '#5E82FF' },
     blankInput: {
         padding: 0,
+        paddingVertical: 0,
         margin: 0,
         fontSize: fontScale(13),
         fontWeight: '600',
         color: '#111827',
-        lineHeight: fontScale(20),
+        lineHeight: fontScale(16),
         borderWidth: 0,
         ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', outlineWidth: 0 } as any) : {}),
     },
