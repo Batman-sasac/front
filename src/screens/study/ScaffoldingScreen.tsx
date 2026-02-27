@@ -54,6 +54,7 @@ type Props = {
     subjectName?: string; // 과목명
     currentStudyIndex?: number;
     totalStudyCount?: number;
+    accumulatedEarnedXp?: number;
 };
 
 const BG = '#F6F7FB';
@@ -79,6 +80,7 @@ export default function ScaffoldingScreen({
     reviewQuizId = null, // 복습 quiz ID
     currentStudyIndex = 0,
     totalStudyCount = 1,
+    accumulatedEarnedXp = 0,
 }: Props) {
     const [step, setStep] = useState<Step>(initialRound);
     const isReviewMode = reviewQuizId != null;
@@ -848,8 +850,9 @@ export default function ScaffoldingScreen({
                                     const earnedXp = correctCount * 2;
                                     const isLastStudy = currentStudyIndex >= totalStudyCount - 1;
                                     if (isLastStudy) {
+                                        const totalEarnedXp = accumulatedEarnedXp + earnedXp;
                                         setPopupTitle('축하합니다');
-                                        setPopupMessage(`학습을 완료해서 ${earnedXp}xp를 획득했어요`);
+                                        setPopupMessage(`학습을 완료해서 총 ${totalEarnedXp}xp를 획득했어요`);
                                     } else {
                                         setPopupTitle('다음 학습으로 이동');
                                         setPopupMessage(

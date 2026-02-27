@@ -104,10 +104,10 @@ export default function App() {
 
   const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
   const getLevelForExp = (value: number) => {
-    if (value >= LEVEL_THRESHOLDS[5]) return 5;
-    if (value >= LEVEL_THRESHOLDS[4]) return 4;
-    if (value >= LEVEL_THRESHOLDS[3]) return 3;
-    if (value >= LEVEL_THRESHOLDS[2]) return 2;
+    if (value >= LEVEL_THRESHOLDS[4]) return 5;
+    if (value >= LEVEL_THRESHOLDS[3]) return 4;
+    if (value >= LEVEL_THRESHOLDS[2]) return 3;
+    if (value >= LEVEL_THRESHOLDS[1]) return 2;
     return 1;
   };
 
@@ -511,7 +511,7 @@ export default function App() {
 
   const [currentLeagueTier] = useState<LeagueTier>('iron');  // 우선 아이언으로 시작
   const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
-  const [leagueRemainingText] = useState<string>('남은 시간: 3일 19시간 30분'); // 임시 텍스트
+  const [leagueRemainingText] = useState<string>(''); // 임시 텍스트
   // 촬영 결과 임시 소스 목록
   const [capturedSources, setCapturedSources] = useState<ImageSourcePropType[]>([]);
 
@@ -877,6 +877,7 @@ export default function App() {
               subjectName={subjectName} // 과목명 전달
               currentStudyIndex={selectedSourceIndex}
               totalStudyCount={capturedSources.length}
+              accumulatedEarnedXp={batchEarnedXp}
               onRetry={async () => {
                 setScaffoldingLoading(true);
                 setScaffoldingError(null);
@@ -955,20 +956,21 @@ export default function App() {
 
                 const isLastInBatch = selectedSourceIndex >= capturedSources.length - 1;
                 const nextPoints = Number(gradeResult?.new_points);
+                const earnedXp = gradeCount * 2;
+
+                if (!isLastInBatch && earnedXp > 0) {
+                  setBatchEarnedXp((prev) => prev + earnedXp);
+                }
+
                 if (Number.isFinite(nextPoints)) {
-                  if (isLastInBatch) {
-                    setExp(nextPoints);
-                  }
+                  // 백엔드 누적 포인트를 신뢰해서 단계별로 즉시 반영
+                  setExp(nextPoints);
                 } else {
-                  const earnedXp = gradeCount * 2;
                   if (isLastInBatch) {
                     const totalEarned = batchEarnedXp + earnedXp;
                     if (totalEarned > 0) {
                       setExp((prev) => prev + totalEarned);
                     }
-                    setBatchEarnedXp(0);
-                  } else if (earnedXp > 0) {
-                    setBatchEarnedXp((prev) => prev + earnedXp);
                   }
                 }
               }}
