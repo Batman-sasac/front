@@ -16,6 +16,7 @@
       "buildNumber": "21",
       "supportsTablet": true,
       "bundleIdentifier": "com.batman.bat",
+      "userAppleSignIn": true,
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,

@@ -51,6 +51,24 @@ export async function loginWithOAuth(
     return await response.json();
 }
 
+/** Apple Sign In: identity_token을 백엔드로 전송 */
+export async function loginWithApple(identityToken: string): Promise<LoginResponse> {
+    const endpoint = `${API_BASE_URL}/auth/apple/mobile`;
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identity_token: identityToken }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        const msg = error.detail ? `${error.error || '로그인 실패'}: ${error.detail}` : (error.error || '로그인 실패');
+        throw new Error(msg);
+    }
+
+    return await response.json();
+}
+
 export async function setNickname(
     nickname: string,
     email: string,
