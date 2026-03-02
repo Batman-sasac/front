@@ -1,4 +1,4 @@
-﻿// src/api/ocr.ts
+// src/api/ocr.ts
 export type BlankItem = {
     id: number;
     word: string;
@@ -245,7 +245,17 @@ export type GradeStudyRequest = {
     grade_cnt?: number;
 };
 
-export async function gradeStudy(payload: GradeStudyRequest) {
+/** 백엔드 POST /study/grade 응답 */
+export type GradeStudyResponse = {
+    status: 'success' | 'error';
+    score?: number;
+    reward_given?: number;
+    /** 성공 시 누적 포인트 (grade_cnt 0이면 null) */
+    new_points?: number | null;
+    message?: string;
+};
+
+export async function gradeStudy(payload: GradeStudyRequest): Promise<GradeStudyResponse> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
@@ -343,7 +353,14 @@ export type ReviewStudyRequest = {
     user_answers: string[];
 };
 
-export async function submitReviewStudy(payload: ReviewStudyRequest) {
+/** 백엔드 POST /study/review-study 응답 */
+export type ReviewStudyResponse = {
+    status: 'success' | 'error';
+    new_points?: number;
+    message?: string;
+};
+
+export async function submitReviewStudy(payload: ReviewStudyRequest): Promise<ReviewStudyResponse> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
