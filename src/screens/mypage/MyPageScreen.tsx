@@ -14,7 +14,7 @@ import {
 import { fontScale, scale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
 import OAuthWebView from '../../components/OAuthWebView';
-import { clearAuthData, getToken, getUserInfo as getStoredUserInfo, setStoredNickname } from '../../lib/storage';
+import { clearAuthData, getToken, getUserInfo as getStoredUserInfo, getCachedMyPageStats, setCachedMyPageStats, saveAuthData } from '../../lib/storage';
 import { confirmLogout } from '../../lib/auth';
 import {
     connectAccount,
@@ -94,6 +94,18 @@ export default function MyPageScreen({
 
     useEffect(() => {
         const run = async () => {
+            try {
+                const cached = await getCachedMyPageStats();
+                if (cached) {
+                    setTotalStudyCountState(cached.totalStudyCount);
+                    setContinuousDaysState(cached.continuousDays);
+                    setMonthlyGoalState(cached.monthlyGoal);
+                    setTempGoal(cached.monthlyGoal ?? 20);
+                }
+            } catch (e) {
+                console.error('마이페이지 캐시 로드 실패:', e);
+            }
+
             await loadAccountInfo();
         };
         run();
@@ -117,10 +129,20 @@ export default function MyPageScreen({
             const fallbackGoal = typeof monthlyGoal === 'number' ? monthlyGoal : null;
             const resolvedGoal = monthlyGoalValue && monthlyGoalValue > 0 ? monthlyGoalValue : fallbackGoal ?? monthlyGoalValue;
 
-            setTotalStudyCountState(stats.data.total_learning_count);
-            setContinuousDaysState(stats.data.consecutive_days);
-            setMonthlyGoalState(resolvedGoal ?? 0);
-            setTempGoal(resolvedGoal ?? 20);
+            const total = Number(stats.data.total_learning_count ?? 0);
+            const consecutive = Number(stats.data.consecutive_days ?? 0);
+            const resolvedGoalNumber = resolvedGoal ?? 0;
+
+            setTotalStudyCountState(total);
+            setContinuousDaysState(consecutive);
+            setMonthlyGoalState(resolvedGoalNumber);
+            setTempGoal(resolvedGoalNumber || 20);
+
+            await setCachedMyPageStats({
+                totalStudyCount: total,
+                continuousDays: consecutive,
+                monthlyGoal: resolvedGoalNumber,
+            });
         } catch (error) {
             console.error('계정 정보 로드 실패:', error);
             Alert.alert('오류', '계정 정보를 불러오지 못했습니다.');
@@ -237,7 +259,12 @@ export default function MyPageScreen({
             }
 
             await apiUpdateNickname(token, newNickname);
-            await setStoredNickname(newNickname);
+
+            // 서버 닉네임 변경 후 로컬 캐시(토큰/이메일/닉네임)도 최신 값으로 동기화
+            const stored = await getStoredUserInfo();
+            const email = stored.email ?? '';
+            await saveAuthData(token, email, newNickname);
+
             setCurrentNickname(newNickname);
             onNicknameChange?.(newNickname);
             Alert.alert('성공', '닉네임이 변경되었습니다.');
