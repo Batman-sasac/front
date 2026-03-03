@@ -33,7 +33,7 @@ type Props = {
     // 현재 로그인한 사용자의 리그 정보
     currentTier: LeagueTier;
     users: LeagueUser[];     // 순위 순서로 정렬된 배열 (1등 → n등)
-    remainingText: string;   // 예: "남은 시간: 3일 19시간 30분"
+    remainingText: string;
 };
 
 // 리그 이름 레이블
