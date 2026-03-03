@@ -2,6 +2,8 @@
 import {
     Alert,
     Image,
+    KeyboardAvoidingView,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -12,7 +14,7 @@ import {
 import { fontScale, scale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
 import OAuthWebView from '../../components/OAuthWebView';
-import { clearAuthData, getToken, getUserInfo as getStoredUserInfo } from '../../lib/storage';
+import { clearAuthData, getToken, getUserInfo as getStoredUserInfo, setStoredNickname } from '../../lib/storage';
 import { confirmLogout } from '../../lib/auth';
 import {
     connectAccount,
@@ -235,6 +237,7 @@ export default function MyPageScreen({
             }
 
             await apiUpdateNickname(token, newNickname);
+            await setStoredNickname(newNickname);
             setCurrentNickname(newNickname);
             onNicknameChange?.(newNickname);
             Alert.alert('성공', '닉네임이 변경되었습니다.');
@@ -448,35 +451,41 @@ export default function MyPageScreen({
 
             {showNicknameModal && (
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalBox}>
-                        <Text style={styles.modalTitle}>닉네임 변경</Text>
+                    <KeyboardAvoidingView
+                        style={styles.modalKeyboardAvoiding}
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        keyboardVerticalOffset={scale(12)}
+                    >
+                        <View style={styles.modalBox}>
+                            <Text style={styles.modalTitle}>닉네임 변경</Text>
 
-                        <View style={styles.nicknameInputWrapper}>
-                            <TextInput
-                                style={styles.nicknameInput}
-                                value={tempNickname}
-                                onChangeText={setTempNickname}
-                                placeholder="닉네임을 입력하세요"
-                                maxLength={10}
-                                autoFocus
-                            />
-                        </View>
+                            <View style={styles.nicknameInputWrapper}>
+                                <TextInput
+                                    style={styles.nicknameInput}
+                                    value={tempNickname}
+                                    onChangeText={setTempNickname}
+                                    placeholder="닉네임을 입력하세요"
+                                    maxLength={10}
+                                    autoFocus
+                                />
+                            </View>
 
-                        <View style={styles.modalButtonRow}>
-                            <Pressable style={[styles.modalButton, styles.modalCancel]} onPress={() => setShowNicknameModal(false)}>
-                                <Text style={styles.modalCancelText}>취소</Text>
-                            </Pressable>
-                            <Pressable
-                                style={[styles.modalButton, styles.modalPrimaryButton]}
-                                onPress={async () => {
-                                    const success = await handleNicknameChange(tempNickname);
-                                    if (success) setShowNicknameModal(false);
-                                }}
-                            >
-                                <Text style={styles.modalPrimaryText}>확인</Text>
-                            </Pressable>
+                            <View style={styles.modalButtonRow}>
+                                <Pressable style={[styles.modalButton, styles.modalCancel]} onPress={() => setShowNicknameModal(false)}>
+                                    <Text style={styles.modalCancelText}>취소</Text>
+                                </Pressable>
+                                <Pressable
+                                    style={[styles.modalButton, styles.modalPrimaryButton]}
+                                    onPress={async () => {
+                                        const success = await handleNicknameChange(tempNickname);
+                                        if (success) setShowNicknameModal(false);
+                                    }}
+                                >
+                                    <Text style={styles.modalPrimaryText}>확인</Text>
+                                </Pressable>
+                            </View>
                         </View>
-                    </View>
+                    </KeyboardAvoidingView>
                 </View>
             )}
 
@@ -738,6 +747,11 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.35)',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    modalKeyboardAvoiding: {
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     modalBox: {
         width: '40%',
