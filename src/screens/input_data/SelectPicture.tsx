@@ -34,6 +34,7 @@ const MIN_BOX = 80;
 
 type CropRect = { x: number; y: number; w: number; h: number };
 type DisplayRect = { dx: number; dy: number; dw: number; dh: number };
+const EMPTY_CROP: CropRect = { x: 0, y: 0, w: 0, h: 0 };
 
 function clamp(v: number, min: number, max: number) {
     return Math.max(min, Math.min(max, v));
@@ -75,7 +76,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         return getDisplayRect(containerW, containerH, imageW, imageH);
     }, [containerW, containerH, imageW, imageH]);
 
-    const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, w: 0, h: 0 });
+    const [crop, setCrop] = useState<CropRect>(EMPTY_CROP);
     const [cropByIndex, setCropByIndex] = useState<Record<number, { px: number; py: number; pw: number; ph: number }>>({});
 
     const cropRef = useRef<CropRect>(crop);
@@ -122,6 +123,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         if (!selectedSource) return;
 
         // 이미지 전환 시 이전 이미지 크기를 즉시 비워, crop 복원이 잘못된 크기로 계산되지 않도록 함
+        setCrop(EMPTY_CROP);
         setImageW(0);
         setImageH(0);
 
@@ -536,6 +538,13 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     }, [crop, containerW, containerH]);
 
     const limitReached = ocrUsage?.status === 'limit_reached';
+    const isCropUiReady =
+        imageW > 0 &&
+        imageH > 0 &&
+        displayRect.dw > 0 &&
+        displayRect.dh > 0 &&
+        crop.w > 0 &&
+        crop.h > 0;
 
     return (
         <View style={styles.root}>
@@ -585,7 +594,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                         >
                             <Image source={selectedSource} style={[styles.previewImage, { transform: [{ rotate: `${rotation}deg` }] }]} resizeMode="contain" />
 
-                            {imageW > 0 && imageH > 0 && (
+                            {isCropUiReady && (
                                 <View style={styles.cropArea}>
                                     <View style={[styles.maskTop, overlayStyles.top, { pointerEvents: 'none' }]} />
                                     <View style={[styles.maskBottom, overlayStyles.bottom, { pointerEvents: 'none' }]} />
