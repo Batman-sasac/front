@@ -85,6 +85,17 @@ export async function clearAuthData() {
 }
 
 /**
+ * 닉네임만 로컬 저장소에 갱신
+ */
+export async function setStoredNickname(nickname: string): Promise<void> {
+    try {
+        await AsyncStorage.setItem(USER_NICKNAME_KEY, nickname);
+    } catch (error) {
+        console.error('닉네임 로컬 저장 실패:', error);
+    }
+}
+
+/**
  * 로그인 여부 확인
  */
 export async function isLoggedIn(): Promise<boolean> {

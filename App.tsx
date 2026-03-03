@@ -511,7 +511,7 @@ export default function App() {
 
   const [currentLeagueTier] = useState<LeagueTier>('iron');  // 우선 아이언으로 시작
   const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
-  const [leagueRemainingText] = useState<string>(''); // 임시 텍스트
+  const [leagueRemainingText] = useState<string>('');
   // 촬영 결과 임시 소스 목록
   const [capturedSources, setCapturedSources] = useState<ImageSourcePropType[]>([]);
 
