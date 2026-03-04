@@ -151,15 +151,13 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
 
         {/* Apple 로그인 (iOS만) */}
         {appleAuthAvailable && (
-          <Pressable
-            style={[styles.button, styles.apple]}
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={16}
+            style={styles.appleAuthButton}
             onPress={handleAppleLogin}
-          >
-            <Text style={styles.appleIcon}></Text>
-            <Text style={[styles.buttonText, styles.appleText]}>
-              Apple로 계속하기
-            </Text>
-          </Pressable>
+          />
         )}
 
         {/* 네이버 로그인 */}
@@ -227,16 +225,9 @@ const styles = StyleSheet.create({
   naver: {
     backgroundColor: '#03C75A',
   },
-  apple: {
-    backgroundColor: '#000',
-  },
-  appleIcon: {
-    marginRight: 8,
-    fontSize: 20,
-    color: '#fff',
-  },
-  appleText: {
-    color: '#fff',
+  appleAuthButton: {
+    width: 309,
+    height: 64,
   },
   kakaoIcon: {
     width: 18,
@@ -251,7 +242,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   buttonText: {
-    fontSize: 15,
+    fontSize: 22,
     fontWeight: '600',
   },
   naverText: {
