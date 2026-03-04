@@ -55,11 +55,11 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
       const response = await loginWithApple(identityToken);
       if (response.status === 'NICKNAME_REQUIRED' || response.status === 'nickname_required') {
         if (response.token) {
-          await saveAuthData(response.token, response.email, 'pending');
+          await saveAuthData(response.token, response.email, 'pending', 'apple');
         }
         onNicknameRequired(response.email, response.social_id!);
       } else if (response.status === 'success') {
-        await saveAuthData(response.token!, response.email, response.nickname!);
+        await saveAuthData(response.token!, response.email, response.nickname!, 'apple');
         onLoginSuccess(response.email, response.nickname!);
       } else {
         Alert.alert('로그인 실패', '알 수 없는 응답입니다.');
@@ -94,14 +94,14 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
         // 토큰이 반환되면 임시로 저장 (닉네임 설정 API에서 사용할 수 있도록)
         if (response.token) {
           console.log('✅ 임시 토큰 저장:', response.token.substring(0, 20) + '...');
-          await saveAuthData(response.token, response.email, 'pending');
+          await saveAuthData(response.token, response.email, 'pending', oauthProvider);
         }
 
         onNicknameRequired(response.email, response.social_id!);
       } else if (response.status === 'success') {
         // 로그인 성공 - 토큰 저장
         console.log('로그인 성공:', response.email, response.nickname);
-        await saveAuthData(response.token!, response.email, response.nickname!);
+        await saveAuthData(response.token!, response.email, response.nickname!, oauthProvider);
         onLoginSuccess(response.email, response.nickname!);
       } else {
         console.log('알 수 없는 응답 상태:', response);

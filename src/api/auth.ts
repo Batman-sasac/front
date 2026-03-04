@@ -236,7 +236,7 @@ export async function connectAccount(
  */
 export async function disconnectAccount(
     token: string,
-    provider: 'kakao' | 'naver'
+    provider: 'kakao' | 'naver' | 'apple'
 ): Promise<{
     status: string;
     message: string;
