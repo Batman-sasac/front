@@ -496,10 +496,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16
   },
   welcome: {
-    fontSize: fontScale(22),
+    fontSize: fontScale(30),
     fontWeight: '800',
-    marginTop: scale(8),
-    marginBottom: scale(16),
+    marginTop: scale(10),
+    marginBottom: scale(8),
+    marginHorizontal: scale(8),
   },
 
   /* 좌/우 컬럼 레이아웃 */
