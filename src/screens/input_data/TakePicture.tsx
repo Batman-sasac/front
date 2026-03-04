@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Platform, ImageSourcePropType } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Platform, ImageSourcePropType, Alert, Linking } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -39,7 +39,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
             const media = await ImagePicker.requestMediaLibraryPermissionsAsync();
             setHasMediaPermission(media.status === 'granted');
 
-            if (!cameraPermission?.granted) {
+            if (cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain) {
                 await requestCameraPermission();
             }
         })();
@@ -259,46 +259,68 @@ export default function TakePicture({ onBack, onDone }: Props) {
         onDone(shots);
     };
 
-    if (cameraPermission?.granted === false) {
+    const handleRequestCameraPermission = async () => {
+        try {
+            if (cameraPermission?.granted) return;
+
+            if (cameraPermission?.canAskAgain === false) {
+                Alert.alert(
+                    '카메라 권한 필요',
+                    '설정에서 카메라 권한을 허용해주세요.',
+                    [
+                        { text: '취소', style: 'cancel' },
+                        { text: '설정으로 이동', onPress: () => Linking.openSettings() },
+                    ]
+                );
+                return;
+            }
+
+            const result = await requestCameraPermission();
+            if (!result.granted && result.canAskAgain === false) {
+                Alert.alert(
+                    '카메라 권한 필요',
+                    '설정에서 카메라 권한을 허용해주세요.',
+                    [
+                        { text: '취소', style: 'cancel' },
+                        { text: '설정으로 이동', onPress: () => Linking.openSettings() },
+                    ]
+                );
+            }
+        } catch (e) {
+            console.error('카메라 권한 요청 실패:', e);
+            Alert.alert('오류', '카메라 권한 요청 중 문제가 발생했습니다.');
+        }
+    };
+
+    if (!cameraPermission) {
         return (
             <View style={[styles.root, styles.center]}>
-                <Text style={{ color: '#fff', marginBottom: scale(12) }}>
+                <Text style={{ fontSize: scale(18), color: '#fff', marginBottom: scale(12) }}>
+                    카메라 권한 상태를 확인 중입니다.
+                </Text>
+
+                <Pressable
+                    style={[
+                        styles.primaryBtn,
+                        { marginTop: scale(10), backgroundColor: 'rgba(255,255,255,0.15)' },
+                    ]}
+                    onPress={onBack}
+                >
+                    <Text style={styles.primaryBtnText}>뒤로가기</Text>
+                </Pressable>
+            </View>
+        );
+    }
+
+    if (cameraPermission.granted === false) {
+        return (
+            <View style={[styles.root, styles.center]}>
+                <Text style={{ fontSize: scale(18), color: '#fff', marginBottom: scale(12) }}>
                     카메라 권한이 필요합니다.
                 </Text>
 
-                <Pressable style={styles.primaryBtn} onPress={requestCameraPermission}>
+                <Pressable style={styles.primaryBtn} onPress={handleRequestCameraPermission}>
                     <Text style={styles.primaryBtnText}>권한 요청</Text>
-                </Pressable>
-
-                <Pressable
-                    style={[
-                        styles.primaryBtn,
-                        { marginTop: scale(10), backgroundColor: '#22C55E' },
-                    ]}
-                    onPress={() => {
-                        onDone([
-                            require('../../../assets/ocr-test.png'),
-                        ]);
-                    }}
-                >
-                    <Text style={styles.primaryBtnText}>🧪 OCR 테스트 (스크린샷)</Text>
-                </Pressable>
-
-                <Pressable
-                    style={[
-                        styles.primaryBtn,
-                        { marginTop: scale(10), backgroundColor: '#3B82F6' },
-                    ]}
-                    onPress={() => {
-                        onDone([
-                            require('../../../assets/dummy/text1.jpg'),
-                            require('../../../assets/dummy/text2.jpg'),
-                            require('../../../assets/dummy/text3.jpg'),
-                            require('../../../assets/dummy/text4.jpg'),
-                        ]);
-                    }}
-                >
-                    <Text style={styles.primaryBtnText}>(임시) 더미 이미지 테스트</Text>
                 </Pressable>
 
                 <Pressable
@@ -446,7 +468,7 @@ const styles = StyleSheet.create({
         borderRadius: scale(14),
         backgroundColor: '#5E82FF',
     },
-    primaryBtnText: { color: '#fff', fontSize: fontScale(13), fontWeight: '800' },
+    primaryBtnText: { color: '#fff', fontSize: fontScale(25), fontWeight: '800', marginVertical: scale(5), marginHorizontal: scale(5) },
 
     topBar: {
         position: 'absolute',
