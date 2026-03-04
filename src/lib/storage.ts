@@ -3,20 +3,36 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const TOKEN_KEY = '@bat_auth_token';
 const USER_EMAIL_KEY = '@bat_user_email';
 const USER_NICKNAME_KEY = '@bat_user_nickname';
+const USER_PROVIDER_KEY = '@bat_user_provider';
 const NOTIFICATION_CACHE_KEY = '@bat_notification_status';
+export type AuthProvider = 'kakao' | 'naver' | 'apple';
 
 /**
  * 로그인 정보 저장
  */
-export async function saveAuthData(token: string, email: string, nickname: string) {
+export async function saveAuthData(
+    token: string,
+    email: string,
+    nickname: string,
+    provider?: AuthProvider
+) {
     try {
-        console.log('토큰 저장 시작:', { token: token?.substring(0, 20) + '...', email, nickname });
+        console.log('토큰 저장 시작:', {
+            token: token?.substring(0, 20) + '...',
+            email,
+            nickname,
+            provider: provider ?? '(unchanged)',
+        });
 
-        await AsyncStorage.multiSet([
+        const entries: [string, string][] = [
             [TOKEN_KEY, token],
             [USER_EMAIL_KEY, email],
             [USER_NICKNAME_KEY, nickname],
-        ]);
+        ];
+        if (provider) {
+            entries.push([USER_PROVIDER_KEY, provider]);
+        }
+        await AsyncStorage.multiSet(entries);
 
         // 저장 후 검증
         const savedToken = await AsyncStorage.getItem(TOKEN_KEY);
@@ -51,20 +67,28 @@ export async function getToken(): Promise<string | null> {
 export async function getUserInfo(): Promise<{
     email: string | null;
     nickname: string | null;
+    provider: AuthProvider | null;
 }> {
     try {
-        const [email, nickname] = await AsyncStorage.multiGet([
+        const [email, nickname, provider] = await AsyncStorage.multiGet([
             USER_EMAIL_KEY,
             USER_NICKNAME_KEY,
+            USER_PROVIDER_KEY,
         ]);
+        const providerRaw = provider[1];
+        const providerValue: AuthProvider | null =
+            providerRaw === 'kakao' || providerRaw === 'naver' || providerRaw === 'apple'
+                ? providerRaw
+                : null;
 
         return {
             email: email[1],
             nickname: nickname[1],
+            provider: providerValue,
         };
     } catch (error) {
         console.error('사용자 정보 가져오기 실패:', error);
-        return { email: null, nickname: null };
+        return { email: null, nickname: null, provider: null };
     }
 }
 
@@ -77,6 +101,7 @@ export async function clearAuthData() {
             TOKEN_KEY,
             USER_EMAIL_KEY,
             USER_NICKNAME_KEY,
+            USER_PROVIDER_KEY,
         ]);
     } catch (error) {
         console.error('인증 정보 삭제 실패:', error);
