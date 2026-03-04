@@ -14,13 +14,15 @@ import {
 import { fontScale, scale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
 import OAuthWebView from '../../components/OAuthWebView';
-import { clearAuthData, getToken, getUserInfo as getStoredUserInfo, getCachedMyPageStats, setCachedMyPageStats, saveAuthData } from '../../lib/storage';
+import { clearAuthData, getToken, getUserInfo as getStoredUserInfo, getCachedMyPageStats, setCachedMyPageStats, saveAuthData, type AuthProvider } from '../../lib/storage';
 import { confirmLogout } from '../../lib/auth';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import {
     connectAccount,
     disconnectAccount,
     getOAuthUrl,
     getUserStats,
+    loginWithApple,
     updateNickname as apiUpdateNickname,
     withdrawAccount,
 } from '../../api/auth';
@@ -45,6 +47,15 @@ type Props = {
 };
 
 const BG = '#F6F7FB';
+
+const inferProviderFromEmail = (email: string | null): AuthProvider | null => {
+    if (!email) return null;
+    const lowered = email.toLowerCase();
+    if (lowered.endsWith('@kakao.oauth') || lowered.startsWith('kakao_')) return 'kakao';
+    if (lowered.endsWith('@naver.oauth') || lowered.startsWith('naver_')) return 'naver';
+    if (lowered.endsWith('@apple.oauth') || lowered.startsWith('apple_') || lowered.endsWith('@privaterelay.appleid.com')) return 'apple';
+    return null;
+};
 
 const getCharacterSourceByType = (typeLabel: string) => {
     if (!typeLabel) return require('../../../assets/bat-character.png');
@@ -79,6 +90,7 @@ export default function MyPageScreen({
 
     const [kakaoEmail, setKakaoEmail] = useState<string | null>(null);
     const [naverEmail, setNaverEmail] = useState<string | null>(null);
+    const [appleEmail, setAppleEmail] = useState<string | null>(null);
 
     const [showOAuthWebView, setShowOAuthWebView] = useState(false);
     const [oauthProvider, setOauthProvider] = useState<'kakao' | 'naver'>('kakao');
@@ -120,8 +132,11 @@ export default function MyPageScreen({
             }
 
             const stored = await getStoredUserInfo();
-            setKakaoEmail(stored.email ?? null);
-            setNaverEmail(null);
+            const storedEmail = stored.email ?? null;
+            const provider = stored.provider ?? inferProviderFromEmail(storedEmail);
+            setKakaoEmail(provider === 'kakao' ? storedEmail : null);
+            setNaverEmail(provider === 'naver' ? storedEmail : null);
+            setAppleEmail(provider === 'apple' ? storedEmail : null);
 
             const [stats, monthlyStats] = await Promise.all([getUserStats(token), getMonthlyStats()]);
 
@@ -151,6 +166,7 @@ export default function MyPageScreen({
 
     const kakaoConnected = !!kakaoEmail;
     const naverConnected = !!naverEmail;
+    const appleConnected = !!appleEmail;
 
     const handleConnectKakao = async () => {
         try {
@@ -171,6 +187,50 @@ export default function MyPageScreen({
             setShowOAuthWebView(true);
         } catch (error: any) {
             Alert.alert('오류', error?.message || '네이버 로그인 URL 생성 실패');
+        }
+    };
+
+    const handleConnectApple = async () => {
+        if (Platform.OS !== 'ios') {
+            Alert.alert('안내', 'Apple 계정 연동은 iOS에서만 가능합니다.');
+            return;
+        }
+
+        try {
+            const available = await AppleAuthentication.isAvailableAsync();
+            if (!available) {
+                Alert.alert('안내', '이 기기에서는 Apple 로그인 기능을 사용할 수 없습니다.');
+                return;
+            }
+
+            const credential = await AppleAuthentication.signInAsync({
+                requestedScopes: [
+                    AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                    AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                ],
+            });
+
+            const identityToken = credential.identityToken;
+            if (!identityToken) {
+                Alert.alert('오류', 'Apple 인증 토큰을 받지 못했습니다.');
+                return;
+            }
+
+            const result = await loginWithApple(identityToken);
+            if (
+                result.status === 'success' ||
+                result.status === 'nickname_required' ||
+                result.status === 'NICKNAME_REQUIRED'
+            ) {
+                setAppleEmail(result.email);
+                Alert.alert('성공', 'Apple 계정을 연동했습니다.');
+                return;
+            }
+
+            Alert.alert('오류', result.message || 'Apple 계정 연동에 실패했습니다.');
+        } catch (error: any) {
+            if (error?.code === 'ERR_REQUEST_CANCELED') return;
+            Alert.alert('오류', error?.message || 'Apple 계정 연동 실패');
         }
     };
 
@@ -196,8 +256,8 @@ export default function MyPageScreen({
         }
     };
 
-    const tryDisconnect = async (provider: 'kakao' | 'naver') => {
-        const connectedCount = (kakaoEmail ? 1 : 0) + (naverEmail ? 1 : 0);
+    const tryDisconnect = async (provider: 'kakao' | 'naver' | 'apple') => {
+        const connectedCount = (kakaoEmail ? 1 : 0) + (naverEmail ? 1 : 0) + (appleEmail ? 1 : 0);
 
         if (connectedCount <= 1) {
             setShowSingleDisconnectModal(true);
@@ -215,11 +275,14 @@ export default function MyPageScreen({
 
             if (provider === 'kakao') {
                 setKakaoEmail(null);
-            } else {
+            } else if (provider === 'naver') {
                 setNaverEmail(null);
+            } else {
+                setAppleEmail(null);
             }
 
-            Alert.alert('성공', `${provider === 'kakao' ? '카카오' : '네이버'} 계정 연동을 해제했습니다.`);
+            const providerLabel = provider === 'kakao' ? '카카오' : provider === 'naver' ? '네이버' : 'Apple';
+            Alert.alert('성공', `${providerLabel} 계정 연동을 해제했습니다.`);
         } catch (error: any) {
             Alert.alert('오류', error?.message || '연동 해제 실패');
         }
@@ -410,6 +473,45 @@ export default function MyPageScreen({
                         {kakaoConnected && (
                             <View style={styles.emailBox}>
                                 <Text style={styles.emailText}>이메일: {kakaoEmail}</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={[styles.accountContainer, appleConnected && styles.accountContainerConnectedApple]}>
+                        <View style={[styles.accountBox, styles.appleBox]}>
+                            <View style={styles.accountRow}>
+                                <View style={styles.providerInfo}>
+                                    <Text style={styles.appleProviderIcon}></Text>
+                                    <Text style={[styles.providerName, styles.appleText]}>Apple 계정</Text>
+                                </View>
+
+                                {appleConnected ? (
+                                    <Pressable style={styles.accountAction} onPress={() => tryDisconnect('apple')}>
+                                        <Text style={[styles.accountActionText, styles.appleText]}>연동 해제</Text>
+                                        <Image
+                                            source={require('../../../assets/shift.png')}
+                                            style={styles.shiftIcon}
+                                            resizeMode="contain"
+                                            tintColor="#FFFFFF"
+                                        />
+                                    </Pressable>
+                                ) : (
+                                    <Pressable style={styles.accountAction} onPress={handleConnectApple}>
+                                        <Text style={[styles.accountActionText, styles.appleText]}>연동하기</Text>
+                                        <Image
+                                            source={require('../../../assets/shift.png')}
+                                            style={styles.shiftIcon}
+                                            resizeMode="contain"
+                                            tintColor="#FFFFFF"
+                                        />
+                                    </Pressable>
+                                )}
+                            </View>
+                        </View>
+
+                        {appleConnected && (
+                            <View style={styles.emailBox}>
+                                <Text style={styles.emailText}>이메일: {appleEmail}</Text>
                             </View>
                         )}
                     </View>
@@ -707,6 +809,10 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#03C75A',
     },
+    accountContainerConnectedApple: {
+        borderWidth: 2,
+        borderColor: '#111827',
+    },
     accountBox: {
         paddingVertical: scale(14),
         paddingHorizontal: scale(16),
@@ -716,6 +822,9 @@ const styles = StyleSheet.create({
     },
     naverBox: {
         backgroundColor: '#03C75A',
+    },
+    appleBox: {
+        backgroundColor: '#111827',
     },
     accountRow: {
         flexDirection: 'row',
@@ -760,6 +869,16 @@ const styles = StyleSheet.create({
     },
     naverText: {
         color: '#FFFFFF',
+    },
+    appleText: {
+        color: '#FFFFFF',
+    },
+    appleProviderIcon: {
+        color: '#FFFFFF',
+        fontSize: fontScale(16),
+        fontWeight: '700',
+        width: scale(18),
+        textAlign: 'center',
     },
     withdrawButton: {
         marginTop: scale(16),
