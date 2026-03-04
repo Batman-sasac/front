@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -91,6 +91,8 @@ export default function HomeScreen({
   onNavigate,
   onLogout,
 }: Props) {
+  const [graphWidth, setGraphWidth] = useState(0);
+  const graphSvgHeight = scale(132);
   const characterSource = getCharacterSourceByType(typeLabel);
   const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
   const getLevelBounds = (currentLevel: number) => {
@@ -222,24 +224,34 @@ export default function HomeScreen({
               <View style={styles.lineGraphContainer}>
                 {weeklyGrowth && weeklyGrowth.labels && weeklyGrowth.data ? (
                   <View style={styles.lineChartWrapper}>
-                    <View style={styles.lineChartContainer}>
+                    <View
+                      style={styles.lineChartContainer}
+                      onLayout={(e) => setGraphWidth(e.nativeEvent.layout.width)}
+                    >
                       {/* 그라데이션 배경 영역 */}
                       <View style={styles.graphBackground} />
                       {/* 선과 점 */}
-                      <Svg width="100%" height={scale(200)} style={styles.svgOverlay}>
+                      <Svg
+                        width={graphWidth > 0 ? graphWidth : '100%'}
+                        height={graphSvgHeight}
+                        style={styles.svgOverlay}
+                      >
                         {weeklyGrowth?.data && weeklyGrowth.data.length > 0 && (() => {
                           const data = weeklyGrowth.data;
                           const maxValue = Math.max(...data, 1);
-                          const padding = 20;
-                          const svgWidth = 360;
-                          const svgHeight = 160;
-                          const chartWidth = svgWidth - padding * 2;
-                          const chartHeight = svgHeight - padding * 2;
+                          const svgWidth = Math.max(graphWidth, 320);
+                          const paddingLeft = 20;
+                          const paddingRight = 20;
+                          const paddingTop = 18;
+                          const paddingBottom = 20;
+                          const svgHeight = graphSvgHeight;
+                          const chartWidth = Math.max(svgWidth - (paddingLeft + paddingRight), 1);
+                          const chartHeight = Math.max(svgHeight - (paddingTop + paddingBottom), 1);
                           const pointSpacing = chartWidth / Math.max(data.length - 1, 1);
 
                           const points = data.map((val: number, idx: number) => ({
-                            x: padding + idx * pointSpacing,
-                            y: svgHeight - padding - (val / maxValue) * chartHeight,
+                            x: paddingLeft + idx * pointSpacing,
+                            y: svgHeight - paddingBottom - (val / maxValue) * chartHeight,
                             val,
                           }));
 
@@ -252,9 +264,9 @@ export default function HomeScreen({
                                 <Circle cx={p.x} cy={p.y} r={4} fill="#5E82FF" />
                                 <SvgText
                                   x={p.x}
-                                  y={p.y - 10}
-                                  fontSize="12"
-                                  fontWeight="600"
+                                  y={p.y - 12}
+                                  fontSize="14"
+                                  fontWeight="700"
                                   fill="#5E82FF"
                                   textAnchor="middle"
                                 >
@@ -497,10 +509,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   leftColumn: {
-    flex: 1,
+    flex: 0.97,
   },
   rightColumn: {
-    flex: 1,
+    flex: 1.03,
     gap: 8,
   },
   /* 카드들 */
@@ -532,7 +544,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  smallTitle: { fontSize: fontScale(17), fontWeight: '500', marginBottom: 4 },
+  smallTitle: { fontSize: fontScale(25), fontWeight: '500', marginBottom: -4 },
   smallBody: { fontSize: fontScale(12), color: '#4B5563' },
 
   /* 레벨/경험치 */
@@ -574,8 +586,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   characterImage: {
-    width: scale(140),
-    height: scale(140),
+    width: scale(190),
+    height: scale(190),
+    marginBottom: scale(20),
+    marginTop: scale(20),
   },
   todayButton: {
     borderRadius: scale(16),
@@ -589,7 +603,7 @@ const styles = StyleSheet.create({
   todayButtonText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: fontScale(15),
+    fontSize: fontScale(24),
   },
 
   /* 링크 텍스트 */
@@ -650,10 +664,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   fireImage: {
-    width: scale(60),
-    height: scale(60),
+    width: scale(80),
+    height: scale(80),
     tintColor: '#E5E7EB',
     marginRight: scale(14),
+    marginBottom: scale(4),
+    marginTop: scale(4),
   },
   fireImageActive: {
     tintColor: '#F973A6', // 활성 핑크 (원하는 색으로 조정 가능)
@@ -662,12 +678,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   streakTitle: {
-    fontSize: fontScale(16),
+    fontSize: fontScale(23),
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: scale(25),
   },
   streakStrong: {
     fontWeight: '800',
+    fontSize: fontScale(18),
   },
   weekRow: {
     flexDirection: 'row',
@@ -688,7 +705,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FED7E2', // 연한 핑크 배경
   },
   weekLabel: {
-    fontSize: 13,
+    fontSize: fontScale(16),
     color: '#4B5563',
   },
   weekLabelChecked: {
@@ -717,8 +734,10 @@ const styles = StyleSheet.create({
 
   leagueTitle: {
     fontSize: fontScale(20),
-    fontWeight: '700',
-    marginBottom: 10,
+    fontWeight: '400',
+    marginBottom: fontScale(25),
+    marginHorizontal: scale(4),
+    marginTop: scale(8),
   },
 
   leagueRow: {
@@ -727,26 +746,28 @@ const styles = StyleSheet.create({
   },
 
   leagueTrophy: {
-    width: scale(62),
-    height: scale(62),
-    marginRight: 14,
+    width: scale(100),
+    height: scale(100),
+    marginRight: scale(14),
+    marginBottom: scale(8),
   },
 
   leagueMainText: {
-    fontSize: fontScale(15),
-    fontWeight: '800',
+    fontSize: fontScale(25),
+    fontWeight: '500',
     marginBottom: 6,
   },
 
   leagueSubText: {
-    fontSize: fontScale(12),
+    fontSize: fontScale(15),
     fontWeight: '600',
-    color: '#4B5563',
+    color: '#84858C',
+    marginTop: scale(7),
   },
 
   leagueArrowImage: {
-    width: scale(20),
-    height: scale(20),
+    width: scale(30),
+    height: scale(30),
     tintColor: '#9CA3AF',
     marginLeft: 8,
   },
@@ -757,8 +778,8 @@ const styles = StyleSheet.create({
     gap: scale(6),
   },
   todayButtonIcon: {
-    width: scale(20),
-    height: scale(20),
+    width: scale(24),
+    height: scale(24),
     tintColor: '#FFFFFF',
   },
   headerRow: {
@@ -781,21 +802,21 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   lineGraphContainer: {
-    minHeight: scale(180),
-    marginTop: scale(2),
-    marginBottom: scale(-45),
+    minHeight: scale(138),
+    marginTop: scale(0),
+    marginBottom: scale(0),
     justifyContent: 'flex-start',
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   lineChartWrapper: {
     width: '100%',
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   lineChartContainer: {
     width: '100%',
-    height: scale(210),
+    height: scale(135),
     position: 'relative',
-    marginBottom: 0,
+    marginBottom: scale(2),
   },
   graphBackground: {
     position: 'absolute',
@@ -829,15 +850,17 @@ const styles = StyleSheet.create({
   },
   graphStatsTextContainer: {
     alignItems: 'flex-start',
-    marginTop: -scale(80),
-    paddingLeft: scale(20),
+    marginTop: scale(-2),
+    paddingLeft: scale(8),
+    paddingBottom: scale(4),
     width: '100%',
     includeFontPadding: false
   },
   graphStatsLabel: {
-    fontSize: fontScale(11),
-    color: '#9CA3AF',
-    fontWeight: '500',
+    fontSize: fontScale(15),
+    color: '#4B5563',
+    fontWeight: '800',
+    marginBottom: scale(4),
   },
   graphStatsText: {
     fontSize: fontScale(12),
@@ -928,11 +951,12 @@ const styles = StyleSheet.create({
     color: '#4B5563',
   },
   goalCardTitle: {
-    fontSize: fontScale(18),
-    fontWeight: '700',
+    fontSize: fontScale(25),
+    fontWeight: '500',
     color: '#1F2937',
     marginTop: scale(8),
     marginBottom: scale(20),
+    marginHorizontal: scale(8),
   },
   goalInlineRow: {
     flexDirection: 'row',
@@ -941,10 +965,12 @@ const styles = StyleSheet.create({
     marginBottom: scale(18),
   },
   goalItemLabel: {
-    fontSize: fontScale(13),
+    fontSize: fontScale(18),
     fontWeight: '600',
     color: '#4B5563',
     minWidth: scale(75),
+    marginHorizontal: scale(8),
+    marginBottom: scale(4),
   },
   goalProgressBarContainer: {
     flex: 1,
@@ -956,13 +982,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   goalProgressBar: {
-    height: '100%',
-    borderRadius: scale(8),
+    height: '130%',
+    borderRadius: scale(10),
   },
   goalValueOverlay: {
     position: 'absolute',
     right: scale(10),
-    fontSize: fontScale(14),
+    fontSize: fontScale(20),
     fontWeight: '800',
     color: '#FFFFFF',
   },
@@ -974,10 +1000,11 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   goalHighlight: {
-    fontSize: fontScale(18),
+    fontSize: fontScale(24),
     fontWeight: '700',
     color: '#5E82FF',
-    marginBottom: scale(8),
+    marginBottom: scale(24),
+    marginHorizontal: scale(8),
     textAlign: 'left',
   },
 });
