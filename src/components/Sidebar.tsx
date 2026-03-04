@@ -155,16 +155,20 @@ const styles = StyleSheet.create({
         gap: scale(16),
         alignItems: 'center',
         paddingBottom: scale(16),
+        marginBottom: scale(35),
     },
     menuButton: {
         alignItems: 'center',
         justifyContent: 'center',
         gap: scale(6),
+        marginTop: scale(2),
     },
     menuIcon: {
-        width: scale(32),
-        height: scale(32),
+        width: scale(36),
+        height: scale(36),
         tintColor: '#9CA3AF',
+        marginBottom: scale(2),
+        marginTop: scale(2),
     },
     menuText: {
         fontSize: fontScale(14),
