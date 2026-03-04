@@ -372,7 +372,7 @@ export default function HomeScreen({
 
                 {/* 리그명 + 순위 */}
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.leagueMainText}>아이언 리그 5위</Text>
+                  <Text style={styles.leagueMainText}>아이언 리그 <Text style={styles.leagueRank}>5</Text> 위</Text>
 
                   {/* XP 부족분 계산 */}
                   <Text style={styles.leagueSubText}>
@@ -756,6 +756,11 @@ const styles = StyleSheet.create({
     fontSize: fontScale(25),
     fontWeight: '500',
     marginBottom: 6,
+  },
+
+  leagueRank: {
+    fontSize: fontScale(30),
+    fontWeight: '700',
   },
 
   leagueSubText: {
