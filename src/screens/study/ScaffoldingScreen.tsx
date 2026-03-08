@@ -1069,9 +1069,11 @@ export default function ScaffoldingScreen({
                     )}
                 </View>
             </View>
-            <View pointerEvents="none" style={styles.pageIndicatorWrap}>
-                <Text style={styles.pageIndicatorText}>{pageIndicatorLabel}</Text>
-            </View>
+            {!isReviewMode && (
+                <View pointerEvents="none" style={styles.pageIndicatorWrap}>
+                    <Text style={styles.pageIndicatorText}>{pageIndicatorLabel}</Text>
+                </View>
+            )}
 
             {/* 설명 */}
             {hintWord !== null && (
