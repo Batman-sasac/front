@@ -38,6 +38,11 @@ export type ScaffoldingPayload = {
     user_answers?: string[]; // 이전 학습에서 작성한 답변 (복습용)
 };
 
+type SavePayload = {
+    answers: string[];
+    selectedBlankIds: number[];
+};
+
 type Props = {
     onBack: () => void;
     onBackFromCompletion?: () => void; // 학습 완료 후 뒤로가기
@@ -48,7 +53,7 @@ type Props = {
     loading: boolean;
     error: string | null;
     onRetry: () => void;
-    onSave?: (answers: string[]) => Promise<void>;
+    onSave?: (payload: SavePayload) => Promise<void>;
     initialRound?: Step; // 초기 라운드 설정 (복습용)
     reviewQuizId?: number | null; // 복습용 quiz ID
     subjectName?: string; // 과목명
@@ -836,12 +841,23 @@ export default function ScaffoldingScreen({
                                 onPress={async () => {
                                     if (onSave) {
                                         try {
-                                            // blankDefs(blank_index) 순서대로 답변 정렬
-                                            const answerList = blankDefs.map((blank) => {
-                                                const instance = keywordInstances.find((ki) => ki.blankId === blank.id);
-                                                return instance ? (answers[instance.instanceId] ?? '') : '';
+                                            const orderedUniqueBlankIds = Array.from(
+                                                new Set(
+                                                    orderedSelectedBlanks
+                                                        .map((instanceId) => blankIdByInstance.get(instanceId))
+                                                        .filter((blankId): blankId is number => typeof blankId === 'number')
+                                                )
+                                            );
+                                            const answerList = orderedUniqueBlankIds.map((blankId) => {
+                                                const instance = orderedSelectedBlanks.find(
+                                                    (instanceId) => blankIdByInstance.get(instanceId) === blankId
+                                                );
+                                                return instance != null ? (answers[instance] ?? '') : '';
                                             });
-                                            await onSave(answerList);
+                                            await onSave({
+                                                answers: answerList,
+                                                selectedBlankIds: orderedUniqueBlankIds,
+                                            });
                                         } catch (e: any) {
                                             Alert.alert('저장 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
                                             return;
@@ -900,9 +916,13 @@ export default function ScaffoldingScreen({
                                 const userValue = answers[instanceId] ?? '';
                                 const substep = step.split('-')[1];
                                 const isSelected = selectedBlankSet.has(instanceId); // 사용자가 선택한 빈칸인지
+                                const shouldRenderPlainKeyword = isReviewMode && !isSelected;
 
                                 if (substep === '1') {
                                     // 설명
+                                    if (shouldRenderPlainKeyword) {
+                                        return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
+                                    }
                                     if (isSelected) {
                                         // 설명
                                         return (
@@ -935,6 +955,9 @@ export default function ScaffoldingScreen({
                                 if (substep === '2') {
                                     // 설명
                                     if (!isSelected) {
+                                        if (shouldRenderPlainKeyword) {
+                                            return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
+                                        }
                                         return (
                                             <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
                                                 <Text style={styles.wordText}>{t.value}</Text>
@@ -985,6 +1008,9 @@ export default function ScaffoldingScreen({
 
                                 // 설명
                                 if (!isSelected) {
+                                    if (shouldRenderPlainKeyword) {
+                                        return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
+                                    }
                                     return (
                                         <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
                                             <Text style={styles.wordText}>{t.value}</Text>
