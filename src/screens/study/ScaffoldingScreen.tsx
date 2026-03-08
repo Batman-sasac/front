@@ -665,6 +665,10 @@ export default function ScaffoldingScreen({
     const HelpChip = () => {
         const substep = step.split('-')[1];
 
+        if (isReviewMode) {
+            return null;
+        }
+
         if (substep === '2') {
             return (
                 <>
