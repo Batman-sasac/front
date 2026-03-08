@@ -37,9 +37,6 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
     useEffect(() => {
         (async () => {
-            const media = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            setHasMediaPermission(media.status === 'granted');
-
             if (cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain) {
                 await requestCameraPermission();
             }
@@ -76,8 +73,50 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
     const [isCameraActive, setIsCameraActive] = useState<boolean>(true);
 
+    const ensureMediaPermission = async () => {
+        const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+        if (current.granted) {
+            setHasMediaPermission(true);
+            return true;
+        }
+
+        if (current.canAskAgain === false) {
+            setHasMediaPermission(false);
+            Alert.alert(
+                '사진 권한 필요',
+                '갤러리에서 학습 자료 이미지를 선택하려면 사진 접근 권한이 필요합니다. 설정에서 사진 권한을 허용해주세요.',
+                [
+                    { text: '취소', style: 'cancel' },
+                    { text: '설정으로 이동', onPress: () => Linking.openSettings() },
+                ]
+            );
+            return false;
+        }
+
+        const requested = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        setHasMediaPermission(requested.granted);
+
+        if (requested.granted) {
+            return true;
+        }
+
+        if (requested.canAskAgain === false) {
+            Alert.alert(
+                '사진 권한 필요',
+                '갤러리에서 학습 자료 이미지를 선택하려면 사진 접근 권한이 필요합니다. 설정에서 사진 권한을 허용해주세요.',
+                [
+                    { text: '취소', style: 'cancel' },
+                    { text: '설정으로 이동', onPress: () => Linking.openSettings() },
+                ]
+            );
+        }
+
+        return false;
+    };
+
     const handlePickFromGallery = async () => {
-        if (hasMediaPermission !== true) return;
+        const granted = hasMediaPermission === true ? true : await ensureMediaPermission();
+        if (!granted) return;
         // 카메라 꺼서 메모리 확보
         setIsCameraActive(false);
 
