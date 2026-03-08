@@ -896,7 +896,7 @@ export default function App() {
                   setScaffoldingLoading(false);
                 }
               }}
-              onSave={async (userAnswers) => {
+              onSave={async ({ answers: userAnswers, selectedBlankIds }) => {
                 // 복습 모드에서는 저장하지 않음
                 if (isReviewMode) {
                   if (reviewQuizId != null) {
@@ -918,13 +918,36 @@ export default function App() {
                 if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
 
                 const blanks = scaffoldingPayload.blanks ?? [];
-                const keywords = blanks.map((b) => b.word);
+                const blankById = new Map(blanks.map((blank) => [blank.id, blank] as const));
+                const selectedBlanks = selectedBlankIds
+                  .map((blankId) => blankById.get(blankId))
+                  .filter((blank): blank is NonNullable<typeof blank> => blank != null);
+                if (selectedBlanks.length === 0) {
+                  throw new Error('선택된 빈칸 정보가 없습니다.');
+                }
+
+                const keywords = selectedBlanks.map((b) => b.word);
+                const keywordSet = new Set(keywords);
                 const pages = scaffoldingPayload.pages && scaffoldingPayload.pages.length > 0
                   ? scaffoldingPayload.pages
+                      .map((page) => ({
+                        ...page,
+                        keywords: (page.keywords ?? []).filter((word) => keywordSet.has(word)),
+                      }))
                   : [{ original_text: scaffoldingPayload.extractedText, keywords }];
-                const blankItems = scaffoldingPayload.blankItems && scaffoldingPayload.blankItems.length > 0
+                const rawBlankItems = scaffoldingPayload.blankItems && scaffoldingPayload.blankItems.length > 0
                   ? scaffoldingPayload.blankItems
                   : blanks.map((b, i) => ({ blank_index: i, word: b.word, page_index: 0 }));
+                const blankItemById = new Map(rawBlankItems.map((item) => [item.blank_index, item] as const));
+                const blankItems = selectedBlankIds.map((blankId, index) => {
+                  const item = blankItemById.get(blankId);
+                  const blank = blankById.get(blankId);
+                  return {
+                    blank_index: index,
+                    word: item?.word ?? blank?.word ?? '',
+                    page_index: item?.page_index ?? 0,
+                  };
+                });
                 const rawText = pages.map((p) => p.original_text ?? '').join('\n\n');
 
                 const ocrText = {
