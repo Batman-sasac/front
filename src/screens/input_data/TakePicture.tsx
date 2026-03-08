@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Platform, ImageSourcePropType, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Platform, ImageSourcePropType, Alert, Linking, ScrollView } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -33,6 +33,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
     const [isCounting, setIsCounting] = useState(false);
 
     const [shots, setShots] = useState<ImageSourcePropType[]>([]);
+    const [isShotListVisible, setIsShotListVisible] = useState(false);
 
     useEffect(() => {
         (async () => {
@@ -49,6 +50,12 @@ export default function TakePicture({ onBack, onDone }: Props) {
     const canShoot = useMemo(() => {
         return cameraPermission?.granted === true && !isCounting;
     }, [cameraPermission?.granted, isCounting]);
+
+    useEffect(() => {
+        if (shots.length === 0) {
+            setIsShotListVisible(false);
+        }
+    }, [shots.length]);
 
     const toggleTimer = () => {
         setTimer((prev) => {
@@ -259,6 +266,27 @@ export default function TakePicture({ onBack, onDone }: Props) {
         onDone(shots);
     };
 
+    const handleToggleShotList = () => {
+        if (shots.length === 0) return;
+        setIsShotListVisible((prev) => !prev);
+    };
+
+    const handleRemoveShot = (removeIndex: number) => {
+        setShots((prev) => prev.filter((_, idx) => idx !== removeIndex));
+    };
+
+    const getShotKey = (shot: ImageSourcePropType, index: number) => {
+        const candidate = shot as { uri?: string } | number;
+        if (typeof candidate === 'number') {
+            return `asset-${candidate}-${index}`;
+        }
+        return candidate.uri ? `uri-${candidate.uri}-${index}` : `shot-${index}`;
+    };
+
+    const visibleShotCount = Math.min(shots.length, 4);
+    const selectedShotListWidth =
+        visibleShotCount * scale(46) + Math.max(visibleShotCount - 1, 0) * scale(8) + scale(8);
+
     const handleRequestCameraPermission = async () => {
         try {
             if (cameraPermission?.granted) return;
@@ -407,26 +435,13 @@ export default function TakePicture({ onBack, onDone }: Props) {
                         />
                     </Pressable>
 
-                    {/* 최신 사진 썸네일 */}
-                    {false && shots.length > 0 && (
-                        <View style={styles.thumbnailContainer}>
-                            <Image source={shots[0]} style={styles.thumbnailImage} />
-                        </View>
-                    )}
-
                     {/* 갤러리 선택 버튼 */}
                     <Pressable style={styles.iconBtn} onPress={handlePickFromGallery}>
-                        {shots.length > 0 ? (
-                            <View style={styles.thumbnailContainer}>
-                                <Image source={shots[0]} style={styles.thumbnailImage} />
-                            </View>
-                        ) : (
-                            <Image
-                                source={require('../../../assets/take-picture/select_photo.png')}
-                                style={styles.icon}
-                                resizeMode="contain"
-                            />
-                        )}
+                        <Image
+                            source={require('../../../assets/take-picture/select_photo.png')}
+                            style={styles.icon}
+                            resizeMode="contain"
+                        />
                     </Pressable>
 
                     {/* 문서/PDF 선택 버튼 */}
@@ -438,6 +453,36 @@ export default function TakePicture({ onBack, onDone }: Props) {
                         />
                     </Pressable>
 
+                    {/* 선택/촬영 사진 썸네일 버튼 */}
+                    {shots.length > 0 && (
+                        <View style={styles.thumbnailAnchor}>
+                            <Pressable style={styles.iconBtn} onPress={handleToggleShotList}>
+                                <View style={styles.thumbnailContainer}>
+                                    <Image source={shots[0]} style={styles.thumbnailImage} />
+                                </View>
+                            </Pressable>
+
+                            {isShotListVisible && (
+                                <View style={[styles.selectedShotsRow, { width: selectedShotListWidth }]}>
+                                    <ScrollView
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        contentContainerStyle={styles.selectedShotsContent}
+                                    >
+                                        {shots.map((shot, idx) => (
+                                            <View key={getShotKey(shot, idx)} style={styles.selectedShotItem}>
+                                                <Image source={shot} style={styles.selectedShotImage} />
+                                                <Pressable style={styles.removeShotBtn} onPress={() => handleRemoveShot(idx)}>
+                                                    <Text style={styles.removeShotText}>x</Text>
+                                                </Pressable>
+                                            </View>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            )}
+                        </View>
+
+                    )}
 
                     {/* 촬영 완료 버튼 */}
                     <Pressable
@@ -452,6 +497,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                         />
                     </Pressable>
                 </View>
+
             </View>
         </View>
     );
@@ -498,7 +544,7 @@ const styles = StyleSheet.create({
     rightButtons: {
         position: 'absolute',
         right: scale(16),
-        top: scale(80),
+        top: scale(140),
         bottom: scale(160),
         alignItems: 'center',
         justifyContent: 'center',
@@ -545,6 +591,7 @@ const styles = StyleSheet.create({
         borderRadius: scale(24),
         alignItems: 'center',
         justifyContent: 'center',
+        marginTop: scale(8),
     },
     finishImage: {
         width: scale(60),
@@ -563,6 +610,14 @@ const styles = StyleSheet.create({
         borderRadius: scale(8),
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.35)',
+    },
+    thumbnailAnchor: {
+        width: scale(48),
+        height: scale(48),
+        position: 'relative',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'visible',
     },
 
     documentIcon: {
@@ -588,6 +643,53 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.35)',
     },
     moreText: { color: '#fff', fontSize: fontScale(12), fontWeight: '800', marginLeft: scale(4) },
+
+    selectedShotsRow: {
+        position: 'absolute',
+        right: scale(52),
+        top: scale(-2),
+        zIndex: 5,
+    },
+    selectedShotsContent: {
+        flexDirection: 'row-reverse',
+        paddingVertical: scale(4),
+        paddingHorizontal: scale(4),
+        alignItems: 'center',
+    },
+    selectedShotItem: {
+        width: scale(44),
+        height: scale(44),
+        marginRight: scale(8),
+        marginTop: scale(2),
+    },
+    selectedShotImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: scale(8),
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.35)',
+        backgroundColor: 'rgba(0,0,0,0.1)',
+    },
+    removeShotBtn: {
+        position: 'absolute',
+        top: scale(-5),
+        right: scale(-5),
+        width: scale(16),
+        height: scale(16),
+        borderRadius: scale(8),
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        borderWidth: 1,
+        borderColor: '#fff',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    removeShotText: {
+        color: '#fff',
+        fontSize: fontScale(11),
+        fontWeight: '800',
+        lineHeight: scale(12),
+        textTransform: 'lowercase',
+    },
 
     countOverlay: {
         ...StyleSheet.absoluteFillObject,
