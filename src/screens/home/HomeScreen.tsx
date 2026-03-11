@@ -982,7 +982,7 @@ const styles = StyleSheet.create({
   },
   goalProgressBarContainer: {
     flex: 1,
-    height: scale(32),
+    height: scale(37),
     backgroundColor: '#E5E7EB',
     borderRadius: scale(8),
     overflow: 'visible',
@@ -990,7 +990,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   goalProgressBar: {
-    height: '130%',
+    height: '100%',
     borderRadius: scale(10),
   },
   goalValueOverlay: {
