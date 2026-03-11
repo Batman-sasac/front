@@ -574,20 +574,25 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         const ch = containerRef.current.h;
         const c = cropRef.current;
 
-        const topH = clamp(c.y, 0, ch);
-        const bottomTop = clamp(c.y + c.h, 0, ch);
+        const frameLeft = clamp(Math.round(c.x), 0, cw);
+        const frameTop = clamp(Math.round(c.y), 0, ch);
+        const frameWidth = clamp(Math.round(c.w), 0, Math.max(cw - frameLeft, 0));
+        const frameHeight = clamp(Math.round(c.h), 0, Math.max(ch - frameTop, 0));
+
+        const topH = frameTop;
+        const bottomTop = clamp(frameTop + frameHeight, 0, ch);
         const bottomH = clamp(ch - bottomTop, 0, ch);
 
-        const leftW = clamp(c.x, 0, cw);
-        const rightLeft = clamp(c.x + c.w, 0, cw);
+        const leftW = frameLeft;
+        const rightLeft = clamp(frameLeft + frameWidth, 0, cw);
         const rightW = clamp(cw - rightLeft, 0, cw);
 
         return {
             top: { height: topH },
             bottom: { top: bottomTop, height: bottomH },
-            left: { top: c.y, height: c.h, width: leftW },
-            right: { left: rightLeft, top: c.y, height: c.h, width: rightW },
-            frame: { left: c.x, top: c.y, width: c.w, height: c.h },
+            left: { top: frameTop, height: frameHeight, width: leftW },
+            right: { left: rightLeft, top: frameTop, height: frameHeight, width: rightW },
+            frame: { left: frameLeft, top: frameTop, width: frameWidth, height: frameHeight },
         };
     }, [crop, containerW, containerH]);
 
