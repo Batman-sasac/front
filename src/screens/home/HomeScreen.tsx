@@ -46,6 +46,8 @@ const getCharacterSourceByType = (typeLabel: string) => {
 type RewardState = {
   baseXP: number;
   bonusXP: number;
+  baseLabel?: string;
+  bonusLabel?: string;
   showBase: boolean;
   showBonus: boolean;
 };
@@ -421,7 +423,7 @@ export default function HomeScreen({
                             ((monthlyStats?.this_month_count ?? 0) / (monthlyGoal ?? 20)) * 100,
                             100
                           )}%`,
-                          backgroundColor: '#92A6FF',
+                          backgroundColor: '#92a6ff',
                         },
                       ]}
                     />
@@ -446,7 +448,7 @@ export default function HomeScreen({
             <View style={styles.rewardCard}>
               <Text style={styles.rewardTextMain}>축하합니다!</Text>
               <Text style={styles.rewardTextSub}>
-                출석 보상으로{' '}
+                {rewardState.baseLabel ?? '출석 보상으로'}{' '}
                 <Text style={styles.rewardXP}>{rewardState.baseXP}XP</Text>
                 를 획득했어요!
               </Text>
@@ -470,7 +472,7 @@ export default function HomeScreen({
             <View style={styles.rewardCard}>
               <Text style={styles.rewardTextMain}>축하합니다!</Text>
               <Text style={styles.rewardTextSub}>
-                랜덤 추가 리워드로{' '}
+                {rewardState.bonusLabel ?? '랜덤 추가 리워드로'}{' '}
                 <Text style={styles.rewardXP}>{rewardState.bonusXP}XP</Text>
                 를 획득했어요!
               </Text>
@@ -558,12 +560,12 @@ const styles = StyleSheet.create({
   levelValue: { fontSize: fontScale(20), color: '#000000', fontWeight: '800' },
 
   progressWrapper: {
-    marginBottom: 16,
+    marginBottom: scale(16),
     position: 'relative',
   },
   progressBarBackground: {
     width: '100%',
-    height: 6,
+    height: scale(6),
     borderRadius: 999,
     backgroundColor: '#E5E7EB',
   },
@@ -584,7 +586,7 @@ const styles = StyleSheet.create({
   /* 캐릭터 + 버튼 */
   characterWrapper: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: scale(16),
   },
   characterImage: {
     width: scale(190),
@@ -914,7 +916,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   graphPlaceholder: {
-    fontSize: fontScale(13),
+    fontSize: fontScale(11),
     color: '#9CA3AF',
     textAlign: 'center',
     paddingVertical: scale(20),
