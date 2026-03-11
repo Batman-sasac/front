@@ -761,6 +761,7 @@ export default function App() {
               onDone={(sources) => {
                 setCapturedSources(sources);
                 setSelectedSourceIndex(0);
+                setCropBySourceIndex({});
                 setScaffoldingPayloads([]);
                 setScaffoldingPayload(null);
                 setScaffoldingError(null);
@@ -773,6 +774,10 @@ export default function App() {
           {/* 자료 입력: 선택/미리보기 화면 */}
           {step === 'selectPicture' && (
             <SelectPicture
+              key={capturedSources.map((source: any, index) => {
+                if (typeof source === 'number') return `asset-${source}-${index}`;
+                return source?.uri ? `uri-${source.uri}-${index}` : `source-${index}`;
+              }).join('|')}
               sources={capturedSources}
               onBack={() => setStep('takePicture')}
               onStartLearning={async (finalSources, isOcrNeeded, subject, cropMap) => {
