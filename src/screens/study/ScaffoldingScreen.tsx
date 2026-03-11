@@ -862,6 +862,9 @@ export default function ScaffoldingScreen({
                                                 answers: answerList,
                                                 selectedBlankIds: orderedUniqueBlankIds,
                                             });
+                                            if (isReviewMode) {
+                                                return;
+                                            }
                                         } catch (e: any) {
                                             Alert.alert('저장 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
                                             return;

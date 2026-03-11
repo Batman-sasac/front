@@ -73,6 +73,8 @@ export default function App() {
   const [rewardState, setRewardState] = useState({
     baseXP: 0,
     bonusXP: 0,
+    baseLabel: '출석 보상으로',
+    bonusLabel: '랜덤 추가 리워드로',
     showBase: false,
     showBonus: false,
   });
@@ -490,6 +492,8 @@ export default function App() {
       setRewardState({
         baseXP,
         bonusXP,
+        baseLabel: '출석 보상으로',
+        bonusLabel: '랜덤 추가 리워드로',
         showBase: true,
         showBonus: false,
       });
@@ -902,24 +906,6 @@ export default function App() {
                 }
               }}
               onSave={async ({ answers: userAnswers, selectedBlankIds }) => {
-                // 복습 모드에서는 저장하지 않음
-                if (isReviewMode) {
-                  if (reviewQuizId != null) {
-                    const reviewResult = await submitReviewStudy({
-                      quiz_id: reviewQuizId,
-                      user_answers: userAnswers,
-                    });
-                    const nextPoints = Number(reviewResult?.new_points);
-                    if (Number.isFinite(nextPoints)) {
-                      setExp(nextPoints);
-                    }
-                  }
-                  setIsReviewMode(false);
-                  setReviewQuizId(null);
-                  setStep('home');
-                  return;
-                }
-
                 if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
 
                 const blanks = scaffoldingPayload.blanks ?? [];
@@ -932,6 +918,44 @@ export default function App() {
                 }
 
                 const keywords = selectedBlanks.map((b) => b.word);
+                const reviewCorrectCount = userAnswers.reduce((acc, ua, idx) => {
+                  const isCorrect = (ua ?? '').trim().toLowerCase() === (keywords[idx] ?? '').trim().toLowerCase();
+                  return acc + (isCorrect ? 1 : 0);
+                }, 0);
+                const reviewEarnedXp = reviewCorrectCount * 2;
+
+                // 복습 모드에서는 저장하지 않음
+                if (isReviewMode) {
+                  setExp((prev) => prev + reviewEarnedXp);
+                  setRewardState({
+                    baseXP: reviewEarnedXp,
+                    bonusXP: 0,
+                    baseLabel: '복습 완료 보상으로',
+                    bonusLabel: '랜덤 추가 리워드로',
+                    showBase: true,
+                    showBonus: false,
+                  });
+                  setIsReviewMode(false);
+                  setReviewQuizId(null);
+                  setStep('home');
+
+                  if (reviewQuizId != null) {
+                    void submitReviewStudy({
+                      quiz_id: reviewQuizId,
+                      user_answers: userAnswers,
+                    })
+                      .then((reviewResult) => {
+                        const nextPoints = Number(reviewResult?.new_points);
+                        if (Number.isFinite(nextPoints)) {
+                          setExp(nextPoints);
+                        }
+                      })
+                      .catch((error) => {
+                        console.error('복습 결과 저장 실패:', error);
+                      });
+                  }
+                  return;
+                }
                 const keywordSet = new Set(keywords);
                 const pages = scaffoldingPayload.pages && scaffoldingPayload.pages.length > 0
                   ? scaffoldingPayload.pages
@@ -961,10 +985,7 @@ export default function App() {
                   quiz: { raw: rawText },
                 };
 
-                const gradeCount = userAnswers.reduce((acc, ua, idx) => {
-                  const isCorrect = (ua ?? '').trim().toLowerCase() === (keywords[idx] ?? '').trim().toLowerCase();
-                  return acc + (isCorrect ? 1 : 0);
-                }, 0);
+                const gradeCount = reviewCorrectCount;
 
                 const gradeResult = await gradeStudy({
                   quiz_id: 0,
