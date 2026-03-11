@@ -36,6 +36,14 @@ type CropRect = { x: number; y: number; w: number; h: number };
 type DisplayRect = { dx: number; dy: number; dw: number; dh: number };
 const EMPTY_CROP: CropRect = { x: 0, y: 0, w: 0, h: 0 };
 
+function getSourceKey(source: ImageSourcePropType | null | undefined, fallbackIndex = 0) {
+    if (source == null) return `empty-${fallbackIndex}`;
+    if (typeof source === 'number') return `asset-${source}`;
+
+    const candidate = source as { uri?: string };
+    return candidate.uri ? `uri-${candidate.uri}` : `source-${fallbackIndex}`;
+}
+
 function clamp(v: number, min: number, max: number) {
     return Math.max(min, Math.min(max, v));
 }
@@ -65,12 +73,21 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     }, [sources, selectedIndex]);
 
     const allSources = useMemo(() => (sources || []), [sources]);
+    const sourcesSessionKey = useMemo(
+        () => allSources.map((source, index) => getSourceKey(source, index)).join('|'),
+        [allSources]
+    );
+    const selectedSourceKey = useMemo(
+        () => getSourceKey(selectedSource, selectedIndex),
+        [selectedSource, selectedIndex]
+    );
 
     const [containerW, setContainerW] = useState(0);
     const [containerH, setContainerH] = useState(0);
 
     const [imageW, setImageW] = useState(0);
     const [imageH, setImageH] = useState(0);
+    const [isCropReady, setIsCropReady] = useState(false);
 
     const displayRect = useMemo(() => {
         return getDisplayRect(containerW, containerH, imageW, imageH);
@@ -120,12 +137,33 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     }, [imageW, imageH]);
 
     useEffect(() => {
-        if (!selectedSource) return;
-
-        // 이미지 전환 시 이전 이미지 크기를 즉시 비워, crop 복원이 잘못된 크기로 계산되지 않도록 함
+        setSelectedIndex(0);
+        setRotation(0);
+        setSubjectName('');
+        setCropByIndex({});
         setCrop(EMPTY_CROP);
+        cropRef.current = EMPTY_CROP;
         setImageW(0);
         setImageH(0);
+        setIsCropReady(false);
+        dragStateRef.current = {
+            type: null,
+            startX: 0,
+            startY: 0,
+            startCrop: { ...EMPTY_CROP },
+        };
+    }, [sourcesSessionKey]);
+
+    useEffect(() => {
+        setIsCropReady(false);
+        setCrop(EMPTY_CROP);
+        cropRef.current = EMPTY_CROP;
+        setImageW(0);
+        setImageH(0);
+
+        if (!selectedSource) return;
+
+        let cancelled = false;
 
         const anySrc: any = selectedSource;
         const uri = typeof anySrc?.uri === 'string' ? (anySrc.uri as string) : null;
@@ -134,26 +172,35 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             Image.getSize(
                 uri,
                 (w, h) => {
+                    if (cancelled) return;
                     setImageW(w);
                     setImageH(h);
                 },
                 () => {
+                    if (cancelled) return;
                     setImageW(0);
                     setImageH(0);
                 }
             );
-            return;
+            return () => {
+                cancelled = true;
+            };
         }
 
         const anyImage: any = Image as any;
         if (typeof anyImage.resolveAssetSource === 'function') {
             const resolved = anyImage.resolveAssetSource(selectedSource);
             if (resolved?.width && resolved?.height) {
+                if (cancelled) return;
                 setImageW(resolved.width);
                 setImageH(resolved.height);
             }
         }
-    }, [selectedSource]);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedSource, selectedSourceKey]);
 
     useEffect(() => {
         let cancelled = false;
@@ -194,7 +241,10 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             const y = displayRect.dy + (saved.py / imageH) * displayRect.dh;
             const w = (saved.pw / imageW) * displayRect.dw;
             const h = (saved.ph / imageH) * displayRect.dh;
-            setCrop({ x, y, w, h });
+            const nextCrop = { x, y, w, h };
+            setCrop(nextCrop);
+            cropRef.current = nextCrop;
+            setIsCropReady(true);
             return;
         }
 
@@ -203,12 +253,15 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         const x = displayRect.dx + (displayRect.dw - w) / 2;
         const y = displayRect.dy + (displayRect.dh - h) / 2;
 
-        setCrop({ x, y, w, h });
+        const nextCrop = { x, y, w, h };
+        setCrop(nextCrop);
+        cropRef.current = nextCrop;
+        setIsCropReady(true);
 
         // containerRef도 함께 업데이트
         containerRef.current = { w: containerW, h: containerH };
         console.log('🖼️ Crop 초기화:', { x, y, w, h }, 'Container:', { w: containerW, h: containerH });
-    }, [displayRect.dx, displayRect.dy, displayRect.dw, displayRect.dh, selectedIndex, containerW, containerH, imageW, imageH, cropByIndex]);
+    }, [displayRect.dx, displayRect.dy, displayRect.dw, displayRect.dh, selectedIndex, selectedSourceKey, containerW, containerH, imageW, imageH, cropByIndex]);
 
     const getPixelCrop = () => {
         const d = displayRef.current;
@@ -236,6 +289,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const [isCropping, setIsCropping] = useState(false);
 
     const persistCurrentCropForIndex = (idx: number) => {
+        if (!isCropReady) return;
         const pixelCrop = getPixelCrop();
         if (!pixelCrop) return;
         setCropByIndex((prev) => ({
@@ -539,6 +593,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
     const limitReached = ocrUsage?.status === 'limit_reached';
     const isCropUiReady =
+        isCropReady &&
         imageW > 0 &&
         imageH > 0 &&
         displayRect.dw > 0 &&
@@ -691,9 +746,9 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             </View>
 
             <Pressable
-                style={[styles.fab, (!sources || sources.length === 0 || isCropping || limitReached) && { opacity: 0.5 }]}
+                style={[styles.fab, (!sources || sources.length === 0 || isCropping || limitReached || !isCropUiReady) && { opacity: 0.5 }]}
                 onPress={handleStart}
-                disabled={!sources || sources.length === 0 || isCropping || limitReached}
+                disabled={!sources || sources.length === 0 || isCropping || limitReached || !isCropUiReady}
             >
                 {isCropping ? (
                     <ActivityIndicator size="large" color="#FFFFFF" />
