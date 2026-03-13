@@ -111,6 +111,7 @@ export default function HomeScreen({
   const expInLevel = expClamped - levelMin;
   const expNeeded = Math.max(levelMax - levelMin, 1);
   const expProgress = levelMax === levelMin ? 1 : Math.min(expInLevel / expNeeded, 1);
+
   // 레벨에 따라 날개 스케일 (레벨 1: 0.9, 2: 1.05, 3: 1.2, 4: 1.35, 5: 1.5)
   const characterScale = 0.9 + (Math.min(Math.max(effectiveLevel, 1), 5) - 1) * 0.15;
   const weekdays = ['월', '화', '수', '목', '금', '토', '일'];

@@ -104,13 +104,19 @@ export default function App() {
   const MONTHLY_GOAL_KEY = '@bat_monthly_goal';
   const TYPE_LABEL_KEY = '@bat_type_label';
 
+  // 포인트 기준 레벨 구간
+  // 1레벨: 0 ~ 100
+  // 2레벨: 101 ~ 500
+  // 3레벨: 501 ~ 2000
+  // 4레벨: 2001 ~ 5000
+  // 5레벨: 5001 ~ 10000 (이후도 5레벨로 유지)
   const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
   const getLevelForExp = (value: number) => {
-    if (value >= LEVEL_THRESHOLDS[4]) return 5;
-    if (value >= LEVEL_THRESHOLDS[3]) return 4;
-    if (value >= LEVEL_THRESHOLDS[2]) return 3;
-    if (value >= LEVEL_THRESHOLDS[1]) return 2;
-    return 1;
+    if (value <= LEVEL_THRESHOLDS[1]) return 1;
+    if (value <= LEVEL_THRESHOLDS[2]) return 2;
+    if (value <= LEVEL_THRESHOLDS[3]) return 3;
+    if (value <= LEVEL_THRESHOLDS[4]) return 4;
+    return 5;
   };
 
   const progressLoadedRef = useRef(false);
