@@ -4,7 +4,7 @@
     "slug": "frontend",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/bat-character.png",
+    "icon": "./assets/ios_icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -13,10 +13,9 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "buildNumber": "21",
+      "buildNumber": "60",
       "supportsTablet": true,
       "bundleIdentifier": "com.batman.bat",
-      "userAppleSignIn": true,
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -59,6 +58,7 @@
     },
     "plugins": [
       "expo-notifications",
+      "expo-apple-authentication",
       [
         "expo-build-properties",
         {
@@ -73,14 +73,15 @@
     },
     "extra": {
       "eas": {
-        "projectId": "e9972864-6164-4023-9020-a4b1f3c766a4"
+        "projectId": "fe671185-4f2f-4705-899c-f5c1dfb3f574"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/e9972864-6164-4023-9020-a4b1f3c766a4"
-    }
+      "url": "https://u.expo.dev/fe671185-4f2f-4705-899c-f5c1dfb3f574"
+    },
+    "owner": "binssss"
   }
 }
