@@ -39,7 +39,13 @@ yarn-error.*
 # generated native folders
 /ios
 /android
-.expo/ 
+.expo/
+
+# EAS / build artifacts (ipa, apk 등)
+build-*.ipa
+build-*.apk
+*.ipa
+*.apk 
 
 .env
 

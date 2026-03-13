@@ -996,8 +996,9 @@ export default function App() {
                   ocr_text: ocrText,
                   // backend compatibility
                   user_answers: userAnswers,
-                  subject_name: scaffoldingPayload.title,
-                  study_name: scaffoldingPayload.title,
+                  // 과목명: 사용자가 입력한 subjectName이 있으면 그 값을 우선 사용
+                  subject_name: subjectName || scaffoldingPayload.title,
+                  study_name: subjectName || scaffoldingPayload.title,
                   original_text: pages.map((p) => p.original_text ?? ''),
                   keywords,
                   grade_cnt: gradeCount,
