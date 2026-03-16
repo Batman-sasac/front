@@ -127,9 +127,8 @@ export default function HomeScreen({
   const expNeeded = Math.max(levelMax - levelMin, 1);
   const expProgress = levelMax === levelMin ? 1 : Math.min(expInLevel / expNeeded, 1);
 
-  // 레벨업 캐릭터는 레벨별 이미지를 쓰므로 스케일 1, 유형 없을 때만 기존 BAT 스케일 적용
-  const hasLevelUpImage = Boolean(typeLabel && (typeLabel.includes('분석형') || typeLabel.includes('협력형') || typeLabel.includes('창의형') || typeLabel.includes('사회형')));
-  const characterScale = hasLevelUpImage ? 1 : 0.9 + (Math.min(Math.max(effectiveLevel, 1), 5) - 1) * 0.15;
+  // 레벨업 이미지를 레벨별로 따로 쓰므로 스케일은 항상 1로 고정
+  const characterScale = 1;
   const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
   const todayIndex = (() => {
     const jsDay = new Date().getDay();
@@ -198,6 +197,7 @@ export default function HomeScreen({
                 <Image
                   source={characterSource}
                   style={[styles.characterImage, { transform: [{ scale: characterScale }] }]}
+                  resizeMode="contain"
                 />
               </View>
 

@@ -35,6 +35,8 @@ export type OcrUsageResponse = {
     pages_limit: number;
     remaining: number;
     message?: string;
+    /** 백엔드에서 화이트리스트 유저인 경우 내려주는 플래그 */
+    is_unlimited?: boolean;
 };
 
 import config from '../lib/config';

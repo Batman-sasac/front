@@ -124,6 +124,10 @@ export default function App() {
   const isUsageLimitReached = (usage?: OcrUsageResponse | null) => {
     const target = usage ?? ocrUsage;
     if (!target) return false;
+
+    // 백엔드에서 무제한(화이트리스트) 유저로 내려온 경우에는 항상 사용 가능 처리
+    if (target.is_unlimited) return false;
+
     return target.status === 'limit_reached' || target.remaining <= 0;
   };
 
