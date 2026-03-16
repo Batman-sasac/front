@@ -12,34 +12,49 @@ import Sidebar from '../../components/Sidebar';
 import { confirmLogout } from '../../lib/auth';
 import Svg, { Polyline, Circle, Defs, LinearGradient, Stop, G, Text as SvgText } from 'react-native-svg';
 
-// 학습 유형 텍스트에 따라 캐릭터 이미지를 매핑
-const getCharacterSourceByType = (typeLabel: string) => {
-  // 아직 유형이 없으면 기본 파란 BAT
+// 학습자 유형별 색상 → 레벨업 캐릭터 이미지 (레벨 1~5)
+const LEVEL_UP_IMAGES: Record<string, Record<number, ReturnType<typeof require>>> = {
+  green: {
+    1: require('../../../assets/level-up/green-1.png'),
+    2: require('../../../assets/level-up/green-2.png'),
+    3: require('../../../assets/level-up/green-3.png'),
+    4: require('../../../assets/level-up/green-4.png'),
+    5: require('../../../assets/level-up/green-5.png'),
+  },
+  red: {
+    1: require('../../../assets/level-up/red-1.png'),
+    2: require('../../../assets/level-up/red-2.png'),
+    3: require('../../../assets/level-up/red-3.png'),
+    4: require('../../../assets/level-up/red-4.png'),
+    5: require('../../../assets/level-up/red-5.png'),
+  },
+  yellow: {
+    1: require('../../../assets/level-up/yellow-1.png'),
+    2: require('../../../assets/level-up/yellow-2.png'),
+    3: require('../../../assets/level-up/yellow-3.png'),
+    4: require('../../../assets/level-up/yellow-4.png'),
+    5: require('../../../assets/level-up/yellow-5.png'),
+  },
+  purple: {
+    1: require('../../../assets/level-up/purple-1.png'),
+    2: require('../../../assets/level-up/purple-2.png'),
+    3: require('../../../assets/level-up/purple-3.png'),
+    4: require('../../../assets/level-up/purple-4.png'),
+    5: require('../../../assets/level-up/purple-5.png'),
+  },
+};
+
+/** 학습자 유형 + 레벨에 따라 레벨업 캐릭터 이미지 반환 (유형별 색상 적용) */
+const getLevelUpCharacterSource = (typeLabel: string, level: number): ReturnType<typeof require> => {
+  const clampedLevel = Math.min(5, Math.max(1, level));
+  // 유형 없으면 기본 파란 BAT
   if (!typeLabel) {
     return require('../../../assets/bat-character.png');
   }
-
-  // 분석형 학습자  -> 장독립·숙고형 (초록 BAT)
-  if (typeLabel.includes('분석형')) {
-    return require('../../../assets/character/bat-green.png');
-  }
-
-  // 협력형 학습자  -> 장의존·숙고형 (빨간 BAT)
-  if (typeLabel.includes('협력형')) {
-    return require('../../../assets/character/bat-red.png');
-  }
-
-  // 창의형 학습자 -> 장독립·충동형 (노랑 BAT)
-  if (typeLabel.includes('창의형')) {
-    return require('../../../assets/character/bat-yellow.png');
-  }
-
-  // 사회형 학습자 -> 장의존·충동형 (보라 BAT)
-  if (typeLabel.includes('사회형')) {
-    return require('../../../assets/character/bat-purple.png');
-  }
-
-  // 예외: 위에 안 걸리면 기본 파란 BAT
+  if (typeLabel.includes('분석형')) return LEVEL_UP_IMAGES.green[clampedLevel];
+  if (typeLabel.includes('협력형')) return LEVEL_UP_IMAGES.red[clampedLevel];
+  if (typeLabel.includes('창의형')) return LEVEL_UP_IMAGES.yellow[clampedLevel];
+  if (typeLabel.includes('사회형')) return LEVEL_UP_IMAGES.purple[clampedLevel];
   return require('../../../assets/bat-character.png');
 };
 
@@ -95,7 +110,6 @@ export default function HomeScreen({
 }: Props) {
   const [graphWidth, setGraphWidth] = useState(0);
   const graphSvgHeight = scale(132);
-  const characterSource = getCharacterSourceByType(typeLabel);
   const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
   const getLevelBounds = (currentLevel: number) => {
     const idx = Math.min(Math.max(currentLevel, 1), 5) - 1;
@@ -105,6 +119,7 @@ export default function HomeScreen({
   };
 
   const effectiveLevel = level;
+  const characterSource = getLevelUpCharacterSource(typeLabel, effectiveLevel);
 
   const { min: levelMin, max: levelMax } = getLevelBounds(effectiveLevel);
   const expClamped = Math.max(levelMin, Math.min(exp, levelMax));
@@ -112,8 +127,9 @@ export default function HomeScreen({
   const expNeeded = Math.max(levelMax - levelMin, 1);
   const expProgress = levelMax === levelMin ? 1 : Math.min(expInLevel / expNeeded, 1);
 
-  // 레벨에 따라 날개 스케일 (레벨 1: 0.9, 2: 1.05, 3: 1.2, 4: 1.35, 5: 1.5)
-  const characterScale = 0.9 + (Math.min(Math.max(effectiveLevel, 1), 5) - 1) * 0.15;
+  // 레벨업 캐릭터는 레벨별 이미지를 쓰므로 스케일 1, 유형 없을 때만 기존 BAT 스케일 적용
+  const hasLevelUpImage = Boolean(typeLabel && (typeLabel.includes('분석형') || typeLabel.includes('협력형') || typeLabel.includes('창의형') || typeLabel.includes('사회형')));
+  const characterScale = hasLevelUpImage ? 1 : 0.9 + (Math.min(Math.max(effectiveLevel, 1), 5) - 1) * 0.15;
   const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
   const todayIndex = (() => {
     const jsDay = new Date().getDay();
