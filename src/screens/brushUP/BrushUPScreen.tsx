@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Modal, ActivityIndicator } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
@@ -54,19 +54,24 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
     const [searchText, setSearchText] = useState('');
     const [cards, setCards] = useState<Card[]>([]);
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const PAGE_SIZE = 20;
 
     // 복습 카드 로드
     useEffect(() => {
-        loadReviewCards();
+        void loadReviewCards(1, true);
     }, []);
 
-    const loadReviewCards = async () => {
+    const loadReviewCards = async (nextPage: number, reset = false) => {
         try {
-            setLoading(true);
+            if (reset) setLoading(true);
+            else setLoadingMore(true);
             const token = await getToken();
 
             // /ocr/list에서 복습 카드 데이터 조회
-            const response = await fetch(`${API_BASE_URL}/ocr/list?page=1&size=100`, {
+            const response = await fetch(`${API_BASE_URL}/ocr/list?page=${nextPage}&size=${PAGE_SIZE}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                 },
@@ -93,16 +98,21 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                     };
                 });
 
-                setCards(cardList);
+                setCards((prev) => (reset ? cardList : [...prev, ...cardList]));
+                setPage(nextPage);
+                setHasMore(Boolean(data.has_more));
             } else {
                 console.error('카드 로드 실패:', data);
-                setCards([]);
+                if (reset) setCards([]);
+                setHasMore(false);
             }
         } catch (error) {
             console.error('카드 로드 에러:', error);
-            setCards([]);
+            if (reset) setCards([]);
+            setHasMore(false);
         } finally {
-            setLoading(false);
+            if (reset) setLoading(false);
+            setLoadingMore(false);
         }
     };
 
@@ -250,47 +260,67 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                             <Text style={styles.emptyDesc}>학습을 완료하면 여기에 표시돼요!</Text>
                         </View>
                     ) : (
-                        filteredCards.map((card) => (
-                            <View
-                                key={card.id}
-                                style={styles.card}
-                            >
-                                {/* X 버튼 */}
-                                <Pressable
-                                    style={styles.closeBtn}
-                                    hitSlop={10}
-                                    onPressIn={() => setSuppressCardPress(true)}
-                                    onPress={() => handleDeletePress(card)}
+                        <>
+                            {filteredCards.map((card) => (
+                                <View
+                                    key={card.id}
+                                    style={styles.card}
                                 >
-                                    <Text style={styles.closeText}>×</Text>
-                                </Pressable>
+                                    {/* X 버튼 */}
+                                    <Pressable
+                                        style={styles.closeBtn}
+                                        hitSlop={10}
+                                        onPressIn={() => setSuppressCardPress(true)}
+                                        onPress={() => handleDeletePress(card)}
+                                    >
+                                        <Text style={styles.closeText}>×</Text>
+                                    </Pressable>
 
-                                {/* 카드 클릭 영역 */}
-                                <Pressable
-                                    style={styles.cardPressable}
-                                    onPress={() => {
-                                        if (suppressCardPress) return;
-                                        onCardPress?.(card);
-                                    }}
-                                >
+                                    {/* 카드 클릭 영역 */}
+                                    <Pressable
+                                        style={styles.cardPressable}
+                                        onPress={() => {
+                                            if (suppressCardPress) return;
+                                            onCardPress?.(card);
+                                        }}
+                                    >
 
-                                    {/* 제목 + 과목 아이콘 */}
-                                    <View style={styles.cardHeader}>
-                                        <Text style={styles.cardSubjectIcon}>{getSubjectIcon(card.subject)}</Text>
-                                        <Text style={styles.cardTitle}>{card.title}</Text>
-                                    </View>
+                                        {/* 제목 + 과목 아이콘 */}
+                                        <View style={styles.cardHeader}>
+                                            <Text style={styles.cardSubjectIcon}>{getSubjectIcon(card.subject)}</Text>
+                                            <Text style={styles.cardTitle}>{card.title}</Text>
+                                        </View>
 
-                                    {/* 설명 */}
-                                    <Text style={styles.cardDesc} numberOfLines={2}>{card.description}</Text>
+                                        {/* 설명 */}
+                                        <Text style={styles.cardDesc} numberOfLines={2}>{card.description}</Text>
 
-                                    {/* 기간 */}
-                                    <View style={styles.cardFooter}>
-                                        <Text ></Text>
-                                        <Text style={styles.cardDays}>{card.daysAgo}일 전</Text>
-                                    </View>
-                                </Pressable>
-                            </View>
-                        ))
+                                        {/* 기간 */}
+                                        <View style={styles.cardFooter}>
+                                            <Text ></Text>
+                                            <Text style={styles.cardDays}>{card.daysAgo}일 전</Text>
+                                        </View>
+                                    </Pressable>
+                                </View>
+                            ))}
+
+                            {selectedSubject === 'all' && (
+                                <>
+                                    {loadingMore && (
+                                        <View style={styles.loadMoreLoading}>
+                                            <ActivityIndicator size="small" color="#5E82FF" />
+                                        </View>
+                                    )}
+                                    {!loadingMore && hasMore && (
+                                        <Pressable
+                                            style={styles.loadMoreBtn}
+                                            onPress={() => void loadReviewCards(page + 1, false)}
+                                        >
+                                            <Text style={styles.loadMoreText}>더보기</Text>
+                                        </Pressable>
+                                    )}
+                                </>
+                            )}
+                        </>
                     )}
                 </ScrollView>
             </View>
@@ -365,6 +395,25 @@ const styles = StyleSheet.create({
     mainContent: {
         flex: 1,
         paddingTop: scale(20),
+    },
+    loadMoreBtn: {
+        alignSelf: 'center',
+        marginTop: scale(10),
+        marginBottom: scale(24),
+        paddingHorizontal: scale(18),
+        paddingVertical: scale(12),
+        borderRadius: scale(12),
+        backgroundColor: '#EEF2FF',
+    },
+    loadMoreText: {
+        color: '#3B5BFF',
+        fontWeight: '800',
+        fontSize: fontScale(16),
+    },
+    loadMoreLoading: {
+        alignSelf: 'center',
+        marginTop: scale(10),
+        marginBottom: scale(24),
     },
     // ?곷떒 ?ㅻ뜑 移대뱶
     headerCard: {

@@ -238,6 +238,10 @@ export type GradeStudyRequest = {
         blanks: BlankItemSave[];
         quiz: { raw: string };
     };
+    /** 페이지별 정답 수 (pages index 기준) */
+    page_correct_counts?: number[];
+    /** 페이지별 문항 수 (pages index 기준) */
+    page_question_counts?: number[];
     // 백엔드 호환용 추가 필드
     user_answers?: string[];
     study_name?: string;

@@ -70,6 +70,16 @@ export default function App() {
   const [subjectName, setSubjectName] = useState('');
   const [cropBySourceIndex, setCropBySourceIndex] = useState<Record<number, { px: number; py: number; pw: number; ph: number }>>({});
   const [batchEarnedXp, setBatchEarnedXp] = useState(0);
+  type PendingGradePart = {
+    pages: { original_text: string; keywords: string[] }[];
+    blankItems: { blank_index: number; word: string; page_index: number }[];
+    keywords: string[];
+    userAnswers: string[];
+    correctCount: number;
+  };
+  // 멀티 이미지 학습 시: 페이지별 결과를 모았다가 마지막에 1번만 /study/grade 호출
+  const [pendingGradeParts, setPendingGradeParts] = useState<Record<number, PendingGradePart>>({});
+  const pendingGradePartsRef = useRef<Record<number, PendingGradePart>>({});
   const [rewardState, setRewardState] = useState({
     baseXP: 0,
     bonusXP: 0,
@@ -576,9 +586,13 @@ export default function App() {
       setScaffoldingError(message);
 
       if (typeof message === 'string' && message.includes('무료 횟수')) {
-        Alert.alert('OCR 사용 한도', message);
-        setStep('home');
-        return;
+        // 화이트리스트 유저는 사용량 소진 모달/알림을 띄우지 않음 (기록은 계속 유지)
+        const latestUsage = (await refreshOcrUsage()) ?? ocrUsage;
+        if (!latestUsage?.is_unlimited) {
+          Alert.alert('OCR 사용 한도', message);
+          setStep('home');
+          return;
+        }
       }
 
       Alert.alert('OCR 오류', message);
@@ -779,6 +793,8 @@ export default function App() {
                 setScaffoldingPayloads([]);
                 setScaffoldingPayload(null);
                 setScaffoldingError(null);
+                setPendingGradeParts({});
+                pendingGradePartsRef.current = {};
                 setStep('selectPicture');
               }}
             />
@@ -801,6 +817,8 @@ export default function App() {
                 const nextCropMap = cropMap ?? {};
                 setCropBySourceIndex(nextCropMap);
                 setBatchEarnedXp(0);
+                setPendingGradeParts({});
+                pendingGradePartsRef.current = {};
 
                 if (!finalSources.length) {
                   setScaffoldingError('학습할 이미지가 없습니다.');
@@ -989,49 +1007,114 @@ export default function App() {
                 });
                 const rawText = pages.map((p) => p.original_text ?? '').join('\n\n');
 
-                const ocrText = {
-                  pages,
-                  blanks: blankItems,
-                  quiz: { raw: rawText },
-                };
-
-                const gradeCount = reviewCorrectCount;
-
-                const gradeResult = await gradeStudy({
-                  quiz_id: 0,
-                  correct_answers: keywords,
-                  answer: keywords,
-                  user_answer: userAnswers,
-                  quiz_html: rawText,
-                  ocr_text: ocrText,
-                  // backend compatibility
-                  user_answers: userAnswers,
-                  // 과목명: 사용자가 입력한 subjectName이 있으면 그 값을 우선 사용
-                  subject_name: subjectName || scaffoldingPayload.title,
-                  study_name: subjectName || scaffoldingPayload.title,
-                  original_text: pages.map((p) => p.original_text ?? ''),
-                  keywords,
-                  grade_cnt: gradeCount,
-                });
-
                 const isLastInBatch = selectedSourceIndex >= capturedSources.length - 1;
-                const nextPoints = Number(gradeResult?.new_points);
-                const earnedXp = gradeCount * 2;
+                const earnedXp = reviewCorrectCount * 2;
+
+                // 페이지별 결과를 모아둠 (마지막 페이지에서만 merge 후 DB 저장)
+                const part: PendingGradePart = {
+                  pages,
+                  blankItems,
+                  keywords,
+                  userAnswers,
+                  correctCount: reviewCorrectCount,
+                };
+                const nextParts = {
+                  ...pendingGradePartsRef.current,
+                  [selectedSourceIndex]: part,
+                };
+                pendingGradePartsRef.current = nextParts;
+                setPendingGradeParts(nextParts);
 
                 if (!isLastInBatch && earnedXp > 0) {
                   setBatchEarnedXp((prev) => prev + earnedXp);
                 }
 
-                if (Number.isFinite(nextPoints)) {
-                  // 백엔드 누적 포인트를 신뢰해서 단계별로 즉시 반영
-                  setExp(nextPoints);
-                } else {
-                  if (isLastInBatch) {
-                    const totalEarned = batchEarnedXp + earnedXp;
-                    if (totalEarned > 0) {
-                      setExp((prev) => prev + totalEarned);
-                    }
+                if (!isLastInBatch) return;
+
+                // 마지막 페이지: 지금까지 모아둔 결과 + 현재 페이지 결과를 merge해서 1회 저장
+                const mergedParts: Record<number, PendingGradePart> = {
+                  ...pendingGradePartsRef.current,
+                };
+                const mergedPages: { original_text: string; keywords: string[] }[] = [];
+                const mergedBlanks: { blank_index: number; word: string; page_index: number }[] = [];
+                const mergedKeywords: string[] = [];
+                const mergedUserAnswers: string[] = [];
+                let pageOffset = 0;
+                let blankOffset = 0;
+                let totalCorrect = 0;
+
+                for (let idx = 0; idx < capturedSources.length; idx += 1) {
+                  const p = mergedParts[idx];
+                  if (!p) throw new Error(`${idx + 1}페이지 학습 결과가 없어 저장할 수 없습니다.`);
+                  totalCorrect += p.correctCount;
+
+                  // pages merge (global page index)
+                  for (const pg of p.pages) mergedPages.push(pg);
+
+                  // blanks merge (reindex blank_index + page_index)
+                  for (let b = 0; b < p.blankItems.length; b += 1) {
+                    const bi = p.blankItems[b];
+                    mergedBlanks.push({
+                      blank_index: blankOffset + b,
+                      word: bi.word,
+                      page_index: pageOffset + (bi.page_index ?? 0),
+                    });
                   }
+
+                  // answers merge (blank order)
+                  mergedKeywords.push(...p.keywords);
+                  mergedUserAnswers.push(...p.userAnswers);
+
+                  pageOffset += p.pages.length;
+                  blankOffset += p.keywords.length;
+                }
+
+                const mergedRawText = mergedPages.map((p) => p.original_text ?? '').join('\n\n');
+                const mergedOcrText = {
+                  pages: mergedPages,
+                  blanks: mergedBlanks,
+                  quiz: { raw: mergedRawText },
+                };
+
+                // 페이지별 문항/정답 집계 (mergedBlanks.page_index 기준)
+                const pageQuestionCounts = Array.from({ length: mergedPages.length }, () => 0);
+                const pageCorrectCounts = Array.from({ length: mergedPages.length }, () => 0);
+                for (let i = 0; i < mergedBlanks.length; i += 1) {
+                  const pageIndex = mergedBlanks[i]?.page_index ?? 0;
+                  if (pageIndex < 0 || pageIndex >= pageQuestionCounts.length) continue;
+                  pageQuestionCounts[pageIndex] += 1;
+                  const ua = (mergedUserAnswers[i] ?? '').trim().toLowerCase();
+                  const ca = (mergedKeywords[i] ?? '').trim().toLowerCase();
+                  if (ua && ca && ua === ca) pageCorrectCounts[pageIndex] += 1;
+                }
+
+                const gradeResult = await gradeStudy({
+                  quiz_id: 0,
+                  correct_answers: mergedKeywords,
+                  answer: mergedKeywords,
+                  user_answer: mergedUserAnswers,
+                  quiz_html: mergedRawText,
+                  ocr_text: mergedOcrText,
+                  // backend compatibility
+                  user_answers: mergedUserAnswers,
+                  subject_name: subjectName || scaffoldingPayload.title,
+                  study_name: subjectName || scaffoldingPayload.title,
+                  original_text: mergedPages.map((p) => p.original_text ?? ''),
+                  keywords: mergedKeywords,
+                  grade_cnt: totalCorrect,
+                  page_correct_counts: pageCorrectCounts,
+                  page_question_counts: pageQuestionCounts,
+                });
+
+                setPendingGradeParts({});
+                pendingGradePartsRef.current = {};
+                const nextPoints = Number(gradeResult?.new_points);
+                const totalEarned = batchEarnedXp + earnedXp;
+
+                if (Number.isFinite(nextPoints)) {
+                  setExp(nextPoints);
+                } else if (totalEarned > 0) {
+                  setExp((prev) => prev + totalEarned);
                 }
               }}
             />

@@ -845,22 +845,24 @@ export default function ScaffoldingScreen({
                                 onPress={async () => {
                                     if (onSave) {
                                         try {
-                                            const orderedUniqueBlankIds = Array.from(
-                                                new Set(
-                                                    orderedSelectedBlanks
-                                                        .map((instanceId) => blankIdByInstance.get(instanceId))
-                                                        .filter((blankId): blankId is number => typeof blankId === 'number')
-                                                )
-                                            );
-                                            const answerList = orderedUniqueBlankIds.map((blankId) => {
-                                                const instance = orderedSelectedBlanks.find(
-                                                    (instanceId) => blankIdByInstance.get(instanceId) === blankId
-                                                );
-                                                return instance != null ? (answers[instance] ?? '') : '';
-                                            });
+                                            // 페이지/등장 순서 기반으로 instance를 그대로 저장한다.
+                                            // 같은 단어(같은 blankId)가 여러 번 나오더라도 dedupe 하지 않아야
+                                            // 페이지별 문항 수/정답 수가 정확히 집계된다.
+                                            const answerPairs = orderedSelectedBlanks
+                                                .map((instanceId) => {
+                                                    const blankId = blankIdByInstance.get(instanceId);
+                                                    if (typeof blankId !== 'number') return null;
+                                                    return {
+                                                        blankId,
+                                                        answer: answers[instanceId] ?? '',
+                                                    };
+                                                })
+                                                .filter((pair): pair is { blankId: number; answer: string } => pair != null);
+                                            const orderedBlankIds = answerPairs.map((pair) => pair.blankId);
+                                            const answerList = answerPairs.map((pair) => pair.answer);
                                             await onSave({
                                                 answers: answerList,
-                                                selectedBlankIds: orderedUniqueBlankIds,
+                                                selectedBlankIds: orderedBlankIds,
                                             });
                                             if (isReviewMode) {
                                                 return;
