@@ -5,10 +5,17 @@ export type BlankItem = {
     meaningLong?: string;
 };
 
+/** 클로바 enableTableDetection → 백엔드가 내려주는 표 블록 (셀 문자열 그리드) */
+export type OcrTableBlock = {
+    rows: string[][];
+};
+
 // ocr_app.py의 /ocr/save 스펙: 페이지, 빈칸, 사용자 답변 모두 JSON
 export type PageItem = {
     original_text: string;
     keywords: string[];
+    /** General OCR 표 인식 결과; 없으면 생략 */
+    tables?: OcrTableBlock[];
 };
 
 export type BlankItemSave = {
@@ -42,6 +49,24 @@ export type OcrUsageResponse = {
 import config from '../lib/config';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
+
+/** POST /ocr 의 pages[].tables 정규화 */
+function normalizeOcrTables(raw: unknown): OcrTableBlock[] | undefined {
+    if (!Array.isArray(raw) || raw.length === 0) return undefined;
+    const out: OcrTableBlock[] = [];
+    for (const t of raw) {
+        if (!t || typeof t !== 'object') continue;
+        const rows = (t as { rows?: unknown }).rows;
+        if (!Array.isArray(rows) || rows.length === 0) continue;
+        const grid = rows.map((r) =>
+            Array.isArray(r) ? r.map((c) => String(c ?? '')) : [],
+        );
+        if (grid.some((row) => row.length > 0)) {
+            out.push({ rows: grid });
+        }
+    }
+    return out.length > 0 ? out : undefined;
+}
 
 export async function runOcr(fileUri: string, cropInfo?: { px: number; py: number; pw: number; ph: number }): Promise<ScaffoldingPayload> {
     console.log('OCR 요청 시작 - fileUri:', fileUri, 'cropInfo:', cropInfo);
@@ -116,12 +141,15 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
 
     // 백엔드가 pages 배열 반환 (PDF/다중 이미지)
     if (Array.isArray(inner.pages) && inner.pages.length > 0) {
-        pages = inner.pages.map((p: { original_text?: string; keywords?: string[] }) => ({
-            original_text: p?.original_text ?? '',
-            keywords: Array.isArray(p?.keywords)
-                ? p.keywords.map(normalizeKeyword).filter(Boolean)
-                : [],
-        }));
+        pages = inner.pages.map(
+            (p: { original_text?: string; keywords?: string[]; tables?: unknown }) => ({
+                original_text: p?.original_text ?? '',
+                keywords: Array.isArray(p?.keywords)
+                    ? p.keywords.map(normalizeKeyword).filter(Boolean)
+                    : [],
+                tables: normalizeOcrTables(p?.tables),
+            }),
+        );
 
         originalText = pages
             .map((p) => p.original_text ?? '')
