@@ -173,6 +173,26 @@ export default function App() {
     }
   };
 
+  const refreshLeagueLeaderboard = async () => {
+    try {
+      const response = await getRewardLeaderboard();
+      if (response.status !== 'success' || !response.leaderboard) {
+        return null;
+      }
+
+      const users: LeagueUser[] = response.leaderboard.map((item, idx) => ({
+        id: `user_${idx}`,
+        nickname: item.nickname,
+        xp: item.total_reward,
+      }));
+      setLeagueUsers(users);
+      return users;
+    } catch (error) {
+      console.error('리그 데이터 로드 실패:', error);
+      return null;
+    }
+  };
+
   const tryMoveToTakePicture = async () => {
     const usage = await refreshOcrUsage();
     if (!isSubscribed && isUsageLimitReached(usage)) {
@@ -393,22 +413,7 @@ export default function App() {
 
     // 리그 화면 진입 시 상위 5명 리더보드 로드
     if (step === 'league') {
-      (async () => {
-        try {
-          const response = await getRewardLeaderboard();
-          if (response.status === 'success' && response.leaderboard) {
-            // 백엔드에서 상위 5명만 반환
-            const users: LeagueUser[] = response.leaderboard.map((item, idx) => ({
-              id: `user_${idx}`,
-              nickname: item.nickname,
-              xp: item.total_reward,
-            }));
-            setLeagueUsers(users);
-          }
-        } catch (e) {
-          console.error('리그 데이터 로드 실패:', e);
-        }
-      })();
+      void refreshLeagueLeaderboard();
     }
   }, [step, progressLoaded]);
 
@@ -498,6 +503,7 @@ export default function App() {
     let baseXP = 10;
     let bonusXP = 0;
     let shouldReward = true;
+    let totalPoints: number | null = null;
 
     try {
       const result = await checkAttendanceReward();
@@ -505,6 +511,7 @@ export default function App() {
         shouldReward = result.is_new_reward;
         baseXP = result.baseXP ?? 0;
         bonusXP = result.bonusXP ?? 0;
+        totalPoints = Number.isFinite(Number(result.total_points)) ? Number(result.total_points) : null;
       }
     } catch (error) {
       console.error('출석 보상 API 실패, 로컬 처리로 대체', error);
@@ -524,7 +531,11 @@ export default function App() {
     });
 
     if (shouldReward && (baseXP > 0 || bonusXP > 0)) {
-      setExp((prev) => prev + baseXP + bonusXP);
+      if (totalPoints != null) {
+        setExp(totalPoints);
+      } else {
+        setExp((prev) => prev + baseXP + bonusXP);
+      }
       setRewardState({
         baseXP,
         bonusXP,
@@ -533,6 +544,7 @@ export default function App() {
         showBase: true,
         showBonus: false,
       });
+      void refreshLeagueLeaderboard();
     }
   };
   const handleCloseBaseReward = () => {
@@ -1016,6 +1028,7 @@ export default function App() {
                         if (Number.isFinite(nextPoints)) {
                           setExp(nextPoints);
                         }
+                        return refreshLeagueLeaderboard();
                       })
                       .catch((error) => {
                         console.error('복습 결과 저장 실패:', error);
@@ -1155,7 +1168,10 @@ export default function App() {
                 setPendingGradeParts({});
                 pendingGradePartsRef.current = {};
                 const nextPoints = Number(gradeResult?.new_points);
-                const totalEarned = totalCorrect * 2;
+                const rewardGiven = Number(gradeResult?.reward_given);
+                const totalEarned = Number.isFinite(rewardGiven) ? rewardGiven : totalCorrect * 2;
+                batchEarnedXpRef.current = totalEarned;
+                setBatchEarnedXp(totalEarned);
 
                 if (totalEarned > 0) {
                   setRewardState({
@@ -1172,6 +1188,9 @@ export default function App() {
                   setExp(nextPoints);
                 } else if (totalEarned > 0) {
                   setExp((prev) => prev + totalEarned);
+                }
+                if (totalEarned > 0) {
+                  void refreshLeagueLeaderboard();
                 }
                 return {
                   earnedXp,

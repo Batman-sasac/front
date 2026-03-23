@@ -668,6 +668,10 @@ export default function ScaffoldingScreen({
             Alert.alert('입력 필요', '복습에서는 선택한 모든 빈칸에 답을 입력한 뒤 채점할 수 있어요.');
             return;
         }
+        if (!isReviewMode && step === '3-2' && missingAnswerCount > 0) {
+            Alert.alert('입력 필요', `최종 리워드는 3라운드 ${orderedSelectedBlanks.length}문항 기준이에요. 모든 빈칸에 답을 입력한 뒤 채점해 주세요.`);
+            return;
+        }
 
         const next: Record<number, GradeState> = { ...graded };
         const newWrong = new Set(wrongInstances);
