@@ -46,6 +46,7 @@ type SavePayload = {
 type SaveResult = {
     earnedXp: number;
     totalEarnedXp?: number;
+    handledCompletion?: boolean;
 };
 
 type Props = {
@@ -911,6 +912,9 @@ export default function ScaffoldingScreen({
                                                 selectedBlankIds: orderedBlankIds,
                                             });
                                             if (isReviewMode) {
+                                                return;
+                                            }
+                                            if (saveResult?.handledCompletion) {
                                                 return;
                                             }
                                             const earnedXp = saveResult?.earnedXp ?? correctCount * 2;
