@@ -197,7 +197,6 @@ export default function HomeScreen({
                 <Image
                   source={characterSource}
                   style={[styles.characterImage, { transform: [{ scale: characterScale }] }]}
-                  resizeMode="contain"
                 />
               </View>
 
