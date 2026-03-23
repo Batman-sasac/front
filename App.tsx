@@ -18,6 +18,7 @@ import TakePicture from './src/screens/input_data/TakePicture';
 import SelectPicture from './src/screens/input_data/SelectPicture';
 import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
+import StudyFlowScreen from './src/screens/study/StudyFlowScreen';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
@@ -46,6 +47,8 @@ type Step =
   | 'mypage'
   | 'takePicture'
   | 'selectPicture'
+  | 'ocrLoading'
+  | 'studyIntro'
   | 'talkingStudy'
   | 'scaffolding'
   | 'brushup'
@@ -581,7 +584,6 @@ export default function App() {
     setScaffoldingPayload(null);
     setScaffoldingPayloads([]);
     setSelectedSourceIndex(0);
-    setStep('scaffolding');
 
     try {
       const nextPayloads: ScaffoldingPayload[] = [];
@@ -593,6 +595,7 @@ export default function App() {
       setScaffoldingPayloads(nextPayloads);
       setSelectedSourceIndex(0);
       setScaffoldingPayload(nextPayloads[0] ?? null);
+      setStep('studyIntro');
     } catch (e: any) {
       const message = e?.message ?? 'OCR 추출에 실패했습니다.';
       setScaffoldingPayload(null);
@@ -840,8 +843,24 @@ export default function App() {
                   return;
                 }
 
+                setStep('ocrLoading');
                 await preloadScaffoldingPayloads(finalSources, nextCropMap);
               }}
+            />
+          )}
+          {step === 'ocrLoading' && (
+            <StudyFlowScreen
+              mode="loading"
+              totalPages={capturedSources.length}
+              currentPage={Math.min(selectedSourceIndex + 1, Math.max(capturedSources.length, 1))}
+            />
+          )}
+          {step === 'studyIntro' && (
+            <StudyFlowScreen
+              mode="intro"
+              totalPages={capturedSources.length}
+              currentPage={selectedSourceIndex + 1}
+              onStart={() => setStep('scaffolding')}
             />
           )}
           {step === 'talkingStudy' && (
@@ -873,6 +892,7 @@ export default function App() {
                     setSelectedSourceIndex(nextIndex);
                     setScaffoldingPayload(nextPayload);
                     setScaffoldingError(null);
+                    setStep('studyIntro');
                     return;
                   }
 
@@ -887,6 +907,7 @@ export default function App() {
                       next[nextIndex] = payload;
                       return next;
                     });
+                    setStep('studyIntro');
                   } catch (e: any) {
                     const message = e?.message ?? 'OCR 추출에 실패했습니다.';
                     setScaffoldingPayload(null);
