@@ -585,6 +585,24 @@ export default function ScaffoldingScreen({
         requestAnimationFrame(() => inputRefs.current[instanceId]?.focus());
     };
 
+    const focusAdjacentBlank = (instanceId: number, direction: 1 | -1 = 1) => {
+        const currentIndex = orderedSelectedBlanks.indexOf(instanceId);
+        if (currentIndex < 0) return;
+
+        const nextInstanceId = orderedSelectedBlanks[currentIndex + direction];
+        if (typeof nextInstanceId !== 'number') {
+            setActiveBlankId(null);
+            inputRefs.current[instanceId]?.blur();
+            return;
+        }
+
+        setActiveBlankId(nextInstanceId);
+        setHintWord(null);
+        setHintType(null);
+        setHintPosition(null);
+        requestAnimationFrame(() => inputRefs.current[nextInstanceId]?.focus());
+    };
+
     const handlePopupConfirm = () => {
         setPopupVisible(false);
         const cb = popupOnConfirm;
@@ -1041,12 +1059,18 @@ export default function ScaffoldingScreen({
                                                             ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
                                                             value={userValue}
                                                             onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
+                                                            onKeyPress={(e) => {
+                                                                if (e.nativeEvent.key === 'Tab') {
+                                                                    focusAdjacentBlank(instanceId, 1);
+                                                                }
+                                                            }}
+                                                            onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
                                                             style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
                                                             selectTextOnFocus
                                                             autoCapitalize="none"
                                                             autoCorrect={false}
                                                             spellCheck={false}
-                                                            blurOnSubmit
+                                                            blurOnSubmit={false}
                                                             onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
                                                             maxFontSizeMultiplier={1.0}
                                                         />
