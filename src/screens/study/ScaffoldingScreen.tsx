@@ -16,7 +16,14 @@ import {
     PanResponder,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
-import { saveTest } from '../../api/ocr';
+import {
+    saveTest,
+    type ScaffoldingPayload,
+    layoutBlocksToFullImageCoords,
+    getOcrDisplayRect,
+    type LayoutBlock,
+} from '../../api/ocr';
+// NOTE: OCR layout/tokens 학습 화면에서는 사용자가 넣은 이미지를 표시하지 않습니다.
 import config from '../../lib/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -31,12 +38,7 @@ export type BlankItem = {
     meaningLong?: string;
 };
 
-export type ScaffoldingPayload = {
-    title: string;
-    extractedText: string;
-    blanks: BlankItem[];
-    user_answers?: string[]; // 이전 학습에서 작성한 답변 (복습용)
-};
+export type { ScaffoldingPayload };
 
 type SavePayload = {
     answers: string[];
@@ -60,7 +62,18 @@ type Props = {
     currentStudyIndex?: number;
     totalStudyCount?: number;
     accumulatedEarnedXp?: number;
+    /** SelectPicture에서 계산한 원본 기준 크롭(px). 없으면 전체 이미지 OCR로 간주 */
+    cropPixelRect?: { px: number; py: number; pw: number; ph: number } | null;
 };
+
+/** Tokenize — 컴포넌트보다 위에 두어 tokens / renderTokenContent 타입에 사용 */
+type Token =
+    | { type: 'text'; value: string }
+    | { type: 'space'; value: string }
+    | { type: 'newline'; value: '\n' }
+    | { type: 'keyword'; value: string; occ: number; baseWord: string };
+
+type KeywordTokenWithId = { type: 'keyword'; value: string; occ: number; instanceId: number; baseWord: string };
 
 const BG = '#F6F7FB';
 const CARD = '#FFFFFF';
@@ -86,6 +99,7 @@ export default function ScaffoldingScreen({
     currentStudyIndex = 0,
     totalStudyCount = 1,
     accumulatedEarnedXp = 0,
+    cropPixelRect = null,
 }: Props) {
     const [step, setStep] = useState<Step>(initialRound);
     const isReviewMode = reviewQuizId != null;
@@ -109,6 +123,9 @@ export default function ScaffoldingScreen({
     const [pendingSelection, setPendingSelection] = useState<{ includeWord: string; excludeWords: string[] } | null>(null);
     const [dragConfirm, setDragConfirm] = useState<{ text: string; box: { x: number; y: number; w: number; h: number } } | null>(null);
     const [dragSelection, setDragSelection] = useState<{ text: string; box: { x: number; y: number; w: number; h: number } } | null>(null);
+    /** layout_blocks 기반 학습: 원본 이미지 픽셀 크기 */
+    const [imageNatural, setImageNatural] = useState({ w: 0, h: 0 });
+    const [layoutCanvasW, setLayoutCanvasW] = useState(0);
 
     const inputRefs = useRef<Record<number, TextInput | null>>({});
     const blankRefs = useRef<Record<number, View | null>>({}); // blankBox 위치 추적
@@ -131,6 +148,60 @@ export default function ScaffoldingScreen({
 
     /** 키워드 목록 */
     const keywordList = useMemo(() => blankDefs.map((b) => b.word), [blankDefs]);
+
+    const allPages = payload?.pages ?? [];
+    const totalLayoutBlocks = useMemo(
+        () => allPages.reduce((acc, p) => acc + (p.layout_blocks?.length ?? 0), 0),
+        [allPages],
+    );
+    const useLayoutForStudy = useMemo(
+        () => allPages.some((p) => (p.layout_blocks?.length ?? 0) > 0),
+        [allPages],
+    );
+
+    const sourceUri = useMemo(() => {
+        const s = sources[selectedIndex] as { uri?: string };
+        return typeof s?.uri === 'string' ? s.uri : null;
+    }, [sources, selectedIndex]);
+
+    const layoutPageCount = useMemo(
+        () => Math.max(1, allPages.filter((p) => (p.layout_blocks?.length ?? 0) > 0).length),
+        [allPages],
+    );
+    const layoutFullBlocks = useMemo(() => {
+        if (!useLayoutForStudy) return [];
+        const out: LayoutBlock[] = [];
+        const pagesWithLayout = allPages.filter((p) => (p.layout_blocks?.length ?? 0) > 0);
+        if (pagesWithLayout.length === 0) return out;
+
+        // 여러 페이지 OCR은 페이지를 세로로 이어붙인 한 캔버스로 배치한다.
+        pagesWithLayout.forEach((p, pageIndex) => {
+            const blocks = p.layout_blocks ?? [];
+            blocks.forEach((b) => {
+                out.push({
+                    ...b,
+                    y: (pageIndex + b.y) / pagesWithLayout.length,
+                    height: b.height / pagesWithLayout.length,
+                });
+            });
+        });
+        return out;
+    }, [useLayoutForStudy, allPages]);
+
+    const tokensPerBlock = useMemo(() => {
+        if (!useLayoutForStudy || layoutFullBlocks.length === 0) return null;
+        let seq = 1;
+        return layoutFullBlocks.map((b) => {
+            const raw = tokenizeWithKeywords(b.text, keywordList);
+            const chunk: (Token | KeywordTokenWithId)[] = [];
+            for (const t of raw) {
+                if (t.type === 'keyword') chunk.push({ ...t, instanceId: seq++ });
+                else chunk.push(t);
+            }
+            return chunk;
+        });
+    }, [useLayoutForStudy, layoutFullBlocks, keywordList]);
+
     const baseInfoByWord = useMemo(() => {
         const m = new Map<string, BlankItem>();
         blankDefs.forEach((b) => {
@@ -140,11 +211,12 @@ export default function ScaffoldingScreen({
     }, [blankDefs]);
 
     /** 중요: 중복 단어마다 instanceId를 부여해서 입력/채점을 분리 */
-    const tokens = useMemo(() => {
+    const tokens = useMemo((): Array<Token | KeywordTokenWithId> => {
+        if (tokensPerBlock) return tokensPerBlock.flat();
         const raw = tokenizeWithKeywords(extractedText, keywordList);
         let seq = 1;
         return raw.map((t) => (t.type === 'keyword' ? { ...t, instanceId: seq++ } : t));
-    }, [extractedText, keywordList]);
+    }, [tokensPerBlock, extractedText, keywordList]);
 
     const keywordInstances = useMemo(() => {
         const instances = tokens
@@ -161,6 +233,26 @@ export default function ScaffoldingScreen({
             });
         return instances;
     }, [tokens, baseInfoByWord, blankDefs]);
+
+    useEffect(() => {
+        if (!useLayoutForStudy || !sourceUri) {
+            setImageNatural({ w: 0, h: 0 });
+            return;
+        }
+        let cancelled = false;
+        Image.getSize(
+            sourceUri,
+            (w, h) => {
+                if (!cancelled) setImageNatural({ w, h });
+            },
+            () => {
+                if (!cancelled) setImageNatural({ w: 0, h: 0 });
+            },
+        );
+        return () => {
+            cancelled = true;
+        };
+    }, [useLayoutForStudy, sourceUri]);
 
     useEffect(() => {
         if (!isReviewMode || reviewInitRef.current) return;
@@ -527,6 +619,176 @@ export default function ScaffoldingScreen({
             },
         });
     }, [dragEnabled, tokens]);
+
+    // layout_blocks 좌표계는 "OCR에 넣은 이미지(=크롭 영역)" 기준 0~1.
+    // 따라서 캔버스 스케일(가로/세로 비율)도 크롭 영역 크기로 맞춰야
+    // 크롭해도 텍스트 위치가 크롭 기준으로 유지됩니다.
+    const virtualNaturalW = cropPixelRect?.pw && cropPixelRect.pw > 0 ? cropPixelRect.pw : imageNatural.w;
+    const virtualNaturalH = cropPixelRect?.ph && cropPixelRect.ph > 0 ? cropPixelRect.ph : imageNatural.h;
+
+    const canvasH =
+        layoutCanvasW > 0
+            ? (virtualNaturalW > 0 && virtualNaturalH > 0
+                ? (layoutCanvasW * virtualNaturalH) / virtualNaturalW
+                : layoutCanvasW * 1.45 * layoutPageCount)
+            : 0;
+    const rectForLayout = useMemo(
+        () => getOcrDisplayRect(layoutCanvasW, canvasH, virtualNaturalW, virtualNaturalH),
+        [layoutCanvasW, canvasH, virtualNaturalW, virtualNaturalH],
+    );
+
+    // 치킨-에그 방지: layoutStudyCanvas는 onLayout로 width를 얻기 위해
+    // layoutCanvasW/canvasH가 아직 0이어도 렌더되어야 한다.
+    const shouldUseLayoutCanvas =
+        useLayoutForStudy && tokensPerBlock != null && tokensPerBlock.length > 0;
+    const layoutReady = shouldUseLayoutCanvas && layoutCanvasW > 0 && canvasH > 0;
+
+    const blockFontForLayout = (b: LayoutBlock) => {
+        if (rectForLayout.dh <= 0) return fontScale(13);
+        const hPx = b.height * rectForLayout.dh;
+        // layout_blocks의 height가 실제 글자 크기를 직접 의미하지 않는 경우가 있어
+        // 기존 0.38 스케일로는 A4에서 폰트가 지나치게 작게 보일 수 있음.
+        return Math.min(fontScale(15), Math.max(fontScale(9), hPx * 0.5));
+    };
+
+    function renderTokenContent(t: Token | KeywordTokenWithId, idx: number, layoutFontSize?: number) {
+        const fs = layoutFontSize ?? fontScale(13);
+        // layout_blocks 좌표 기반 렌더링 모드인지
+        const inLayoutStudy = layoutReady;
+        // layout 모드에서는 줄간격이 과하게 벌어지는 문제가 있어 lineHeight를 더 타이트하게 고정
+        const lineH = fs * (inLayoutStudy ? 1.0 : 1.45);
+        const wordStyle = [styles.wordText, { fontSize: fs, lineHeight: lineH }];
+        const bodyStyle = [styles.bodyText, { fontSize: fs, lineHeight: lineH }];
+
+        if (t.type === 'newline') {
+            // 레이아웃 모드에서는 flex wrap이 줄바꿈을 담당하므로
+            // newline 토큰이 추가로 라인높이를 밀어내지 않게 제거합니다.
+            if (inLayoutStudy) return null;
+            return <View key={idx} style={styles.newline} />;
+        }
+        if (t.type === 'space') {
+            // 레이아웃 모드에서는 블록 좌표만으로도 간격을 맞추려는 목적이라,
+            // 공백 토큰이 flex 레이아웃에서 추가로 크게 벌어지지 않게 제거한다.
+            if (inLayoutStudy) return null;
+            return <Text key={idx} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
+        }
+        if (t.type === 'text') return <Text key={idx} style={bodyStyle} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
+
+        const kt = t as KeywordTokenWithId;
+        const instanceId = kt.instanceId;
+        const instanceInfo = keywordInstances.find((ki) => ki.instanceId === instanceId);
+        const grade = instanceInfo ? (graded[instanceInfo.blankId] ?? 'idle') : 'idle';
+        const userValue = answers[instanceId] ?? '';
+        const substep = step.split('-')[1];
+        const isSelected = selectedBlankSet.has(instanceId);
+        const shouldRenderPlainKeyword = isReviewMode && !isSelected;
+        // 레이아웃 모드에서는 토큰 사이 margin/padding(= blankTokenSpacing)을 제거한다.
+
+        if (substep === '1') {
+            if (shouldRenderPlainKeyword) {
+                return <Text key={idx} style={bodyStyle} onLayout={recordTokenLayout(idx)}>{kt.value}</Text>;
+            }
+            if (isSelected) {
+                return (
+                    <Pressable
+                        key={idx}
+                        onPress={() => onToggleBlankSelection(instanceId)}
+                        style={[styles.wordPill, inLayoutStudy ? null : styles.blankTokenSpacing, { backgroundColor: HIGHLIGHT_BG }]}
+                        onLayout={recordTokenLayout(idx)}
+                    >
+                        <View style={{ position: 'relative' }}>
+                            <Text style={[wordStyle, { opacity: 0 }]}>{kt.value}</Text>
+                        </View>
+                    </Pressable>
+                );
+            }
+            return (
+                <Pressable
+                    key={idx}
+                    onPress={() => onToggleBlankSelection(instanceId)}
+                    style={[styles.wordPill, inLayoutStudy ? null : styles.blankTokenSpacing, { backgroundColor: HIGHLIGHT_BG }]}
+                    onLayout={recordTokenLayout(idx)}
+                >
+                    <Text style={wordStyle}>{kt.value}</Text>
+                </Pressable>
+            );
+        }
+
+        if (substep === '2') {
+            if (!isSelected) {
+                if (shouldRenderPlainKeyword) {
+                    return <Text key={idx} style={bodyStyle} onLayout={recordTokenLayout(idx)}>{kt.value}</Text>;
+                }
+                return (
+                    <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
+                        <Text style={wordStyle}>{kt.value}</Text>
+                    </Pressable>
+                );
+            }
+            const isActive = activeBlankId === instanceId;
+            const currentHintType = hintWord === instanceId ? hintType : null;
+            const textAlign = currentHintType === 'last' ? 'right' : 'left';
+            return (
+                <View
+                    key={idx}
+                    ref={(r) => {
+                        if (r) blankRefs.current[instanceId] = r;
+                    }}
+                >
+                    <Pressable
+                        onPress={() => onPressBlank(instanceId)}
+                        onLongPress={() => onLongPressBlank(instanceId)}
+                        delayLongPress={450}
+                        style={[styles.wordPill, inLayoutStudy ? null : styles.blankTokenSpacing, styles.blankBoxBase, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
+                        onLayout={recordTokenLayout(idx)}
+                    >
+                        <View style={{ position: 'relative' }}>
+                            <Text style={[wordStyle, { opacity: 0 }]}>{kt.value}</Text>
+                            {isActive ? (
+                                <TextInput
+                                    ref={(r) => {
+                                        if (r) inputRefs.current[instanceId] = r;
+                                    }}
+                                    value={userValue}
+                                    onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
+                                    style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign, fontSize: fs, lineHeight: lineH }]}
+                                    selectTextOnFocus
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    spellCheck={false}
+                                    blurOnSubmit
+                                    onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
+                                    maxFontSizeMultiplier={1.0}
+                                />
+                            ) : (
+                                <Text style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign, fontSize: fs, lineHeight: lineH }]}>
+                                    {userValue}
+                                </Text>
+                            )}
+                        </View>
+                    </Pressable>
+                </View>
+            );
+        }
+
+        if (!isSelected) {
+            if (shouldRenderPlainKeyword) {
+                return <Text key={idx} style={bodyStyle} onLayout={recordTokenLayout(idx)}>{kt.value}</Text>;
+            }
+            return (
+                <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
+                    <Text style={wordStyle}>{kt.value}</Text>
+                </Pressable>
+            );
+        }
+        const bg = grade === 'correct' ? CORRECT_BG : grade === 'wrong' ? WRONG_BG : HIGHLIGHT_BG;
+
+        return (
+            <View key={idx} style={[styles.wordPill, inLayoutStudy ? null : styles.blankTokenSpacing, { backgroundColor: bg }]} onLayout={recordTokenLayout(idx)}>
+                <Text style={wordStyle}>{kt.value}</Text>
+            </View>
+        );
+    }
 
     /** 로딩/에러 UI (모든 Hook 선언 이후) */
     if (loading) {
@@ -907,139 +1169,54 @@ export default function ScaffoldingScreen({
                 {/* 설명 */}
                 <View style={styles.rightCard}>
                     <ScrollView contentContainerStyle={styles.textContainer}>
-                        <View
-                            style={styles.flow}
-                            onLayout={(e) => {
-                                flowLayoutRef.current = e.nativeEvent.layout;
-                            }}
-                            {...(dragResponder ? dragResponder.panHandlers : {})}
-                        >
-                            {tokens.map((t, idx) => {
-                                if (t.type === 'newline') return <View key={idx} style={styles.newline} />;
-                                if (t.type === 'space') return <Text key={idx} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-                                if (t.type === 'text') return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-
-                                const instanceId = t.instanceId;
-                                const instanceInfo = keywordInstances.find(ki => ki.instanceId === instanceId);
-                                const grade = instanceInfo ? (graded[instanceInfo.blankId] ?? 'idle') : 'idle';
-                                const userValue = answers[instanceId] ?? '';
-                                const substep = step.split('-')[1];
-                                const isSelected = selectedBlankSet.has(instanceId); // 사용자가 선택한 빈칸인지
-                                const shouldRenderPlainKeyword = isReviewMode && !isSelected;
-
-                                if (substep === '1') {
-                                    // 설명
-                                    if (shouldRenderPlainKeyword) {
-                                        return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-                                    }
-                                    if (isSelected) {
-                                        // 설명
-                                        return (
-                                            <Pressable
-                                                key={idx}
-                                                onPress={() => onToggleBlankSelection(instanceId)}
-                                                style={[styles.wordPill, styles.blankTokenSpacing, { backgroundColor: HIGHLIGHT_BG }]}
-                                                onLayout={recordTokenLayout(idx)}
-                                            >
-                                                <View style={{ position: 'relative' }}>
-                                                    <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
-                                                </View>
-                                            </Pressable>
-                                        );
-                                    } else {
-                                        // 설명
-                                        return (
-                                            <Pressable
-                                                key={idx}
-                                                onPress={() => onToggleBlankSelection(instanceId)}
-                                                style={[styles.wordPill, styles.blankTokenSpacing, { backgroundColor: HIGHLIGHT_BG }]}
-                                                onLayout={recordTokenLayout(idx)}
-                                            >
-                                                <Text style={styles.wordText}>{t.value}</Text>
-                                            </Pressable>
-                                        );
-                                    }
-                                }
-
-                                if (substep === '2') {
-                                    // 설명
-                                    if (!isSelected) {
-                                        if (shouldRenderPlainKeyword) {
-                                            return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-                                        }
-                                        return (
-                                            <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
-                                                <Text style={styles.wordText}>{t.value}</Text>
-                                            </Pressable>
-                                        );
-                                    }
-                                    const isActive = activeBlankId === instanceId;
-                                    const currentHintType = hintWord === instanceId ? hintType : null;
-                                    const textAlign = currentHintType === 'last' ? 'right' : 'left';
-                                    return (
-                                        <View
-                                            key={idx}
-                                            ref={(r) => { if (r) blankRefs.current[instanceId] = r; }}
-                                        >
-                                            <Pressable
-                                                onPress={() => onPressBlank(instanceId)}
-                                                onLongPress={() => onLongPressBlank(instanceId)}
-                                                delayLongPress={450}
-                                                style={[styles.wordPill, styles.blankTokenSpacing, styles.blankBoxBase, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
-                                                onLayout={recordTokenLayout(idx)}
-                                            >
-                                                <View style={{ position: 'relative' }}>
-                                                    <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
-                                                    {isActive ? (
-                                                        <TextInput
-                                                            ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
-                                                            value={userValue}
-                                                            onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
-                                                            style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
-                                                            selectTextOnFocus
-                                                            autoCapitalize="none"
-                                                            autoCorrect={false}
-                                                            spellCheck={false}
-                                                            blurOnSubmit
-                                                            onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
-                                                            maxFontSizeMultiplier={1.0}
-                                                        />
-                                                    ) : (
-                                                        <Text style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}>
-                                                            {userValue}
-                                                        </Text>
-                                                    )}
-                                                </View>
-                                            </Pressable>
-                                        </View>
-                                    );
-                                }
-
-                                // 설명
-                                if (!isSelected) {
-                                    if (shouldRenderPlainKeyword) {
-                                        return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-                                    }
-                                    return (
-                                        <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
-                                            <Text style={styles.wordText}>{t.value}</Text>
-                                        </Pressable>
-                                    );
-                                }
-                                const bg =
-                                    grade === 'correct' ? CORRECT_BG : grade === 'wrong' ? WRONG_BG : HIGHLIGHT_BG;
-
-                                return (
+                        {shouldUseLayoutCanvas ? (
+                            <View
+                                style={[styles.layoutStudyCanvas, { height: Math.max(canvasH, scale(600)) }]}
+                                onLayout={(e) => setLayoutCanvasW(e.nativeEvent.layout.width)}
+                            >
+                                {layoutCanvasW > 0 && canvasH > 0 && layoutFullBlocks.map((b, bi) => (
                                     <View
-                                        key={idx}
-                                        style={[styles.wordPill, styles.blankTokenSpacing, { backgroundColor: bg }]}
-                                        onLayout={recordTokenLayout(idx)}
+                                        key={`lb-${bi}`}
+                                        style={[
+                                            styles.layoutBlockAbs,
+                                            {
+                                                left: rectForLayout.dx + b.x * rectForLayout.dw,
+                                                top: rectForLayout.dy + b.y * rectForLayout.dh,
+                                                width: b.width * rectForLayout.dw,
+                                                minHeight: Math.max(scale(8), b.height * rectForLayout.dh),
+                                            },
+                                        ]}
                                     >
-                                        <Text style={styles.wordText}>{t.value}</Text>
+                                        <View style={styles.layoutBlockInnerFlow}>
+                                            {tokensPerBlock[bi].map((t, j) =>
+                                                renderTokenContent(t, bi * 10000 + j, blockFontForLayout(b)),
+                                            )}
+                                        </View>
                                     </View>
-                                );
-                            })}
-                        </View>
+                                ))}
+                            </View>
+                        ) : (
+                            <>
+                                {tokens.length === 0 ? (
+                                    <View style={styles.emptyState}>
+                                        <Text style={styles.emptyTitle}>OCR 텍스트 추출 실패</Text>
+                                        <Text style={styles.emptyDesc}>
+                                            extractedText 길이: {extractedText.length} / pages: {allPages.length} / layout_blocks 합: {totalLayoutBlocks}
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    <View
+                                        style={styles.flow}
+                                        onLayout={(e) => {
+                                            flowLayoutRef.current = e.nativeEvent.layout;
+                                        }}
+                                        {...(dragResponder ? dragResponder.panHandlers : {})}
+                                    >
+                                        {tokens.map((t, idx) => renderTokenContent(t, idx))}
+                                    </View>
+                                )}
+                            </>
+                        )}
                     </ScrollView>
                     {dragSelection?.box && flowLayoutRef.current && dragEnabled && (
                         <View
@@ -1157,15 +1334,6 @@ export default function ScaffoldingScreen({
         </KeyboardAvoidingView>
     );
 }
-
-/** Tokenize */
-type Token =
-    | { type: 'text'; value: string }
-    | { type: 'space'; value: string }
-    | { type: 'newline'; value: '\n' }
-    | { type: 'keyword'; value: string; occ: number; baseWord: string };
-
-type KeywordTokenWithId = { type: 'keyword'; value: string; occ: number; instanceId: number; baseWord: string };
 
 /**
  * keyword가 text의 pos 위치에서 시작하는지 확인.
@@ -1288,6 +1456,26 @@ const styles = StyleSheet.create({
     center: { justifyContent: 'center', alignItems: 'center' },
 
     loadingText: { color: MUTED, fontSize: fontScale(12), fontWeight: '700' },
+    emptyState: {
+        minHeight: scale(260),
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: scale(18),
+    },
+    emptyTitle: {
+        color: '#111827',
+        fontSize: fontScale(16),
+        fontWeight: '900',
+        marginBottom: scale(6),
+        textAlign: 'center',
+    },
+    emptyDesc: {
+        color: MUTED,
+        fontSize: fontScale(12),
+        fontWeight: '700',
+        lineHeight: fontScale(16),
+        textAlign: 'center',
+    },
 
     errorTitle: { color: '#111827', fontSize: fontScale(16), fontWeight: '900', marginBottom: scale(8) },
     errorDesc: { color: MUTED, fontSize: fontScale(12), fontWeight: '700', textAlign: 'center', marginBottom: scale(16) },
@@ -1412,6 +1600,26 @@ const styles = StyleSheet.create({
 
     rightCard: { flex: 1, backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: scale(16), overflow: 'hidden', position: 'relative' },
     textContainer: { paddingHorizontal: scale(14), paddingVertical: scale(14) },
+    /** layout_blocks 기반: OCR 이미지와 동일한 상대 좌표로 빈칸 학습 */
+    layoutStudyCanvas: {
+        width: '100%',
+        position: 'relative',
+        // 레이아웃 모드에서 텍스트 좌표만 보여주고, 배경은 흰 화면과 동일하게 유지
+        backgroundColor: 'transparent',
+        borderRadius: scale(12),
+        overflow: 'hidden',
+        borderWidth: 0,
+        borderColor: 'transparent',
+    },
+    layoutBlockAbs: {
+        position: 'absolute',
+        overflow: 'hidden',
+    },
+    layoutBlockInnerFlow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'flex-start',
+    },
     flow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
     newline: { width: '100%', height: fontScale(14) },
     bodyText: { fontSize: fontScale(14), lineHeight: fontScale(22), fontWeight: '600', color: '#111827' },

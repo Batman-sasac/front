@@ -22,7 +22,18 @@ import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy } from './src/api/ocr';
+import {
+  runOcr,
+  ScaffoldingPayload,
+  gradeStudy,
+  getQuizForReview,
+  getWeeklyGrowth,
+  getMonthlyStats,
+  getOcrUsage,
+  OcrUsageResponse,
+  submitReviewStudy,
+  type PageItem,
+} from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
@@ -71,7 +82,7 @@ export default function App() {
   const [cropBySourceIndex, setCropBySourceIndex] = useState<Record<number, { px: number; py: number; pw: number; ph: number }>>({});
   const [batchEarnedXp, setBatchEarnedXp] = useState(0);
   type PendingGradePart = {
-    pages: { original_text: string; keywords: string[] }[];
+    pages: PageItem[];
     blankItems: { blank_index: number; word: string; page_index: number }[];
     keywords: string[];
     userAnswers: string[];
@@ -409,7 +420,15 @@ export default function App() {
     setScaffoldingError(null);
     getQuizForReview(reviewQuizId)
       .then((payload) => {
-        if (!cancelled) setScaffoldingPayload(payload);
+        if (cancelled) return;
+        setScaffoldingPayload(payload);
+
+        // 복습 모드에서는 이미지 URI가 없으면 layout 스케일 계산이 불가능해서,
+        // 서버에 저장된 image_url을 capturedSources에 주입한다.
+        if (payload?.image_url) {
+          setCapturedSources([{ uri: payload.image_url }]);
+          setSelectedSourceIndex(0);
+        }
       })
       .catch((e: any) => {
         if (!cancelled) {
@@ -915,6 +934,12 @@ export default function App() {
               currentStudyIndex={selectedSourceIndex}
               totalStudyCount={capturedSources.length}
               accumulatedEarnedXp={batchEarnedXp}
+              cropPixelRect={
+                isReviewMode
+                  ? scaffoldingPayload?.layout_meta?.crops_by_source_index?.[String(selectedSourceIndex)] ??
+                    null
+                  : cropBySourceIndex[selectedSourceIndex] ?? null
+              }
               onRetry={async () => {
                 setScaffoldingLoading(true);
                 setScaffoldingError(null);
@@ -1035,7 +1060,7 @@ export default function App() {
                 const mergedParts: Record<number, PendingGradePart> = {
                   ...pendingGradePartsRef.current,
                 };
-                const mergedPages: { original_text: string; keywords: string[] }[] = [];
+                const mergedPages: PageItem[] = [];
                 const mergedBlanks: { blank_index: number; word: string; page_index: number }[] = [];
                 const mergedKeywords: string[] = [];
                 const mergedUserAnswers: string[] = [];
@@ -1070,10 +1095,20 @@ export default function App() {
                 }
 
                 const mergedRawText = mergedPages.map((p) => p.original_text ?? '').join('\n\n');
+                const cropEntries = Object.entries(cropBySourceIndex);
+                const layout_meta =
+                  cropEntries.length > 0
+                    ? {
+                        crops_by_source_index: Object.fromEntries(
+                          cropEntries.map(([k, v]) => [String(k), v]),
+                        ),
+                      }
+                    : undefined;
                 const mergedOcrText = {
                   pages: mergedPages,
                   blanks: mergedBlanks,
                   quiz: { raw: mergedRawText },
+                  ...(layout_meta ? { layout_meta } : {}),
                 };
 
                 // 페이지별 문항/정답 집계 (mergedBlanks.page_index 기준)

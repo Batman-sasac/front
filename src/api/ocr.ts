@@ -10,12 +10,23 @@ export type OcrTableBlock = {
     rows: string[][];
 };
 
+/** OCR 필드별 박스(페이지 대비 0~1 정규화). 읽기 순서와 동일 → 원문 레이아웃 재현용 */
+export type LayoutBlock = {
+    text: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
 // ocr_app.py의 /ocr/save 스펙: 페이지, 빈칸, 사용자 답변 모두 JSON
 export type PageItem = {
     original_text: string;
     keywords: string[];
     /** General OCR 표 인식 결과; 없으면 생략 */
     tables?: OcrTableBlock[];
+    /** 필드 단위 좌표(정규화); 없으면 생략 */
+    layout_blocks?: LayoutBlock[];
 };
 
 export type BlankItemSave = {
@@ -24,13 +35,62 @@ export type BlankItemSave = {
     page_index: number;
 };
 
+/** DB `ocr_text.layout_meta` — 복습 시 원본 좌표 복원용 */
+export type LayoutMeta = {
+    /** 학습 저장 시 이미지 인덱스별 크롭(px). JSON 직렬화 시 키는 문자열 */
+    crops_by_source_index?: Record<string, { px: number; py: number; pw: number; ph: number }>;
+};
+
 export type ScaffoldingPayload = {
     title: string;
     extractedText: string;
     blanks: BlankItem[];
     pages?: PageItem[];
     blankItems?: BlankItemSave[];
+    /** 복습 조회 등 */
+    user_answers?: string[];
+    /** 복습용 원본 이미지 URL (OCR 좌표 스케일 계산에 필요) */
+    image_url?: string;
+    /** 채점 저장 시 함께 보관, 복습 시 layout + 크롭 복원 */
+    layout_meta?: LayoutMeta;
 };
+
+/**
+ * Clova layout_blocks는 OCR에 넣은 이미지(크롭 영역) 기준 0~1 정규화.
+ * 원본 전체 이미지 위에 겹칠 때는 크롭(px,py,pw,ph)을 반영해 원본 픽셀 기준 0~1로 변환한다.
+ * 크롭 없이 전체를 OCR했으면 crop을 생략하면 된다.
+ */
+export function layoutBlocksToFullImageCoords(
+    blocks: LayoutBlock[],
+    crop: { px: number; py: number; pw: number; ph: number } | undefined,
+    imageNaturalWidth: number,
+    imageNaturalHeight: number,
+): LayoutBlock[] {
+    if (!blocks.length || imageNaturalWidth <= 0 || imageNaturalHeight <= 0) return [];
+    const px = crop?.px ?? 0;
+    const py = crop?.py ?? 0;
+    const pw = crop?.pw ?? imageNaturalWidth;
+    const ph = crop?.ph ?? imageNaturalHeight;
+    return blocks.map((b) => ({
+        text: b.text,
+        x: (px + b.x * pw) / imageNaturalWidth,
+        y: (py + b.y * ph) / imageNaturalHeight,
+        width: (b.width * pw) / imageNaturalWidth,
+        height: (b.height * ph) / imageNaturalHeight,
+    }));
+}
+
+/** 컨테이너 안에서 이미지를 contain 할 때의 표시 사각형 (좌상단 dx,dy / 크기 dw,dh) */
+export function getOcrDisplayRect(containerW: number, containerH: number, iw: number, ih: number) {
+    if (containerW <= 0 || containerH <= 0) return { dx: 0, dy: 0, dw: 0, dh: 0 };
+    if (iw <= 0 || ih <= 0) return { dx: 0, dy: 0, dw: containerW, dh: containerH };
+    const s = Math.min(containerW / iw, containerH / ih);
+    const dw = iw * s;
+    const dh = ih * s;
+    const dx = (containerW - dw) / 2;
+    const dy = (containerH - dh) / 2;
+    return { dx, dy, dw, dh };
+}
 
 export type OcrResponse =
     | { status: 'success'; original_text: string; keywords: string[] }
@@ -66,6 +126,44 @@ function normalizeOcrTables(raw: unknown): OcrTableBlock[] | undefined {
         }
     }
     return out.length > 0 ? out : undefined;
+}
+
+function normalizeLayoutBlocks(raw: unknown): LayoutBlock[] | undefined {
+    if (!Array.isArray(raw) || raw.length === 0) return undefined;
+    const out: LayoutBlock[] = [];
+    for (const b of raw) {
+        if (!b || typeof b !== 'object') continue;
+        const o = b as Record<string, unknown>;
+        const text = String(o.text ?? '').trim();
+        if (!text) continue;
+        const x = Number(o.x);
+        const y = Number(o.y);
+        const width = Number(o.width);
+        const height = Number(o.height);
+        if ([x, y, width, height].some((n) => Number.isNaN(n))) continue;
+        out.push({ text, x, y, width, height });
+    }
+    return out.length > 0 ? out : undefined;
+}
+
+/** DB/API에서 온 page 한 줄을 PageItem으로 (layout_blocks·tables 유지) */
+export function normalizePageItemFromApi(raw: unknown): PageItem | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const original_text = String(o.original_text ?? '');
+    const rawKw = o.keywords;
+    const keywords = Array.isArray(rawKw)
+        ? rawKw.map((k) => String(k ?? '').trim()).filter(Boolean)
+        : [];
+    const tables = normalizeOcrTables(o.tables);
+    const layout_blocks = normalizeLayoutBlocks(o.layout_blocks);
+    const page: PageItem = {
+        original_text,
+        keywords,
+        ...(tables ? { tables } : {}),
+        ...(layout_blocks ? { layout_blocks } : {}),
+    };
+    return page;
 }
 
 export async function runOcr(fileUri: string, cropInfo?: { px: number; py: number; pw: number; ph: number }): Promise<ScaffoldingPayload> {
@@ -142,12 +240,18 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
     // 백엔드가 pages 배열 반환 (PDF/다중 이미지)
     if (Array.isArray(inner.pages) && inner.pages.length > 0) {
         pages = inner.pages.map(
-            (p: { original_text?: string; keywords?: string[]; tables?: unknown }) => ({
+            (p: {
+                original_text?: string;
+                keywords?: string[];
+                tables?: unknown;
+                layout_blocks?: unknown;
+            }) => ({
                 original_text: p?.original_text ?? '',
                 keywords: Array.isArray(p?.keywords)
                     ? p.keywords.map(normalizeKeyword).filter(Boolean)
                     : [],
                 tables: normalizeOcrTables(p?.tables),
+                layout_blocks: normalizeLayoutBlocks(p?.layout_blocks),
             }),
         );
 
@@ -265,6 +369,7 @@ export type GradeStudyRequest = {
         pages: PageItem[];
         blanks: BlankItemSave[];
         quiz: { raw: string };
+        layout_meta?: LayoutMeta;
     };
     /** 페이지별 정답 수 (pages index 기준) */
     page_correct_counts?: number[];
@@ -318,6 +423,10 @@ export type QuizForReviewResponse = {
         extractedText: string;
         blanks: BlankItem[];
         user_answers?: string[];
+        image_url?: string;
+        /** ocr_data.ocr_text.pages — layout_blocks·tables 포함 */
+        pages?: unknown[];
+        layout_meta?: LayoutMeta;
     };
     message?: string;
 };
@@ -339,11 +448,19 @@ export async function getQuizForReview(quizId: number): Promise<ScaffoldingPaylo
     if (json.status !== 'success' || !json.data) throw new Error(json.message ?? '퀴즈를 불러올 수 없습니다.');
 
     const d = json.data;
+    let pages: PageItem[] | undefined;
+    if (Array.isArray(d.pages) && d.pages.length > 0) {
+        const parsed = d.pages.map((p) => normalizePageItemFromApi(p)).filter((p): p is PageItem => p != null);
+        if (parsed.length > 0) pages = parsed;
+    }
     return {
         title: d.title,
         extractedText: d.extractedText,
         blanks: d.blanks ?? [],
         user_answers: d.user_answers,
+        image_url: d.image_url,
+        pages,
+        layout_meta: d.layout_meta,
     };
 }
 
