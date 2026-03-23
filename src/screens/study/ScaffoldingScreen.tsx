@@ -43,6 +43,11 @@ type SavePayload = {
     selectedBlankIds: number[];
 };
 
+type SaveResult = {
+    earnedXp: number;
+    totalEarnedXp?: number;
+};
+
 type Props = {
     onBack: () => void;
     onBackFromCompletion?: () => void; // 학습 완료 후 뒤로가기
@@ -53,7 +58,7 @@ type Props = {
     loading: boolean;
     error: string | null;
     onRetry: () => void;
-    onSave?: (payload: SavePayload) => Promise<void>;
+    onSave?: (payload: SavePayload) => Promise<SaveResult | void>;
     initialRound?: Step; // 초기 라운드 설정 (복습용)
     reviewQuizId?: number | null; // 복습용 quiz ID
     subjectName?: string; // 과목명
@@ -632,7 +637,20 @@ export default function ScaffoldingScreen({
         setHintType(type); // 선택한 타입만 표시
     };
 
+    const getMissingAnswerCount = () => {
+        return orderedSelectedBlanks.reduce((count, instanceId) => {
+            const userValue = (answers[instanceId] ?? '').trim();
+            return count + (userValue ? 0 : 1);
+        }, 0);
+    };
+
     const onGrade = () => {
+        const missingAnswerCount = getMissingAnswerCount();
+        if (isReviewMode && missingAnswerCount > 0) {
+            Alert.alert('입력 필요', '복습에서는 선택한 모든 빈칸에 답을 입력한 뒤 채점할 수 있어요.');
+            return;
+        }
+
         const next: Record<number, GradeState> = { ...graded };
         const newWrong = new Set(wrongInstances);
 
@@ -843,6 +861,12 @@ export default function ScaffoldingScreen({
                             <Pressable
                                 style={styles.imgBtnWrap}
                                 onPress={async () => {
+                                    const missingAnswerCount = getMissingAnswerCount();
+                                    if (isReviewMode && missingAnswerCount > 0) {
+                                        Alert.alert('입력 필요', '복습 완료 전에 선택한 모든 빈칸에 답을 입력해 주세요.');
+                                        return;
+                                    }
+
                                     if (onSave) {
                                         try {
                                             // 페이지/등장 순서 기반으로 instance를 그대로 저장한다.
@@ -860,18 +884,40 @@ export default function ScaffoldingScreen({
                                                 .filter((pair): pair is { blankId: number; answer: string } => pair != null);
                                             const orderedBlankIds = answerPairs.map((pair) => pair.blankId);
                                             const answerList = answerPairs.map((pair) => pair.answer);
-                                            await onSave({
+                                            const saveResult = await onSave({
                                                 answers: answerList,
                                                 selectedBlankIds: orderedBlankIds,
                                             });
                                             if (isReviewMode) {
                                                 return;
                                             }
+                                            const earnedXp = saveResult?.earnedXp ?? correctCount * 2;
+                                            const totalEarnedXp = saveResult?.totalEarnedXp ?? accumulatedEarnedXp + earnedXp;
+                                            const isLastStudy = currentStudyIndex >= totalStudyCount - 1;
+                                            if (isLastStudy) {
+                                                setPopupTitle('축하합니다');
+                                                setPopupMessage(`학습을 완료해서 총 ${totalEarnedXp}xp를 획득했어요`);
+                                            } else {
+                                                setPopupTitle('다음 학습으로 이동');
+                                                setPopupMessage(
+                                                    `${currentStudyIndex + 1}번 학습을 완료했습니다. ${currentStudyIndex + 2}번 학습을 시작합니다.`
+                                                );
+                                            }
+                                            setPopupOnConfirm(() => () => {
+                                                if (onBackFromCompletion) {
+                                                    onBackFromCompletion();
+                                                } else {
+                                                    onBack();
+                                                }
+                                            });
+                                            setPopupVisible(true);
+                                            return;
                                         } catch (e: any) {
                                             Alert.alert('저장 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
                                             return;
                                         }
                                     }
+
                                     const earnedXp = correctCount * 2;
                                     const isLastStudy = currentStudyIndex >= totalStudyCount - 1;
                                     if (isLastStudy) {

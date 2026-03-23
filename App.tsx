@@ -70,6 +70,7 @@ export default function App() {
   const [subjectName, setSubjectName] = useState('');
   const [cropBySourceIndex, setCropBySourceIndex] = useState<Record<number, { px: number; py: number; pw: number; ph: number }>>({});
   const [batchEarnedXp, setBatchEarnedXp] = useState(0);
+  const batchEarnedXpRef = useRef(0);
   type PendingGradePart = {
     pages: { original_text: string; keywords: string[] }[];
     blankItems: { blank_index: number; word: string; page_index: number }[];
@@ -92,6 +93,18 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [ocrUsage, setOcrUsage] = useState<OcrUsageResponse | null>(null);
   const [showUsageExhaustedModal, setShowUsageExhaustedModal] = useState(false);
+
+  const resetBatchEarnedXp = () => {
+    batchEarnedXpRef.current = 0;
+    setBatchEarnedXp(0);
+  };
+
+  const addBatchEarnedXp = (delta: number) => {
+    const safeDelta = Number.isFinite(delta) ? delta : 0;
+    batchEarnedXpRef.current += safeDelta;
+    setBatchEarnedXp(batchEarnedXpRef.current);
+    return batchEarnedXpRef.current;
+  };
 
   // 학습 통계 상태
   const [totalStudyCount, setTotalStudyCount] = useState(0);
@@ -771,7 +784,7 @@ export default function App() {
                 setSelectedSourceIndex(0);
                 setSubjectName('');
                 setCropBySourceIndex({});
-                setBatchEarnedXp(0);
+                resetBatchEarnedXp();
                 setIsReviewMode(false);
                 setReviewQuizId(null);
                 void AsyncStorage.removeItem(TYPE_LABEL_KEY);
@@ -816,7 +829,7 @@ export default function App() {
                 if (subject) setSubjectName(subject);
                 const nextCropMap = cropMap ?? {};
                 setCropBySourceIndex(nextCropMap);
-                setBatchEarnedXp(0);
+                resetBatchEarnedXp();
                 setPendingGradeParts({});
                 pendingGradePartsRef.current = {};
 
@@ -895,7 +908,7 @@ export default function App() {
                 // 전체 학습 완료 후 홈 이동
                 setIsReviewMode(false);
                 setReviewQuizId(null);
-                setBatchEarnedXp(0);
+                resetBatchEarnedXp();
                 setCropBySourceIndex({});
                 setScaffoldingPayloads([]);
                 setStep('home');
@@ -935,6 +948,11 @@ export default function App() {
               }}
               onSave={async ({ answers: userAnswers, selectedBlankIds }) => {
                 if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
+
+                const hasEmptyAnswer = userAnswers.some((answer) => (answer ?? '').trim() === '');
+                if (isReviewMode && hasEmptyAnswer) {
+                  throw new Error('복습에서는 선택한 모든 빈칸에 답을 입력한 뒤 완료할 수 있습니다.');
+                }
 
                 const blanks = scaffoldingPayload.blanks ?? [];
                 const blankById = new Map(blanks.map((blank) => [blank.id, blank] as const));
@@ -982,7 +1000,10 @@ export default function App() {
                         console.error('복습 결과 저장 실패:', error);
                       });
                   }
-                  return;
+                  return {
+                    earnedXp: reviewEarnedXp,
+                    totalEarnedXp: reviewEarnedXp,
+                  };
                 }
                 const keywordSet = new Set(keywords);
                 const pages = scaffoldingPayload.pages && scaffoldingPayload.pages.length > 0
@@ -1025,11 +1046,15 @@ export default function App() {
                 pendingGradePartsRef.current = nextParts;
                 setPendingGradeParts(nextParts);
 
-                if (!isLastInBatch && earnedXp > 0) {
-                  setBatchEarnedXp((prev) => prev + earnedXp);
+                if (!isLastInBatch) {
+                  const nextBatchTotal = earnedXp > 0
+                    ? addBatchEarnedXp(earnedXp)
+                    : batchEarnedXpRef.current;
+                  return {
+                    earnedXp,
+                    totalEarnedXp: nextBatchTotal,
+                  };
                 }
-
-                if (!isLastInBatch) return;
 
                 // 마지막 페이지: 지금까지 모아둔 결과 + 현재 페이지 결과를 merge해서 1회 저장
                 const mergedParts: Record<number, PendingGradePart> = {
@@ -1109,13 +1134,28 @@ export default function App() {
                 setPendingGradeParts({});
                 pendingGradePartsRef.current = {};
                 const nextPoints = Number(gradeResult?.new_points);
-                const totalEarned = batchEarnedXp + earnedXp;
+                const totalEarned = totalCorrect * 2;
+
+                if (totalEarned > 0) {
+                  setRewardState({
+                    baseXP: totalEarned,
+                    bonusXP: 0,
+                    baseLabel: '학습 완료 보상으로',
+                    bonusLabel: '랜덤 추가 리워드로',
+                    showBase: true,
+                    showBonus: false,
+                  });
+                }
 
                 if (Number.isFinite(nextPoints)) {
                   setExp(nextPoints);
                 } else if (totalEarned > 0) {
                   setExp((prev) => prev + totalEarned);
                 }
+                return {
+                  earnedXp,
+                  totalEarnedXp: totalEarned,
+                };
               }}
             />
 
