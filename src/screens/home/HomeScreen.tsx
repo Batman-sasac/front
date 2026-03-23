@@ -58,15 +58,6 @@ const getLevelUpCharacterSource = (typeLabel: string, level: number): ReturnType
   return require('../../../assets/bat-character.png');
 };
 
-type RewardState = {
-  baseXP: number;
-  bonusXP: number;
-  baseLabel?: string;
-  bonusLabel?: string;
-  showBase: boolean;
-  showBonus: boolean;
-};
-
 type Props = {
   nickname: string;
   typeLabel: string;
@@ -76,10 +67,6 @@ type Props = {
   streak: number;
   hasCheckedInToday: boolean;
   onCheckIn: () => void;
-  // 보상 모달 관련
-  rewardState: RewardState;
-  onCloseBaseReward: () => void;
-  onCloseBonusReward: () => void;
   weekAttendance: boolean[]; // 월~일, true이면 출석
   // 홈 화면 통계
   weeklyGrowth?: { labels: string[]; data: number[] };
@@ -98,9 +85,6 @@ export default function HomeScreen({
   streak,
   hasCheckedInToday,
   onCheckIn,
-  rewardState,
-  onCloseBaseReward,
-  onCloseBonusReward,
   weekAttendance,
   weeklyGrowth,
   monthlyStats,
@@ -461,52 +445,18 @@ export default function HomeScreen({
         </View>
       </ScrollView>
 
-      {/* 출석 보상 모달 */}
-      {rewardState.showBase && (
-        <View style={styles.overlay}>
-          <Pressable style={styles.overlayBackdrop} onPress={onCloseBaseReward}>
-            <View style={styles.rewardCard}>
-              <Text style={styles.rewardTextMain}>축하합니다!</Text>
-              <Text style={styles.rewardTextSub}>
-                {rewardState.baseLabel ?? '출석 보상으로'}{' '}
-                <Text style={styles.rewardXP}>{rewardState.baseXP}XP</Text>
-                를 획득했어요!
-              </Text>
-              <Image
-                source={characterSource}
-                style={styles.rewardCharacter}
-                resizeMode="contain"
-              />
-            </View>
-          </Pressable>
-        </View>
-      )}
-
-      {/* 랜덤 추가 보상 모달 (50% 확률) */}
-      {rewardState.showBonus && (
-        <View style={styles.overlay}>
-          <Pressable
-            style={styles.overlayBackdrop}
-            onPress={onCloseBonusReward}
-          >
-            <View style={styles.rewardCard}>
-              <Text style={styles.rewardTextMain}>축하합니다!</Text>
-              <Text style={styles.rewardTextSub}>
-                {rewardState.bonusLabel ?? '랜덤 추가 리워드로'}{' '}
-                <Text style={styles.rewardXP}>{rewardState.bonusXP}XP</Text>
-                를 획득했어요!
-              </Text>
-              {/* 나중에 선물 박스 이미지로 교체 가능 */}
-              <View style={styles.giftBoxPlaceholder} />
-            </View>
-          </Pressable>
-        </View>
-      )}
     </View>
   );
 }
 
 const BG = '#F3F4F6';
+const CARD_SHADOW = {
+  shadowColor: '#0F172A',
+  shadowOpacity: 0.1,
+  shadowRadius: 18,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 5,
+};
 
 const styles = StyleSheet.create({
   root: { flex: 1, flexDirection: 'row', backgroundColor: BG },
@@ -543,7 +493,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: scale(24),
     padding: scale(18),
-    elevation: 3,
+    ...CARD_SHADOW,
     marginBottom: scale(14),
   },
   smallCard: {
@@ -551,7 +501,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 20,
     paddingHorizontal: 14,
-    elevation: 2,
+    ...CARD_SHADOW,
     marginBottom: scale(12),
   },
   bottomCard: {
@@ -560,7 +510,7 @@ const styles = StyleSheet.create({
     paddingTop: scale(20),
     paddingBottom: scale(6),
     paddingHorizontal: 14,
-    elevation: 2,
+    ...CARD_SHADOW,
   },
 
   rightBottomCard: {
@@ -637,51 +587,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  /* 보상 오버레이 */
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  overlayBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.25)',
-  },
-  rewardCard: {
-    width: 320,
-    borderRadius: 24,
-    backgroundColor: '#ffffff',
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    elevation: 6,
-  },
-  rewardTextMain: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  rewardTextSub: {
-    fontSize: 15,
-    color: '#111827',
-    marginBottom: 16,
-  },
-  rewardXP: {
-    color: '#2563EB',
-    fontWeight: '800',
-  },
-  rewardCharacter: {
-    width: 120,
-    height: 120,
-  },
-  giftBoxPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 20,
-    backgroundColor: '#F9A8D4', // 나중에 이미지로 교체
-  },  // 연속 학습 카드 레이아웃
   streakRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -751,7 +656,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 16,
-    elevation: 2,
+    ...CARD_SHADOW,
     marginBottom: scale(12),
   },
 
