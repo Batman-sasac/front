@@ -260,16 +260,20 @@ export default function HomeScreen({
                           const svgWidth = Math.max(graphWidth, 320);
                           const paddingLeft = 20;
                           const paddingRight = 20;
-                          const paddingTop = 18;
+                          const pointRadius = 4;
+                          const labelOffset = 12;
+                          const labelTopPadding = 18;
+                          const paddingTop = labelTopPadding + labelOffset + pointRadius + 4;
                           const paddingBottom = 20;
                           const svgHeight = graphSvgHeight;
                           const chartWidth = Math.max(svgWidth - (paddingLeft + paddingRight), 1);
                           const chartHeight = Math.max(svgHeight - (paddingTop + paddingBottom), 1);
                           const pointSpacing = chartWidth / Math.max(data.length - 1, 1);
+                          const minPointY = paddingTop;
 
                           const points = data.map((val: number, idx: number) => ({
                             x: paddingLeft + idx * pointSpacing,
-                            y: svgHeight - paddingBottom - (val / maxValue) * chartHeight,
+                            y: Math.max(minPointY, svgHeight - paddingBottom - (val / maxValue) * chartHeight),
                             val,
                           }));
 
@@ -279,7 +283,7 @@ export default function HomeScreen({
                             <Polyline key="line" points={pointsStr} fill="none" stroke="#5E82FF" strokeWidth={2} />,
                             ...points.map((p, idx) => (
                               <G key={`point-${idx}`}>
-                                <Circle cx={p.x} cy={p.y} r={4} fill="#5E82FF" />
+                                <Circle cx={p.x} cy={p.y} r={pointRadius} fill="#5E82FF" />
                                 <SvgText
                                   x={p.x}
                                   y={p.y - 12}
