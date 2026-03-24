@@ -7,7 +7,6 @@ import {
     Image,
     ScrollView,
     TextInput,
-    KeyboardAvoidingView,
     Platform,
     Alert,
     Modal,
@@ -776,10 +775,8 @@ export default function ScaffoldingScreen({
     };
 
     return (
-        <KeyboardAvoidingView
+        <View
             style={styles.root}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
         >
             {/* 설명 */}
             <View style={styles.header}>
@@ -964,7 +961,11 @@ export default function ScaffoldingScreen({
 
                 {/* 설명 */}
                 <View style={styles.rightCard}>
-                    <ScrollView contentContainerStyle={styles.textContainer}>
+                    <ScrollView
+                        contentContainerStyle={styles.textContainer}
+                        keyboardShouldPersistTaps="always"
+                        keyboardDismissMode="none"
+                    >
                         <View
                             style={styles.flow}
                             onLayout={(e) => {
@@ -1048,31 +1049,33 @@ export default function ScaffoldingScreen({
                                             >
                                                 <View style={{ position: 'relative' }}>
                                                     <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
-                                                    {isActive ? (
-                                                        <TextInput
-                                                            ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
-                                                            value={userValue}
-                                                            onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
-                                                            onKeyPress={(e) => {
-                                                                if (e.nativeEvent.key === 'Tab') {
-                                                                    focusAdjacentBlank(instanceId, 1);
+                                                    <TextInput
+                                                        ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
+                                                        value={userValue}
+                                                        onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
+                                                        onFocus={() => setActiveBlankId(instanceId)}
+                                                        onKeyPress={(e) => {
+                                                            if (e.nativeEvent.key === 'Tab') {
+                                                                focusAdjacentBlank(instanceId, 1);
+                                                            }
+                                                        }}
+                                                        onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
+                                                        style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
+                                                        selectTextOnFocus={isActive}
+                                                        autoCapitalize="none"
+                                                        autoCorrect={false}
+                                                        spellCheck={false}
+                                                        blurOnSubmit={false}
+                                                        onBlur={() => {
+                                                            requestAnimationFrame(() => {
+                                                                const hasFocusedInput = orderedSelectedBlanks.some((id) => inputRefs.current[id]?.isFocused?.());
+                                                                if (!hasFocusedInput) {
+                                                                    setActiveBlankId((prev) => (prev === instanceId ? null : prev));
                                                                 }
-                                                            }}
-                                                            onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
-                                                            style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
-                                                            selectTextOnFocus
-                                                            autoCapitalize="none"
-                                                            autoCorrect={false}
-                                                            spellCheck={false}
-                                                            blurOnSubmit={false}
-                                                            onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
-                                                            maxFontSizeMultiplier={1.0}
-                                                        />
-                                                    ) : (
-                                                        <Text style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}>
-                                                            {userValue}
-                                                        </Text>
-                                                    )}
+                                                            });
+                                                        }}
+                                                        maxFontSizeMultiplier={1.0}
+                                                    />
                                                 </View>
                                             </Pressable>
                                         </View>
@@ -1218,7 +1221,7 @@ export default function ScaffoldingScreen({
                     </Pressable>
                 </View>
             )}
-        </KeyboardAvoidingView>
+        </View>
     );
 }
 
