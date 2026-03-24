@@ -1028,11 +1028,6 @@ export default function App() {
               onSave={async ({ answers: userAnswers, selectedBlankIds }) => {
                 if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
 
-                const hasEmptyAnswer = userAnswers.some((answer) => (answer ?? '').trim() === '');
-                if (isReviewMode && hasEmptyAnswer) {
-                  throw new Error('복습에서는 선택한 모든 빈칸에 답을 입력한 뒤 완료할 수 있습니다.');
-                }
-
                 const blanks = scaffoldingPayload.blanks ?? [];
                 const rawBlankItems = scaffoldingPayload.blankItems && scaffoldingPayload.blankItems.length > 0
                   ? scaffoldingPayload.blankItems
