@@ -9,6 +9,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 type Props = {
   title: string;
@@ -56,7 +57,9 @@ export default function RewardSpeechBubble({
     return {
       bubbleMinHeight,
       tailSize,
-      tailOverlap: tailSize * 0.36,
+      tailWidth: tailSize * 1.5,
+      tailHeight: tailSize * 1.02,
+      tailOverlap: tailSize * 0.14,
       borderRadius: safeWidth * (24 / CARD_WIDTH_RATIO),
       horizontalPadding: safeWidth * (28 / CARD_WIDTH_RATIO),
       verticalPadding: safeWidth * (24 / CARD_WIDTH_RATIO),
@@ -137,21 +140,44 @@ export default function RewardSpeechBubble({
         )}
       </View>
 
-      <View
+      <Svg
         style={[
-          styles.tail,
+          styles.tailSvg,
           {
-            width: metrics.tailSize,
-            height: metrics.tailSize,
+            width: metrics.tailWidth,
+            height: metrics.tailHeight,
             marginTop: -metrics.tailOverlap,
-            borderRadius: metrics.tailSize * 0.18,
-            shadowRadius: metrics.shadowRadius * 0.7,
-            shadowOffset: { width: 0, height: metrics.shadowOffsetY * 0.7 },
           },
         ]}
-      />
+        viewBox={`0 0 ${metrics.tailWidth} ${metrics.tailHeight}`}
+      >
+        <Path
+          d={buildTailPath(metrics.tailWidth, metrics.tailHeight)}
+          fill="#FFFFFF"
+        />
+      </Svg>
     </View>
   );
+}
+
+function buildTailPath(width: number, height: number) {
+  const topY = 0;
+  const leftTopX = width * 0.04;
+  const rightTopX = width * 0.96;
+  const leftShoulderX = width * 0.24;
+  const rightShoulderX = width * 0.76;
+  const shoulderY = height * 0.48;
+  const tipX = width * 0.5;
+  const tipY = height;
+
+  return [
+    `M ${leftTopX} ${topY}`,
+    `Q ${width * 0.12} ${height * 0.22} ${leftShoulderX} ${shoulderY}`,
+    `L ${tipX} ${tipY}`,
+    `L ${rightShoulderX} ${shoulderY}`,
+    `Q ${width * 0.88} ${height * 0.22} ${rightTopX} ${topY}`,
+    'Z',
+  ].join(' ');
 }
 
 const styles = StyleSheet.create({
@@ -166,13 +192,10 @@ const styles = StyleSheet.create({
     shadowColor: '#0F172A',
     shadowOpacity: 0.12,
     elevation: 6,
+    zIndex: 2,
   },
-  tail: {
-    backgroundColor: '#FFFFFF',
-    transform: [{ rotate: '45deg' }],
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    elevation: 4,
+  tailSvg: {
+    zIndex: 3,
   },
   title: {
     color: '#111827',
