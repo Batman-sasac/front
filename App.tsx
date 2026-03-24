@@ -19,6 +19,7 @@ import SelectPicture from './src/screens/input_data/SelectPicture';
 import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import StudyFlowScreen from './src/screens/study/StudyFlowScreen';
+import { buildOrderedStudySaveData } from './src/screens/study/scaffoldingLogic';
 import BrushUPScreen from './src/screens/brushUP/BrushUPScreen';
 import RewardScreen, { RewardType } from './src/screens/reward/Reward';
 import ErrorScreen from './src/screens/error/error';
@@ -1029,15 +1030,18 @@ export default function App() {
                 }
 
                 const blanks = scaffoldingPayload.blanks ?? [];
-                const blankById = new Map(blanks.map((blank) => [blank.id, blank] as const));
-                const selectedBlanks = selectedBlankIds
-                  .map((blankId) => blankById.get(blankId))
-                  .filter((blank): blank is NonNullable<typeof blank> => blank != null);
-                if (selectedBlanks.length === 0) {
+                const rawBlankItems = scaffoldingPayload.blankItems && scaffoldingPayload.blankItems.length > 0
+                  ? scaffoldingPayload.blankItems
+                  : blanks.map((b, i) => ({ blank_index: i, word: b.word, page_index: 0 }));
+                const { keywords, blankItems } = buildOrderedStudySaveData({
+                  selectedBlankIds,
+                  blanks,
+                  rawBlankItems,
+                });
+                if (keywords.length === 0) {
                   throw new Error('선택된 빈칸 정보가 없습니다.');
                 }
 
-                const keywords = selectedBlanks.map((b) => b.word);
                 const reviewCorrectCount = userAnswers.reduce((acc, ua, idx) => {
                   const isCorrect = (ua ?? '').trim().toLowerCase() === (keywords[idx] ?? '').trim().toLowerCase();
                   return acc + (isCorrect ? 1 : 0);
@@ -1081,19 +1085,6 @@ export default function App() {
                         keywords: (page.keywords ?? []).filter((word) => keywordSet.has(word)),
                       }))
                   : [{ original_text: scaffoldingPayload.extractedText, keywords }];
-                const rawBlankItems = scaffoldingPayload.blankItems && scaffoldingPayload.blankItems.length > 0
-                  ? scaffoldingPayload.blankItems
-                  : blanks.map((b, i) => ({ blank_index: i, word: b.word, page_index: 0 }));
-                const blankItemById = new Map(rawBlankItems.map((item) => [item.blank_index, item] as const));
-                const blankItems = selectedBlankIds.map((blankId, index) => {
-                  const item = blankItemById.get(blankId);
-                  const blank = blankById.get(blankId);
-                  return {
-                    blank_index: index,
-                    word: item?.word ?? blank?.word ?? '',
-                    page_index: item?.page_index ?? 0,
-                  };
-                });
                 const rawText = pages.map((p) => p.original_text ?? '').join('\n\n');
 
                 const isLastInBatch = selectedSourceIndex >= capturedSources.length - 1;
