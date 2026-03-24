@@ -650,7 +650,7 @@ export default function App() {
       setScaffoldingPayload(nextPayloads[0] ?? null);
       setStep('studyIntro');
     } catch (e: any) {
-      const message = e?.message ?? 'OCR 추출에 실패했습니다.';
+      const message = e?.message ?? '텍스트 추출에 실패했습니다.';
       setScaffoldingPayload(null);
       setScaffoldingError(message);
 
@@ -658,13 +658,13 @@ export default function App() {
         // 화이트리스트 유저는 사용량 소진 모달/알림을 띄우지 않음 (기록은 계속 유지)
         const latestUsage = (await refreshOcrUsage()) ?? ocrUsage;
         if (!latestUsage?.is_unlimited) {
-          Alert.alert('OCR 사용 한도', message);
+          Alert.alert('텍스트 추출 사용 한도', message);
           setStep('home');
           return;
         }
       }
 
-      Alert.alert('OCR 오류', message);
+      Alert.alert('텍스트 추출 오류', message);
       setStep('home');
     } finally {
       setScaffoldingLoading(false);
@@ -883,7 +883,17 @@ export default function App() {
                 return source?.uri ? `uri-${source.uri}-${index}` : `source-${index}`;
               }).join('|')}
               sources={capturedSources}
-              onBack={() => setStep('takePicture')}
+              onBack={() => {
+                setCapturedSources([]);
+                setSelectedSourceIndex(0);
+                setCropBySourceIndex({});
+                setScaffoldingPayloads([]);
+                setScaffoldingPayload(null);
+                setScaffoldingError(null);
+                setPendingGradeParts({});
+                pendingGradePartsRef.current = {};
+                setStep('takePicture');
+              }}
               onStartLearning={async (finalSources, isOcrNeeded, subject, cropMap) => {
                 void isOcrNeeded;
                 setCapturedSources(finalSources);
@@ -967,17 +977,17 @@ export default function App() {
                     });
                     setStep('studyIntro');
                   } catch (e: any) {
-                    const message = e?.message ?? 'OCR 추출에 실패했습니다.';
+                    const message = e?.message ?? '텍스트 추출에 실패했습니다.';
                     setScaffoldingPayload(null);
                     setScaffoldingError(message);
 
                     if (typeof message === 'string' && message.includes('무료 횟수')) {
-                      Alert.alert('OCR 사용 한도', message);
+                      Alert.alert('텍스트 추출 사용 한도', message);
                       setStep('home');
                       return;
                     }
 
-                    Alert.alert('OCR 오류', message);
+                    Alert.alert('텍스트 추출 오류', message);
                   } finally {
                     setScaffoldingLoading(false);
                   }

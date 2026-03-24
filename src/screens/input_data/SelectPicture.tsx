@@ -642,7 +642,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                 </Text>
                 {!isThumb && (
                     <Text style={styles.fileHint}>
-                        파일 자료는 크롭 없이 그대로 OCR로 전달됩니다.
+                        파일 자료는 크롭 없이 그대로 텍스트 추출에 사용됩니다.
                     </Text>
                 )}
             </View>
@@ -660,26 +660,30 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             </Pressable>
 
             <View style={styles.centerWrap}>
-                <Text style={styles.guide}>
-                    {isSelectedImage
-                        ? '원하는 개념 한 가지만 포함되도록 잘라주세요.'
-                        : '파일 자료는 크롭 없이 그대로 학습에 사용돼요.'}
-                </Text>
-                <Text> 학습시작 버튼을 누르면 시간이 조금 소요될 수 있어요.</Text>
+                <View style={styles.topContent}>
+                    <Text style={styles.guide}>
+                        {isSelectedImage
+                            ? '원하는 개념 한 가지만 포함되도록 잘라주세요.'
+                            : '파일 자료는 크롭 없이 그대로 학습에 사용돼요.'}
+                    </Text>
+                    <Text style={styles.guideSubtext}>학습시작 버튼을 누르면 시간이 조금 소요될 수 있어요.</Text>
 
-                {ocrUsage && (
-                    <View style={styles.usageChip}>
-                        <Text style={styles.usageText}>
-                            OCR 남은 횟수 {ocrUsage.remaining}/{ocrUsage.pages_limit}
-                        </Text>
+                    <View style={styles.usageSlot}>
+                        {ocrUsage && (
+                            <View style={styles.usageChip}>
+                                <Text style={styles.usageText}>
+                                    텍스트 추출 남은 횟수 {ocrUsage.remaining}/{ocrUsage.pages_limit}
+                                </Text>
+                            </View>
+                        )}
+                        {ocrUsageError && (
+                            <Text style={styles.usageErrorText}>{ocrUsageError}</Text>
+                        )}
+                        {limitReached && ocrUsage?.message && !ocrUsageError && (
+                            <Text style={styles.usageErrorText}>{ocrUsage.message}</Text>
+                        )}
                     </View>
-                )}
-                {ocrUsageError && (
-                    <Text style={styles.usageErrorText}>{ocrUsageError}</Text>
-                )}
-                {limitReached && ocrUsage?.message && !ocrUsageError && (
-                    <Text style={styles.usageErrorText}>{ocrUsage.message}</Text>
-                )}
+                </View>
 
                 <TextInput
                     style={styles.subjectInput}
@@ -829,12 +833,18 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalBox}>
-                        <Text style={styles.modalTitle}>OCR 횟수 부족</Text>
+                        <Text style={styles.modalTitle}>텍스트 추출 횟수 부족</Text>
                         <Text style={styles.modalMessage}>선택한 자료가 {sources.length}개예요.</Text>
                         <Text style={styles.modalMessage}>
-                            현재 남은 OCR {ocrUsage?.remaining ?? 0}회 이하로 줄여주세요.
+                            현재 남은 텍스트 추출 {ocrUsage?.remaining ?? 0}회 이하로 줄여주세요.
                         </Text>
-                        <Pressable style={styles.modalPrimaryButton} onPress={() => setShowOcrLimitModal(false)}>
+                        <Pressable
+                            style={styles.modalPrimaryButton}
+                            onPress={() => {
+                                setShowOcrLimitModal(false);
+                                onBack();
+                            }}
+                        >
                             <Text style={styles.modalPrimaryText}>확인</Text>
                         </Pressable>
                     </View>
@@ -881,14 +891,32 @@ const styles = StyleSheet.create({
         paddingTop: scale(60),
         paddingBottom: scale(24),
     },
+    topContent: {
+        width: '100%',
+        alignItems: 'center',
+    },
 
     guide: {
         textAlign: 'center',
         fontSize: fontScale(18),
         fontWeight: '800',
         color: '#111827',
-        marginBottom: scale(12),
+        marginBottom: scale(10),
         lineHeight: fontScale(26),
+    },
+    guideSubtext: {
+        textAlign: 'center',
+        fontSize: fontScale(13),
+        fontWeight: '600',
+        color: '#4B5563',
+        marginBottom: scale(18),
+    },
+    usageSlot: {
+        width: '100%',
+        minHeight: scale(34),
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        marginBottom: scale(8),
     },
     usageChip: {
         alignSelf: 'center',
@@ -896,7 +924,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: scale(12),
         paddingVertical: scale(6),
         borderRadius: scale(999),
-        marginBottom: scale(10),
     },
     usageText: {
         color: '#4338CA',
