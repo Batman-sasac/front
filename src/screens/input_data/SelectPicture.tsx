@@ -10,7 +10,6 @@ import {
     PanResponder,
     PanResponderInstance,
     TextInput,
-    ActivityIndicator,
     Platform,
     Alert,
 } from 'react-native';
@@ -755,23 +754,12 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                 onPress={handleStart}
                 disabled={!sources || sources.length === 0 || isCropping || limitReached || !isCropUiReady}
             >
-                {isCropping ? (
-                    <ActivityIndicator size="large" color="#FFFFFF" />
-                ) : (
-                    <Image
-                        source={require('../../../assets/study/start-study-button.png')}
-                        style={styles.fabImage}
-                        resizeMode="contain"
-                    />
-                )}
+                <Image
+                    source={require('../../../assets/study/start-study-button.png')}
+                    style={styles.fabImage}
+                    resizeMode="contain"
+                />
             </Pressable>
-
-            {isCropping && (
-                <View style={styles.loadingOverlay}>
-                    <ActivityIndicator size="large" color="#FFFFFF" />
-                    <Text style={styles.loadingOverlayText}>OCR 분석 중입니다. 잠시만 기다려 주세요.</Text>
-                </View>
-            )}
         </View>
     );
 }
@@ -1084,18 +1072,5 @@ const styles = StyleSheet.create({
     fabImage: {
         width: '100%',
         height: '100%',
-    },
-    loadingOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(17,24,39,0.45)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: scale(12),
-        zIndex: 50,
-    },
-    loadingOverlayText: {
-        color: '#FFFFFF',
-        fontSize: fontScale(14),
-        fontWeight: '700',
     },
 });

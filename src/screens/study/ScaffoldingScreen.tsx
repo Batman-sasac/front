@@ -19,6 +19,10 @@ import { scale, fontScale } from '../../lib/layout';
 import { saveTest } from '../../api/ocr';
 import config from '../../lib/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+    buildKeywordInstances,
+    normalizeBlankWord,
+} from './scaffoldingLogic';
 
 const API_BASE_URL = config.apiBaseUrl;
 
@@ -46,6 +50,7 @@ type SavePayload = {
 type SaveResult = {
     earnedXp: number;
     totalEarnedXp?: number;
+    handledCompletion?: boolean;
 };
 
 type Props = {
@@ -152,20 +157,12 @@ export default function ScaffoldingScreen({
     }, [extractedText, keywordList]);
 
     const keywordInstances = useMemo(() => {
-        const instances = tokens
-            .filter((t): t is KeywordTokenWithId => t.type === 'keyword')
-            .map((t, idx) => {
-                // 설명
-                const blankItem = blankDefs[idx] ?? null;
-                return {
-                    instanceId: t.instanceId,  // UI 렌더링용 식별자
-                    blankId: blankItem?.id ?? idx,  // 서버 전송용(blank_index)
-                    word: t.value,
-                    base: baseInfoByWord.get(t.baseWord) ?? null,
-                };
-            });
-        return instances;
-    }, [tokens, baseInfoByWord, blankDefs]);
+        const keywordTokens = tokens.filter((t): t is KeywordTokenWithId => t.type === 'keyword');
+        return buildKeywordInstances(keywordTokens, blankDefs).map((instance) => ({
+            ...instance,
+            base: instance.base ?? baseInfoByWord.get(instance.word) ?? null,
+        }));
+    }, [tokens, blankDefs, baseInfoByWord]);
 
     useEffect(() => {
         if (!isReviewMode || reviewInitRef.current) return;
@@ -668,6 +665,10 @@ export default function ScaffoldingScreen({
             Alert.alert('입력 필요', '복습에서는 선택한 모든 빈칸에 답을 입력한 뒤 채점할 수 있어요.');
             return;
         }
+        if (!isReviewMode && step === '3-2' && missingAnswerCount > 0) {
+            Alert.alert('입력 필요', `최종 리워드는 3라운드 ${orderedSelectedBlanks.length}문항 기준이에요. 모든 빈칸에 답을 입력한 뒤 채점해 주세요.`);
+            return;
+        }
 
         const next: Record<number, GradeState> = { ...graded };
         const newWrong = new Set(wrongInstances);
@@ -907,6 +908,9 @@ export default function ScaffoldingScreen({
                                                 selectedBlankIds: orderedBlankIds,
                                             });
                                             if (isReviewMode) {
+                                                return;
+                                            }
+                                            if (saveResult?.handledCompletion) {
                                                 return;
                                             }
                                             const earnedXp = saveResult?.earnedXp ?? correctCount * 2;
@@ -1342,7 +1346,7 @@ function tokenizeWithKeywords(text: string, keywords: string[]): Token[] {
 }
 
 function normalize(s: string) {
-    return s.replace(/\s+/g, ' ').trim().toLowerCase();
+    return normalizeBlankWord(s);
 }
 
 /** Styles */
