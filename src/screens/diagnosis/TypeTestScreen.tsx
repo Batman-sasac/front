@@ -72,7 +72,7 @@ export default function TypeTestScreen({ onFinish }: Props) {
             {/* 가운데 캐릭터 + 질문 카드 */}
             <View style={styles.center}>
                 <Image
-                    source={require('../../../assets/bat-character.png')}
+                    source={require('../../../assets/character/bat-character.png')}
                     style={styles.character}
                     resizeMode="contain"
                 />

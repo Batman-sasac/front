@@ -17,7 +17,7 @@ export default function TypeIntroScreen({ nickname, onStartTest }: Props) {
             <View style={styles.contentRow}>
                 {/* 왼쪽 캐릭터 */}
                 <Image
-                    source={require('../../../assets/bat-character.png')}
+                    source={require('../../../assets/character/bat-character.png')}
                     style={styles.character}
                     resizeMode="contain"
                 />

@@ -45,7 +45,7 @@ export default function StudyFlowScreen({ mode, totalPages, currentPage, onStart
         </View>
 
         <Image
-          source={require('../../../assets/bat-character.png')}
+          source={require('../../../assets/character/bat-character.png')}
           style={styles.character}
           resizeMode="contain"
         />
