@@ -46,7 +46,7 @@ export default function TypeResultScreen({
     }
 
     // 혹시 대비용 기본 파란 박쥐
-    return require('../../../assets/bat-character.png');
+    return require('../../../assets/character/bat-character.png');
   };
 
   return (
