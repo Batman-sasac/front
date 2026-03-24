@@ -5,7 +5,6 @@ import {
     StyleSheet,
     Pressable,
     Image,
-    ImageSourcePropType,
     ScrollView,
     TextInput,
     KeyboardAvoidingView,
@@ -19,6 +18,7 @@ import { scale, fontScale } from '../../lib/layout';
 import { saveTest } from '../../api/ocr';
 import config from '../../lib/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StudySource } from '../input_data/studySource';
 import {
     buildKeywordInstances,
     normalizeBlankWord,
@@ -56,7 +56,7 @@ type SaveResult = {
 type Props = {
     onBack: () => void;
     onBackFromCompletion?: () => void; // 학습 완료 후 뒤로가기
-    sources: ImageSourcePropType[];
+    sources: StudySource[];
     selectedIndex: number;
 
     payload: ScaffoldingPayload | null;

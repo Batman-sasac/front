@@ -6,7 +6,6 @@ import {
     Pressable,
     Image,
     ScrollView,
-    ImageSourcePropType,
     PanResponder,
     PanResponderInstance,
     TextInput,
@@ -15,12 +14,13 @@ import {
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { getOcrUsage } from '../../api/ocr';
+import { getStudySourceExtension, getStudySourceName, isImageStudySource, StudySource } from './studySource';
 
 type Props = {
-    sources: ImageSourcePropType[];
+    sources: StudySource[];
     onBack: () => void;
     onStartLearning: (
-        finalSources: ImageSourcePropType[],
+        finalSources: StudySource[],
         ocrLoading?: boolean,
         subjectName?: string,
         cropByIndex?: Record<number, { px: number; py: number; pw: number; ph: number }>
@@ -35,12 +35,9 @@ type CropRect = { x: number; y: number; w: number; h: number };
 type DisplayRect = { dx: number; dy: number; dw: number; dh: number };
 const EMPTY_CROP: CropRect = { x: 0, y: 0, w: 0, h: 0 };
 
-function getSourceKey(source: ImageSourcePropType | null | undefined, fallbackIndex = 0) {
+function getSourceKey(source: StudySource | null | undefined, fallbackIndex = 0) {
     if (source == null) return `empty-${fallbackIndex}`;
-    if (typeof source === 'number') return `asset-${source}`;
-
-    const candidate = source as { uri?: string };
-    return candidate.uri ? `uri-${candidate.uri}` : `source-${fallbackIndex}`;
+    return source.uri ? `uri-${source.uri}` : `source-${fallbackIndex}`;
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -70,6 +67,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         if (!sources || sources.length === 0) return null;
         return sources[Math.min(selectedIndex, sources.length - 1)];
     }, [sources, selectedIndex]);
+    const isSelectedImage = isImageStudySource(selectedSource);
 
     const allSources = useMemo(() => (sources || []), [sources]);
     const sourcesSessionKey = useMemo(
@@ -164,10 +162,9 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
         let cancelled = false;
 
-        const anySrc: any = selectedSource;
-        const uri = typeof anySrc?.uri === 'string' ? (anySrc.uri as string) : null;
+        const uri = typeof selectedSource?.uri === 'string' ? selectedSource.uri : null;
 
-        if (uri) {
+        if (uri && isSelectedImage) {
             Image.getSize(
                 uri,
                 (w, h) => {
@@ -186,20 +183,10 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             };
         }
 
-        const anyImage: any = Image as any;
-        if (typeof anyImage.resolveAssetSource === 'function') {
-            const resolved = anyImage.resolveAssetSource(selectedSource);
-            if (resolved?.width && resolved?.height) {
-                if (cancelled) return;
-                setImageW(resolved.width);
-                setImageH(resolved.height);
-            }
-        }
-
         return () => {
             cancelled = true;
         };
-    }, [selectedSource, selectedSourceKey]);
+    }, [isSelectedImage, selectedSource, selectedSourceKey]);
 
     useEffect(() => {
         let cancelled = false;
@@ -231,6 +218,12 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     }, []);
 
     useEffect(() => {
+        if (!isSelectedImage) {
+            setIsCropReady(false);
+            setCrop(EMPTY_CROP);
+            cropRef.current = EMPTY_CROP;
+            return;
+        }
         if (displayRect.dw <= 0 || displayRect.dh <= 0) return;
         if (imageW <= 0 || imageH <= 0) return;
 
@@ -260,7 +253,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         // containerRef도 함께 업데이트
         containerRef.current = { w: containerW, h: containerH };
         console.log('🖼️ Crop 초기화:', { x, y, w, h }, 'Container:', { w: containerW, h: containerH });
-    }, [displayRect.dx, displayRect.dy, displayRect.dw, displayRect.dh, selectedIndex, selectedSourceKey, containerW, containerH, imageW, imageH, cropByIndex]);
+    }, [displayRect.dx, displayRect.dy, displayRect.dw, displayRect.dh, selectedIndex, selectedSourceKey, containerW, containerH, imageW, imageH, cropByIndex, isSelectedImage]);
 
     const getPixelCrop = () => {
         const d = displayRef.current;
@@ -288,7 +281,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const [isCropping, setIsCropping] = useState(false);
 
     const persistCurrentCropForIndex = (idx: number) => {
-        if (!isCropReady) return;
+        if (!isCropReady || !isImageStudySource(sources[idx])) return;
         const pixelCrop = getPixelCrop();
         if (!pixelCrop) return;
         setCropByIndex((prev) => ({
@@ -313,36 +306,39 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
         console.log('🖼️ cropImage 호출:', { containerW, containerH, imageW, imageH, displayRect, crop });
 
-        const pixelCrop = getPixelCrop();
-        if (!pixelCrop) {
+        const pixelCrop = isSelectedImage ? getPixelCrop() : null;
+        if (isSelectedImage && !pixelCrop) {
             console.error('🖼️ 픽셀 crop 정보 없음', { displayRect, crop, containerW, containerH, imageW, imageH });
             return;
         }
 
-        const anySrc: any = selectedSource;
-        const uri = typeof anySrc?.uri === 'string' ? (anySrc.uri as string) : null;
+        const uri = typeof selectedSource?.uri === 'string' ? selectedSource.uri : null;
 
         if (!uri) {
-            // 더미 이미지(uri 없음)만 OCR 생략
             await onStartLearning(sources, false, subjectName);
             return;
         }
 
         try {
             setIsCropping(true);
-            const nextCropByIndex = {
-                ...cropByIndex,
-                [selectedIndex]: {
-                    px: pixelCrop.px,
-                    py: pixelCrop.py,
-                    pw: pixelCrop.pw,
-                    ph: pixelCrop.ph,
-                },
-            };
+            const nextCropByIndex = isSelectedImage && pixelCrop
+                ? {
+                    ...cropByIndex,
+                    [selectedIndex]: {
+                        px: pixelCrop.px,
+                        py: pixelCrop.py,
+                        pw: pixelCrop.pw,
+                        ph: pixelCrop.ph,
+                    },
+                }
+                : { ...cropByIndex };
 
-            const missingIndex = sources.findIndex((_, idx) => !nextCropByIndex[idx]);
+            const missingIndex = sources.findIndex((source, idx) => {
+                if (!isImageStudySource(source)) return false;
+                return !nextCropByIndex[idx];
+            });
             if (missingIndex >= 0) {
-                Alert.alert('안내', '모든 사진을 한 번씩 선택해 크롭 영역을 확인해 주세요.');
+                Alert.alert('안내', '이미지로 선택한 자료는 모두 한 번씩 선택해 크롭 영역을 확인해 주세요.');
                 setCropByIndex(nextCropByIndex);
                 setSelectedIndex(missingIndex);
                 return;
@@ -604,6 +600,35 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         displayRect.dh > 0 &&
         crop.w > 0 &&
         crop.h > 0;
+    const isReadyToStart = !!selectedSource && (!isSelectedImage || isCropUiReady);
+
+    const renderSourcePreview = (source: StudySource, isThumb = false) => {
+        if (isImageStudySource(source)) {
+            return (
+                <Image
+                    source={{ uri: source.uri }}
+                    style={isThumb ? styles.thumb : styles.previewImage}
+                    resizeMode="contain"
+                />
+            );
+        }
+
+        return (
+            <View style={isThumb ? styles.fileThumb : styles.fileCard}>
+                <Text style={isThumb ? styles.fileThumbExt : styles.fileExt}>
+                    {getStudySourceExtension(source) || 'FILE'}
+                </Text>
+                <Text style={isThumb ? styles.fileThumbName : styles.fileName} numberOfLines={isThumb ? 2 : 3}>
+                    {getStudySourceName(source)}
+                </Text>
+                {!isThumb && (
+                    <Text style={styles.fileHint}>
+                        파일 자료는 크롭 없이 그대로 OCR로 전달됩니다.
+                    </Text>
+                )}
+            </View>
+        );
+    };
 
     return (
         <View style={styles.root}>
@@ -616,7 +641,11 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             </Pressable>
 
             <View style={styles.centerWrap}>
-                <Text style={styles.guide}>원하는 개념 한 가지만 포함되도록 잘라주세요.</Text>
+                <Text style={styles.guide}>
+                    {isSelectedImage
+                        ? '원하는 개념 한 가지만 포함되도록 잘라주세요.'
+                        : '파일 자료는 크롭 없이 그대로 학습에 사용돼요.'}
+                </Text>
                 <Text> 학습시작 버튼을 누르면 시간이 조금 소요될 수 있어요.</Text>
 
                 {ocrUsage && (
@@ -651,9 +680,17 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                                 setContainerH(height);
                             }}
                         >
-                            <Image source={selectedSource} style={[styles.previewImage, { transform: [{ rotate: `${rotation}deg` }] }]} resizeMode="contain" />
+                            {isSelectedImage ? (
+                                <Image
+                                    source={{ uri: selectedSource.uri }}
+                                    style={[styles.previewImage, { transform: [{ rotate: `${rotation}deg` }] }]}
+                                    resizeMode="contain"
+                                />
+                            ) : (
+                                renderSourcePreview(selectedSource)
+                            )}
 
-                            {isCropUiReady && (
+                            {isSelectedImage && isCropUiReady && (
                                 <View style={styles.cropArea}>
                                     <View style={[styles.maskTop, overlayStyles.top, { pointerEvents: 'none' }]} />
                                     <View style={[styles.maskBottom, overlayStyles.bottom, { pointerEvents: 'none' }]} />
@@ -700,29 +737,33 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                         </View>
                     ) : (
                         <View style={styles.empty}>
-                            <Text style={styles.emptyText}>선택된 이미지가 없습니다.</Text>
+                            <Text style={styles.emptyText}>선택된 자료가 없습니다.</Text>
                         </View>
                     )}
                 </View>
 
                 {/* 회전 버튼들 - 사진 밖에 배치 */}
-                <View style={styles.rotateRow}>
-                    <Pressable style={styles.rotateBtnLeft} onPress={handleRotateLeft} hitSlop={10}>
-                        <Image
-                            source={require('../../../assets/turn-icon.png')}
-                            style={styles.rotateIcon}
-                            resizeMode="contain"
-                        />
-                    </Pressable>
+                {isSelectedImage ? (
+                    <View style={styles.rotateRow}>
+                        <Pressable style={styles.rotateBtnLeft} onPress={handleRotateLeft} hitSlop={10}>
+                            <Image
+                                source={require('../../../assets/turn-icon.png')}
+                                style={styles.rotateIcon}
+                                resizeMode="contain"
+                            />
+                        </Pressable>
 
-                    <Pressable style={styles.rotateBtnRight} onPress={handleRotateRight} hitSlop={10}>
-                        <Image
-                            source={require('../../../assets/turn-icon.png')}
-                            style={[styles.rotateIcon, styles.rotateRight]}
-                            resizeMode="contain"
-                        />
-                    </Pressable>
-                </View>
+                        <Pressable style={styles.rotateBtnRight} onPress={handleRotateRight} hitSlop={10}>
+                            <Image
+                                source={require('../../../assets/turn-icon.png')}
+                                style={[styles.rotateIcon, styles.rotateRight]}
+                                resizeMode="contain"
+                            />
+                        </Pressable>
+                    </View>
+                ) : (
+                    <View style={styles.rotateSpacer} />
+                )}
 
                 <View style={styles.recentWrap}>
                     <ScrollView
@@ -741,7 +782,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                                     }}
                                     style={[styles.thumbBtn, active && styles.thumbBtnActive]}
                                 >
-                                    <Image source={src} style={styles.thumb} />
+                                    {renderSourcePreview(src, true)}
                                 </Pressable>
                             );
                         })}
@@ -750,9 +791,9 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             </View>
 
             <Pressable
-                style={[styles.fab, (!sources || sources.length === 0 || isCropping || limitReached || !isCropUiReady) && { opacity: 0.5 }]}
+                style={[styles.fab, (!sources || sources.length === 0 || isCropping || limitReached || !isReadyToStart) && { opacity: 0.5 }]}
                 onPress={handleStart}
-                disabled={!sources || sources.length === 0 || isCropping || limitReached || !isCropUiReady}
+                disabled={!sources || sources.length === 0 || isCropping || limitReached || !isReadyToStart}
             >
                 <Image
                     source={require('../../../assets/study/start-study-button.png')}
@@ -870,6 +911,32 @@ const styles = StyleSheet.create({
     previewImage: {
         width: '100%',
         height: '100%',
+    },
+    fileCard: {
+        width: '100%',
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: scale(24),
+        backgroundColor: '#F8FAFC',
+    },
+    fileExt: {
+        color: '#111827',
+        fontSize: fontScale(28),
+        fontWeight: '900',
+        marginBottom: scale(10),
+    },
+    fileName: {
+        color: '#1F2937',
+        fontSize: fontScale(15),
+        fontWeight: '700',
+        textAlign: 'center',
+        marginBottom: scale(10),
+    },
+    fileHint: {
+        color: '#6B7280',
+        fontSize: fontScale(12),
+        textAlign: 'center',
     },
 
     empty: {
@@ -997,6 +1064,11 @@ const styles = StyleSheet.create({
         marginTop: scale(12),
         marginBottom: scale(12),
     },
+    rotateSpacer: {
+        width: '100%',
+        maxWidth: scale(550),
+        height: scale(72),
+    },
     rotateBtnLeft: {
         width: scale(48),
         height: scale(48),
@@ -1053,6 +1125,27 @@ const styles = StyleSheet.create({
         width: scale(70),
         height: scale(70),
         borderRadius: scale(11),
+    },
+    fileThumb: {
+        width: scale(70),
+        height: scale(70),
+        borderRadius: scale(11),
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: scale(4),
+        backgroundColor: '#F8FAFC',
+    },
+    fileThumbExt: {
+        color: '#111827',
+        fontSize: fontScale(10),
+        fontWeight: '900',
+    },
+    fileThumbName: {
+        color: '#4B5563',
+        fontSize: fontScale(8),
+        fontWeight: '700',
+        textAlign: 'center',
+        marginTop: scale(2),
     },
 
     fab: {

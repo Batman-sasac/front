@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, ImageSourcePropType, Alert, Platform, Modal, Pressable, Image, Text, StyleSheet } from 'react-native';
+import { View, Alert, Platform, Modal, Pressable, Image, Text, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Splash from './src/components/Splash';
 import LoginScreen from './src/screens/auth/LoginScreen';
@@ -16,6 +16,7 @@ import AlarmSettingScreen from './src/screens/alarm/AlarmSettingScreen';
 import MyPageScreen from './src/screens/mypage/MyPageScreen';
 import TakePicture from './src/screens/input_data/TakePicture';
 import SelectPicture from './src/screens/input_data/SelectPicture';
+import { StudySource } from './src/screens/input_data/studySource';
 import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import StudyFlowScreen from './src/screens/study/StudyFlowScreen';
@@ -602,7 +603,7 @@ export default function App() {
   const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
   const [leagueRemainingText] = useState<string>('');
   // 촬영 결과 임시 소스 목록
-  const [capturedSources, setCapturedSources] = useState<ImageSourcePropType[]>([]);
+  const [capturedSources, setCapturedSources] = useState<StudySource[]>([]);
 
   const [scaffoldingPayload, setScaffoldingPayload] = useState<ScaffoldingPayload | null>(null);
   const [scaffoldingPayloads, setScaffoldingPayloads] = useState<ScaffoldingPayload[]>([]);
@@ -610,22 +611,25 @@ export default function App() {
   const [scaffoldingError, setScaffoldingError] = useState<string | null>(null);
 
   const runOcrForIndex = async (
-    sources: ImageSourcePropType[],
+    sources: StudySource[],
     index: number,
     cropMap: Record<number, { px: number; py: number; pw: number; ph: number }>,
   ) => {
-    const target = sources[index] as any;
-    const uri = target?.uri as string | undefined;
+    const target = sources[index];
+    const uri = target?.uri;
 
     if (!uri) {
       throw new Error(`${index + 1}번째 이미지 URI를 찾을 수 없습니다.`);
     }
 
-    return runOcr(uri, cropMap[index]);
+    return runOcr(uri, cropMap[index], {
+      fileName: target?.name ?? undefined,
+      mimeType: target?.mimeType ?? undefined,
+    });
   };
 
   const preloadScaffoldingPayloads = async (
-    sources: ImageSourcePropType[],
+    sources: StudySource[],
     cropMap: Record<number, { px: number; py: number; pw: number; ph: number }>,
   ) => {
     setScaffoldingLoading(true);
@@ -1276,7 +1280,7 @@ export default function App() {
                 </View>
 
                 <View style={stylesSub.modalBody}>
-                  <Image source={require('./assets/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
+                  <Image source={require('./assets/character/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
                   <Text style={stylesSub.modalDesc}>무료 AI 호출 사용량을 모두 사용했어요.</Text>
                   <Text style={stylesSub.modalDesc}>계속 학습하고 싶으시다면</Text>
                   <Text style={stylesSub.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>
