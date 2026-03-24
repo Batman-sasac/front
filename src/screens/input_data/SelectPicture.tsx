@@ -6,6 +6,7 @@ import {
     Pressable,
     Image,
     ScrollView,
+    Modal,
     PanResponder,
     PanResponderInstance,
     TextInput,
@@ -62,6 +63,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const [subjectName, setSubjectName] = useState('');  // 과목명 추가
     const [ocrUsage, setOcrUsage] = useState<{ remaining: number; pages_limit: number; status: string; message?: string } | null>(null);
     const [ocrUsageError, setOcrUsageError] = useState<string | null>(null);
+    const [showOcrLimitModal, setShowOcrLimitModal] = useState(false);
 
     const selectedSource = useMemo(() => {
         if (!sources || sources.length === 0) return null;
@@ -356,6 +358,10 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
     const handleStart = () => {
         if (!selectedSource) return;
+        if (exceedsRemainingOcr) {
+            setShowOcrLimitModal(true);
+            return;
+        }
         cropImage();
     };
 
@@ -592,6 +598,11 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     }, [crop, containerW, containerH]);
 
     const limitReached = ocrUsage?.status === 'limit_reached';
+    const exceedsRemainingOcr =
+        !!ocrUsage &&
+        !ocrUsageError &&
+        !limitReached &&
+        sources.length > Math.max(ocrUsage.remaining ?? 0, 0);
     const isCropUiReady =
         isCropReady &&
         imageW > 0 &&
@@ -601,6 +612,14 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         crop.w > 0 &&
         crop.h > 0;
     const isReadyToStart = !!selectedSource && (!isSelectedImage || isCropUiReady);
+
+    useEffect(() => {
+        if (exceedsRemainingOcr) {
+            setShowOcrLimitModal(true);
+            return;
+        }
+        setShowOcrLimitModal(false);
+    }, [exceedsRemainingOcr]);
 
     const renderSourcePreview = (source: StudySource, isThumb = false) => {
         if (isImageStudySource(source)) {
@@ -791,9 +810,9 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             </View>
 
             <Pressable
-                style={[styles.fab, (!sources || sources.length === 0 || isCropping || limitReached || !isReadyToStart) && { opacity: 0.5 }]}
+                style={[styles.fab, (!sources || sources.length === 0 || isCropping || limitReached || exceedsRemainingOcr || !isReadyToStart) && { opacity: 0.5 }]}
                 onPress={handleStart}
-                disabled={!sources || sources.length === 0 || isCropping || limitReached || !isReadyToStart}
+                disabled={!sources || sources.length === 0 || isCropping || limitReached || exceedsRemainingOcr || !isReadyToStart}
             >
                 <Image
                     source={require('../../../assets/study/start-study-button.png')}
@@ -801,6 +820,26 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                     resizeMode="contain"
                 />
             </Pressable>
+
+            <Modal
+                visible={showOcrLimitModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowOcrLimitModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalBox}>
+                        <Text style={styles.modalTitle}>OCR 횟수 부족</Text>
+                        <Text style={styles.modalMessage}>선택한 자료가 {sources.length}개예요.</Text>
+                        <Text style={styles.modalMessage}>
+                            현재 남은 OCR {ocrUsage?.remaining ?? 0}회 이하로 줄여주세요.
+                        </Text>
+                        <Pressable style={styles.modalPrimaryButton} onPress={() => setShowOcrLimitModal(false)}>
+                            <Text style={styles.modalPrimaryText}>확인</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -870,6 +909,50 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginBottom: scale(8),
         textAlign: 'center',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(15, 23, 42, 0.32)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: scale(20),
+    },
+    modalBox: {
+        width: '100%',
+        maxWidth: scale(340),
+        backgroundColor: '#FFFFFF',
+        borderRadius: scale(20),
+        paddingHorizontal: scale(22),
+        paddingVertical: scale(22),
+        alignItems: 'center',
+    },
+    modalTitle: {
+        fontSize: fontScale(20),
+        fontWeight: '900',
+        color: '#111827',
+        marginBottom: scale(12),
+        textAlign: 'center',
+    },
+    modalMessage: {
+        fontSize: fontScale(14),
+        fontWeight: '700',
+        color: '#4B5563',
+        lineHeight: fontScale(20),
+        textAlign: 'center',
+    },
+    modalPrimaryButton: {
+        marginTop: scale(18),
+        width: '100%',
+        height: scale(48),
+        borderRadius: scale(14),
+        backgroundColor: '#EF4444',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalPrimaryText: {
+        fontSize: fontScale(15),
+        fontWeight: '900',
+        color: '#FFFFFF',
     },
 
     subjectInput: {

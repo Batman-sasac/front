@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Image, Animated, Easing } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 
 type Props = {
@@ -11,6 +11,8 @@ type Props = {
 
 export default function StudyFlowScreen({ mode, totalPages, currentPage, onStart }: Props) {
   const [progress, setProgress] = useState(18);
+  const [trackWidth, setTrackWidth] = useState(0);
+  const animatedProgress = useRef(new Animated.Value(18)).current;
 
   useEffect(() => {
     if (mode !== 'loading') return;
@@ -25,6 +27,21 @@ export default function StudyFlowScreen({ mode, totalPages, currentPage, onStart
 
     return () => clearInterval(timer);
   }, [mode]);
+
+  useEffect(() => {
+    Animated.timing(animatedProgress, {
+      toValue: progress,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [animatedProgress, progress]);
+
+  const animatedFillWidth = animatedProgress.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, trackWidth],
+    extrapolate: 'clamp',
+  });
 
   const bubbleLines = mode === 'loading'
     ? ['문제가 만들어지는 중이에요.', '조금만 기다려주세요!']
@@ -53,8 +70,11 @@ export default function StudyFlowScreen({ mode, totalPages, currentPage, onStart
         {mode === 'loading' ? (
           <View style={styles.progressCard}>
             <Text style={styles.progressText}>{progress}%</Text>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progress}%` }]} />
+            <View
+              style={styles.progressTrack}
+              onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+            >
+              <Animated.View style={[styles.progressFill, { width: animatedFillWidth }]} />
             </View>
           </View>
         ) : (
