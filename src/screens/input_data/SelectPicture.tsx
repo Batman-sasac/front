@@ -765,9 +765,8 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                     )}
                 </View>
 
-                {/* 회전 버튼들 - 사진 밖에 배치 */}
-                {isSelectedImage ? (
-                    <View style={styles.rotateRow}>
+                <View style={styles.rotateRow}>
+                    {isSelectedImage ? (
                         <Pressable style={styles.rotateBtnLeft} onPress={handleRotateLeft} hitSlop={10}>
                             <Image
                                 source={require('../../../assets/turn-icon.png')}
@@ -775,7 +774,35 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                                 resizeMode="contain"
                             />
                         </Pressable>
+                    ) : (
+                        <View style={styles.rotateButtonSpacer} />
+                    )}
 
+                    <View style={styles.recentWrap}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.recentRow}
+                        >
+                            {allSources.map((src, idx) => {
+                                const active = idx === selectedIndex;
+                                return (
+                                    <Pressable
+                                        key={String(idx)}
+                                        onPress={() => {
+                                            persistCurrentCropForIndex(selectedIndex);
+                                            setSelectedIndex(idx);
+                                        }}
+                                        style={[styles.thumbBtn, active && styles.thumbBtnActive]}
+                                    >
+                                        {renderSourcePreview(src, true)}
+                                    </Pressable>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+
+                    {isSelectedImage ? (
                         <Pressable style={styles.rotateBtnRight} onPress={handleRotateRight} hitSlop={10}>
                             <Image
                                 source={require('../../../assets/turn-icon.png')}
@@ -783,33 +810,9 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                                 resizeMode="contain"
                             />
                         </Pressable>
-                    </View>
-                ) : (
-                    <View style={styles.rotateSpacer} />
-                )}
-
-                <View style={styles.recentWrap}>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.recentRow}
-                    >
-                        {allSources.map((src, idx) => {
-                            const active = idx === selectedIndex;
-                            return (
-                                <Pressable
-                                    key={String(idx)}
-                                    onPress={() => {
-                                        persistCurrentCropForIndex(selectedIndex);
-                                        setSelectedIndex(idx);
-                                    }}
-                                    style={[styles.thumbBtn, active && styles.thumbBtnActive]}
-                                >
-                                    {renderSourcePreview(src, true)}
-                                </Pressable>
-                            );
-                        })}
-                    </ScrollView>
+                    ) : (
+                        <View style={styles.rotateButtonSpacer} />
+                    )}
                 </View>
             </View>
 
@@ -1168,16 +1171,16 @@ const styles = StyleSheet.create({
         width: '100%',
         maxWidth: scale(550),
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: scale(16),
+        justifyContent: 'center',
+        gap: scale(14),
+        paddingHorizontal: scale(8),
         marginTop: scale(12),
         marginBottom: scale(12),
     },
-    rotateSpacer: {
-        width: '100%',
-        maxWidth: scale(550),
-        height: scale(72),
+    rotateButtonSpacer: {
+        width: scale(48),
+        height: scale(48),
     },
     rotateBtnLeft: {
         width: scale(48),
@@ -1201,18 +1204,17 @@ const styles = StyleSheet.create({
     },
 
     recentWrap: {
-        width: '100%',
-        maxWidth: scale(550),
+        flex: 1,
+        maxWidth: scale(390),
         height: scale(90),
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: scale(8),
     },
     recentRow: {
         alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: 'flex-start',
         gap: scale(16),
-        paddingHorizontal: scale(16),
+        paddingHorizontal: scale(8),
     },
     thumbBtn: {
         borderRadius: scale(14),
