@@ -68,14 +68,31 @@ function normalizeOcrTables(raw: unknown): OcrTableBlock[] | undefined {
     return out.length > 0 ? out : undefined;
 }
 
-export async function runOcr(fileUri: string, cropInfo?: { px: number; py: number; pw: number; ph: number }): Promise<ScaffoldingPayload> {
+export async function runOcr(
+    fileUri: string,
+    cropInfo?: { px: number; py: number; pw: number; ph: number },
+    fileMeta?: { fileName?: string; mimeType?: string },
+): Promise<ScaffoldingPayload> {
     console.log('OCR 요청 시작 - fileUri:', fileUri, 'cropInfo:', cropInfo);
 
     const form = new FormData();
 
-    // 모바일 환경에서 파일 URI를 Blob으로 변환 시도
-    const fileExtension = fileUri.split('.').pop()?.toLowerCase() || 'jpg';
-    const mimeType = fileExtension === 'png' ? 'image/png' : 'image/jpeg';
+    const nameFromMeta = fileMeta?.fileName?.trim();
+    const nameFromUri = fileUri.split('/').pop()?.split('?')[0] ?? '';
+    const normalizedFileName = nameFromMeta || nameFromUri || 'upload';
+    const fileExtensionMatch = normalizedFileName.match(/\.([a-z0-9]+)$/i);
+    const fileExtension = fileExtensionMatch?.[1]?.toLowerCase()
+        || fileUri.split('.').pop()?.toLowerCase()
+        || 'jpg';
+    const mimeType = fileMeta?.mimeType
+        || (fileExtension === 'png'
+            ? 'image/png'
+            : fileExtension === 'pdf'
+                ? 'application/pdf'
+                : 'image/jpeg');
+    const uploadFileName = normalizedFileName.includes('.')
+        ? normalizedFileName
+        : `upload.${fileExtension}`;
 
     try {
         // 모바일 환경에서 파일 URI를 Blob으로 변환 시도
@@ -83,7 +100,7 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
         const blob = await response.blob();
 
         // Blob을 File 객체로 변환 (웹 호환)
-        const file = new File([blob], `photo.${fileExtension}`, { type: mimeType });
+        const file = new File([blob], uploadFileName, { type: mimeType });
 
         form.append('file', file);
         console.log('FormData 생성 완료 (Blob):', { name: file.name, type: file.type, size: file.size });
@@ -92,13 +109,13 @@ export async function runOcr(fileUri: string, cropInfo?: { px: number; py: numbe
         console.log('Blob 변환 실패, RN 방식 사용:', blobError);
         form.append('file', {
             uri: fileUri,
-            name: `photo.${fileExtension}`,
+            name: uploadFileName,
             type: mimeType,
         } as any);
     }
 
     // crop 정보가 있으면 form에 추가
-    if (cropInfo) {
+    if (cropInfo && mimeType.startsWith('image/')) {
         form.append('crop_x', String(cropInfo.px));
         form.append('crop_y', String(cropInfo.py));
         form.append('crop_width', String(cropInfo.pw));
@@ -453,4 +470,3 @@ export async function getMonthlyStats(): Promise<MonthlyStatsResponse> {
     if (!res.ok) throw new Error(`Monthly Stats HTTP ${res.status}`);
     return res.json();
 }
-
