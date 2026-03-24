@@ -30,7 +30,7 @@ export default function Splash({ onDone, duration = 1500 }: Props) {
     <Animated.View style={[styles.container, { opacity }]}>
       <View style={styles.inner}>
         <Image
-          source={require('../../assets/bat-character.png')}
+          source={require('../../assets/character/bat-character.png')}
           style={{ width: characterSize, height: characterSize }}
           resizeMode="contain"
         />

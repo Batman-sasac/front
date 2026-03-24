@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Platform, ImageSourcePropType, Alert, Linking, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Platform, Alert, Linking, ScrollView } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { scale, fontScale } from '../../lib/layout';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getStudySourceExtension, getStudySourceName, isImageStudySource, StudySource } from './studySource';
 
 type Props = {
     onBack: () => void;
-    onDone: (sources: ImageSourcePropType[]) => void;
+    onDone: (sources: StudySource[]) => void;
 };
 
 type TimerSec = 0 | 3 | 5 | 10;
@@ -32,7 +33,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
     const [countdown, setCountdown] = useState<number>(0);
     const [isCounting, setIsCounting] = useState(false);
 
-    const [shots, setShots] = useState<ImageSourcePropType[]>([]);
+    const [shots, setShots] = useState<StudySource[]>([]);
     const [isShotListVisible, setIsShotListVisible] = useState(false);
 
     useEffect(() => {
@@ -132,7 +133,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                 });
 
                 if (!res.canceled && res.assets?.length) {
-                    const resizedSources: ImageSourcePropType[] = [];
+                    const resizedSources: StudySource[] = [];
 
                     for (const asset of res.assets) {
                         if (!asset.uri) continue;
@@ -144,7 +145,13 @@ export default function TakePicture({ onBack, onDone }: Props) {
                             { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
                         );
 
-                        resizedSources.push({ uri: manipulated.uri } as ImageSourcePropType);
+                        resizedSources.push({
+                            uri: manipulated.uri,
+                            kind: 'image',
+                            name: asset.fileName ?? null,
+                            mimeType: asset.mimeType ?? 'image/jpeg',
+                            size: asset.fileSize ?? null,
+                        });
                         console.log('✅ 리사이징 완료:', manipulated.uri);
                     }
 
@@ -169,11 +176,10 @@ export default function TakePicture({ onBack, onDone }: Props) {
             console.log('📁 문서선택 시작, Platform.OS:', Platform.OS, 'isWeb:', isWeb);
 
             if (isWeb) {
-                // 웹: HTML file input 사용 (이미지만)
+                // 웹: HTML file input 사용
                 console.log('📁 웹 환경에서 file input 사용');
                 const input = document.createElement('input') as HTMLInputElement;
                 input.type = 'file';
-                input.accept = 'image/*';  // 이미지만 허용
                 input.multiple = true;
 
                 input.onchange = async (e: any) => {
@@ -184,27 +190,23 @@ export default function TakePicture({ onBack, onDone }: Props) {
                         const file = files[i];
                         console.log('📁 파일:', file.name, '타입:', file.type, '크기:', file.size);
 
-                        // PDF 파일 거부
-                        if (file.type === 'application/pdf') {
-                            console.error('❌ PDF 파일은 지원하지 않습니다:', file.name);
-                            alert('PDF 파일은 지원하지 않습니다.\n이미지 파일(JPG, PNG 등)만 선택해주세요.');
-                            continue;
-                        }
-
-                        // 이미지 파일만 허용
-                        if (!file.type.startsWith('image/')) {
-                            console.error('❌ 이미지가 아닌 파일:', file.name, file.type);
-                            alert('이미지 파일만 선택해주세요.');
-                            continue;
-                        }
-
                         const reader = new FileReader();
 
                         reader.onload = () => {
                             const dataUrl = reader.result as string;
                             console.log('📁 파일 읽기 완료:', file.name);
                             setShots((prev) => {
-                                const updated = [...prev, { uri: dataUrl }];
+                                const nextSource: StudySource = {
+                                    uri: dataUrl,
+                                    kind: file.type.startsWith('image/') ? 'image' : 'document',
+                                    name: file.name,
+                                    mimeType: file.type || null,
+                                    size: file.size ?? null,
+                                };
+                                const updated = [
+                                    ...prev,
+                                    nextSource,
+                                ];
                                 console.log('📁 업데이트 후 shots 길이:', updated.length);
                                 return updated;
                             });
@@ -223,7 +225,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                 // 네이티브: 문서 선택기 사용
                 console.log('📁 네이티브 환경에서 문서 선택');
                 const res = await DocumentPicker.getDocumentAsync({
-                    type: 'image/*',
+                    type: '*/*',
                     multiple: true,
                     copyToCacheDirectory: false,
                 });
@@ -232,7 +234,13 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
                 const sources = res.assets.map((a) => {
                     console.log('📁 선택된 문서:', a.uri);
-                    return { uri: a.uri } as ImageSourcePropType;
+                    return {
+                        uri: a.uri,
+                        kind: a.mimeType?.startsWith('image/') ? 'image' : 'document',
+                        name: a.name ?? null,
+                        mimeType: a.mimeType ?? null,
+                        size: a.size ?? null,
+                    } satisfies StudySource;
                 });
 
                 setShots((prev) => {
@@ -262,7 +270,15 @@ export default function TakePicture({ onBack, onDone }: Props) {
                     [{ resize: { width: 1440 } }],
                     { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG }
                 );
-                setShots((prev) => [{ uri: manipulated.uri } as ImageSourcePropType, ...prev]);
+                setShots((prev) => [
+                    {
+                        uri: manipulated.uri,
+                        kind: 'image',
+                        name: 'camera-photo.jpg',
+                        mimeType: 'image/jpeg',
+                    },
+                    ...prev,
+                ]);
             }
         } catch (e) {
             console.log('촬영 실패:', e);
@@ -314,12 +330,23 @@ export default function TakePicture({ onBack, onDone }: Props) {
         setShots((prev) => prev.filter((_, idx) => idx !== removeIndex));
     };
 
-    const getShotKey = (shot: ImageSourcePropType, index: number) => {
-        const candidate = shot as { uri?: string } | number;
-        if (typeof candidate === 'number') {
-            return `asset-${candidate}-${index}`;
+    const getShotKey = (shot: StudySource, index: number) => {
+        return shot.uri ? `uri-${shot.uri}-${index}` : `shot-${index}`;
+    };
+
+    const renderShotPreview = (shot: StudySource, style: any) => {
+        if (isImageStudySource(shot)) {
+            return <Image source={{ uri: shot.uri }} style={style} />;
         }
-        return candidate.uri ? `uri-${candidate.uri}-${index}` : `shot-${index}`;
+
+        return (
+            <View style={[style, styles.filePreview]}>
+                <Text style={styles.filePreviewExt}>{getStudySourceExtension(shot) || 'FILE'}</Text>
+                <Text style={styles.filePreviewName} numberOfLines={1}>
+                    {getStudySourceName(shot)}
+                </Text>
+            </View>
+        );
     };
 
     const visibleShotCount = Math.min(shots.length, 4);
@@ -497,7 +524,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                         <View style={styles.thumbnailAnchor}>
                             <Pressable style={styles.iconBtn} onPress={handleToggleShotList}>
                                 <View style={styles.thumbnailContainer}>
-                                    <Image source={shots[0]} style={styles.thumbnailImage} />
+                                    {renderShotPreview(shots[0], styles.thumbnailImage)}
                                 </View>
                             </Pressable>
 
@@ -510,7 +537,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
                                     >
                                         {shots.map((shot, idx) => (
                                             <View key={getShotKey(shot, idx)} style={styles.selectedShotItem}>
-                                                <Image source={shot} style={styles.selectedShotImage} />
+                                                {renderShotPreview(shot, styles.selectedShotImage)}
                                                 <Pressable style={styles.removeShotBtn} onPress={() => handleRemoveShot(idx)}>
                                                     <Text style={styles.removeShotText}>x</Text>
                                                 </Pressable>
@@ -708,6 +735,25 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.35)',
         backgroundColor: 'rgba(0,0,0,0.1)',
+    },
+    filePreview: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: scale(4),
+        backgroundColor: 'rgba(255,255,255,0.9)',
+    },
+    filePreviewExt: {
+        color: '#111827',
+        fontSize: fontScale(10),
+        fontWeight: '800',
+    },
+    filePreviewName: {
+        color: '#4B5563',
+        fontSize: fontScale(7),
+        fontWeight: '700',
+        textAlign: 'center',
+        marginTop: scale(2),
+        width: '100%',
     },
     removeShotBtn: {
         position: 'absolute',

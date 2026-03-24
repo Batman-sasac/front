@@ -133,7 +133,7 @@ export default function ErrorScreen({ onGoHome, onRetry, onSubmitReport }: Props
 
                         <View style={styles.doneBody}>
                             <Image
-                                source={require('../../../assets/bat-character.png')}
+                                source={require('../../../assets/character/bat-character.png')}
                                 style={styles.doneBatImage}
                                 resizeMode="contain"
                             />

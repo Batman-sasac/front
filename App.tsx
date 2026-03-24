@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, ImageSourcePropType, Alert, Platform, Modal, Pressable, Image, Text, StyleSheet } from 'react-native';
+import { View, Alert, Platform, Modal, Pressable, Image, Text, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Splash from './src/components/Splash';
 import LoginScreen from './src/screens/auth/LoginScreen';
@@ -16,6 +16,7 @@ import AlarmSettingScreen from './src/screens/alarm/AlarmSettingScreen';
 import MyPageScreen from './src/screens/mypage/MyPageScreen';
 import TakePicture from './src/screens/input_data/TakePicture';
 import SelectPicture from './src/screens/input_data/SelectPicture';
+import { StudySource } from './src/screens/input_data/studySource';
 import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import StudyFlowScreen from './src/screens/study/StudyFlowScreen';
@@ -602,7 +603,7 @@ export default function App() {
   const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
   const [leagueRemainingText] = useState<string>('');
   // 촬영 결과 임시 소스 목록
-  const [capturedSources, setCapturedSources] = useState<ImageSourcePropType[]>([]);
+  const [capturedSources, setCapturedSources] = useState<StudySource[]>([]);
 
   const [scaffoldingPayload, setScaffoldingPayload] = useState<ScaffoldingPayload | null>(null);
   const [scaffoldingPayloads, setScaffoldingPayloads] = useState<ScaffoldingPayload[]>([]);
@@ -610,22 +611,25 @@ export default function App() {
   const [scaffoldingError, setScaffoldingError] = useState<string | null>(null);
 
   const runOcrForIndex = async (
-    sources: ImageSourcePropType[],
+    sources: StudySource[],
     index: number,
     cropMap: Record<number, { px: number; py: number; pw: number; ph: number }>,
   ) => {
-    const target = sources[index] as any;
-    const uri = target?.uri as string | undefined;
+    const target = sources[index];
+    const uri = target?.uri;
 
     if (!uri) {
       throw new Error(`${index + 1}번째 이미지 URI를 찾을 수 없습니다.`);
     }
 
-    return runOcr(uri, cropMap[index]);
+    return runOcr(uri, cropMap[index], {
+      fileName: target?.name ?? undefined,
+      mimeType: target?.mimeType ?? undefined,
+    });
   };
 
   const preloadScaffoldingPayloads = async (
-    sources: ImageSourcePropType[],
+    sources: StudySource[],
     cropMap: Record<number, { px: number; py: number; pw: number; ph: number }>,
   ) => {
     setScaffoldingLoading(true);
@@ -646,7 +650,7 @@ export default function App() {
       setScaffoldingPayload(nextPayloads[0] ?? null);
       setStep('studyIntro');
     } catch (e: any) {
-      const message = e?.message ?? 'OCR 추출에 실패했습니다.';
+      const message = e?.message ?? '텍스트 추출에 실패했습니다.';
       setScaffoldingPayload(null);
       setScaffoldingError(message);
 
@@ -654,13 +658,13 @@ export default function App() {
         // 화이트리스트 유저는 사용량 소진 모달/알림을 띄우지 않음 (기록은 계속 유지)
         const latestUsage = (await refreshOcrUsage()) ?? ocrUsage;
         if (!latestUsage?.is_unlimited) {
-          Alert.alert('OCR 사용 한도', message);
+          Alert.alert('텍스트 추출 사용 한도', message);
           setStep('home');
           return;
         }
       }
 
-      Alert.alert('OCR 오류', message);
+      Alert.alert('텍스트 추출 오류', message);
       setStep('home');
     } finally {
       setScaffoldingLoading(false);
@@ -879,7 +883,17 @@ export default function App() {
                 return source?.uri ? `uri-${source.uri}-${index}` : `source-${index}`;
               }).join('|')}
               sources={capturedSources}
-              onBack={() => setStep('takePicture')}
+              onBack={() => {
+                setCapturedSources([]);
+                setSelectedSourceIndex(0);
+                setCropBySourceIndex({});
+                setScaffoldingPayloads([]);
+                setScaffoldingPayload(null);
+                setScaffoldingError(null);
+                setPendingGradeParts({});
+                pendingGradePartsRef.current = {};
+                setStep('takePicture');
+              }}
               onStartLearning={async (finalSources, isOcrNeeded, subject, cropMap) => {
                 void isOcrNeeded;
                 setCapturedSources(finalSources);
@@ -963,17 +977,17 @@ export default function App() {
                     });
                     setStep('studyIntro');
                   } catch (e: any) {
-                    const message = e?.message ?? 'OCR 추출에 실패했습니다.';
+                    const message = e?.message ?? '텍스트 추출에 실패했습니다.';
                     setScaffoldingPayload(null);
                     setScaffoldingError(message);
 
                     if (typeof message === 'string' && message.includes('무료 횟수')) {
-                      Alert.alert('OCR 사용 한도', message);
+                      Alert.alert('텍스트 추출 사용 한도', message);
                       setStep('home');
                       return;
                     }
 
-                    Alert.alert('OCR 오류', message);
+                    Alert.alert('텍스트 추출 오류', message);
                   } finally {
                     setScaffoldingLoading(false);
                   }
@@ -1023,11 +1037,6 @@ export default function App() {
               }}
               onSave={async ({ answers: userAnswers, selectedBlankIds }) => {
                 if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
-
-                const hasEmptyAnswer = userAnswers.some((answer) => (answer ?? '').trim() === '');
-                if (isReviewMode && hasEmptyAnswer) {
-                  throw new Error('복습에서는 선택한 모든 빈칸에 답을 입력한 뒤 완료할 수 있습니다.');
-                }
 
                 const blanks = scaffoldingPayload.blanks ?? [];
                 const rawBlankItems = scaffoldingPayload.blankItems && scaffoldingPayload.blankItems.length > 0
@@ -1276,7 +1285,7 @@ export default function App() {
                 </View>
 
                 <View style={stylesSub.modalBody}>
-                  <Image source={require('./assets/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
+                  <Image source={require('./assets/character/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
                   <Text style={stylesSub.modalDesc}>무료 AI 호출 사용량을 모두 사용했어요.</Text>
                   <Text style={stylesSub.modalDesc}>계속 학습하고 싶으시다면</Text>
                   <Text style={stylesSub.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>

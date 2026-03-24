@@ -5,10 +5,8 @@ import {
     StyleSheet,
     Pressable,
     Image,
-    ImageSourcePropType,
     ScrollView,
     TextInput,
-    KeyboardAvoidingView,
     Platform,
     Alert,
     Modal,
@@ -19,6 +17,7 @@ import { scale, fontScale } from '../../lib/layout';
 import { saveTest } from '../../api/ocr';
 import config from '../../lib/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StudySource } from '../input_data/studySource';
 import {
     buildKeywordInstances,
     normalizeBlankWord,
@@ -56,7 +55,7 @@ type SaveResult = {
 type Props = {
     onBack: () => void;
     onBackFromCompletion?: () => void; // 학습 완료 후 뒤로가기
-    sources: ImageSourcePropType[];
+    sources: StudySource[];
     selectedIndex: number;
 
     payload: ScaffoldingPayload | null;
@@ -661,10 +660,6 @@ export default function ScaffoldingScreen({
 
     const onGrade = () => {
         const missingAnswerCount = getMissingAnswerCount();
-        if (isReviewMode && missingAnswerCount > 0) {
-            Alert.alert('입력 필요', '복습에서는 선택한 모든 빈칸에 답을 입력한 뒤 채점할 수 있어요.');
-            return;
-        }
         if (!isReviewMode && step === '3-2' && missingAnswerCount > 0) {
             Alert.alert('입력 필요', `최종 리워드는 3라운드 ${orderedSelectedBlanks.length}문항 기준이에요. 모든 빈칸에 답을 입력한 뒤 채점해 주세요.`);
             return;
@@ -780,10 +775,8 @@ export default function ScaffoldingScreen({
     };
 
     return (
-        <KeyboardAvoidingView
+        <View
             style={styles.root}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
         >
             {/* 설명 */}
             <View style={styles.header}>
@@ -880,12 +873,6 @@ export default function ScaffoldingScreen({
                             <Pressable
                                 style={styles.imgBtnWrap}
                                 onPress={async () => {
-                                    const missingAnswerCount = getMissingAnswerCount();
-                                    if (isReviewMode && missingAnswerCount > 0) {
-                                        Alert.alert('입력 필요', '복습 완료 전에 선택한 모든 빈칸에 답을 입력해 주세요.');
-                                        return;
-                                    }
-
                                     if (onSave) {
                                         try {
                                             // 페이지/등장 순서 기반으로 instance를 그대로 저장한다.
@@ -974,7 +961,11 @@ export default function ScaffoldingScreen({
 
                 {/* 설명 */}
                 <View style={styles.rightCard}>
-                    <ScrollView contentContainerStyle={styles.textContainer}>
+                    <ScrollView
+                        contentContainerStyle={styles.textContainer}
+                        keyboardShouldPersistTaps="always"
+                        keyboardDismissMode="none"
+                    >
                         <View
                             style={styles.flow}
                             onLayout={(e) => {
@@ -1058,31 +1049,33 @@ export default function ScaffoldingScreen({
                                             >
                                                 <View style={{ position: 'relative' }}>
                                                     <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
-                                                    {isActive ? (
-                                                        <TextInput
-                                                            ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
-                                                            value={userValue}
-                                                            onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
-                                                            onKeyPress={(e) => {
-                                                                if (e.nativeEvent.key === 'Tab') {
-                                                                    focusAdjacentBlank(instanceId, 1);
+                                                    <TextInput
+                                                        ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
+                                                        value={userValue}
+                                                        onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
+                                                        onFocus={() => setActiveBlankId(instanceId)}
+                                                        onKeyPress={(e) => {
+                                                            if (e.nativeEvent.key === 'Tab') {
+                                                                focusAdjacentBlank(instanceId, 1);
+                                                            }
+                                                        }}
+                                                        onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
+                                                        style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
+                                                        selectTextOnFocus={isActive}
+                                                        autoCapitalize="none"
+                                                        autoCorrect={false}
+                                                        spellCheck={false}
+                                                        blurOnSubmit={false}
+                                                        onBlur={() => {
+                                                            requestAnimationFrame(() => {
+                                                                const hasFocusedInput = orderedSelectedBlanks.some((id) => inputRefs.current[id]?.isFocused?.());
+                                                                if (!hasFocusedInput) {
+                                                                    setActiveBlankId((prev) => (prev === instanceId ? null : prev));
                                                                 }
-                                                            }}
-                                                            onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
-                                                            style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
-                                                            selectTextOnFocus
-                                                            autoCapitalize="none"
-                                                            autoCorrect={false}
-                                                            spellCheck={false}
-                                                            blurOnSubmit={false}
-                                                            onBlur={() => setActiveBlankId((prev) => (prev === instanceId ? null : prev))}
-                                                            maxFontSizeMultiplier={1.0}
-                                                        />
-                                                    ) : (
-                                                        <Text style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}>
-                                                            {userValue}
-                                                        </Text>
-                                                    )}
+                                                            });
+                                                        }}
+                                                        maxFontSizeMultiplier={1.0}
+                                                    />
                                                 </View>
                                             </Pressable>
                                         </View>
@@ -1228,7 +1221,7 @@ export default function ScaffoldingScreen({
                     </Pressable>
                 </View>
             )}
-        </KeyboardAvoidingView>
+        </View>
     );
 }
 

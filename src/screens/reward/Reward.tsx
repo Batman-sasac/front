@@ -28,7 +28,7 @@ type RewardContent = {
   mascot: 'bat' | 'gift';
 };
 
-const BAT_IMAGE = require('../../../assets/bat-character.png') as ImageSourcePropType;
+const BAT_IMAGE = require('../../../assets/character/bat-character.png') as ImageSourcePropType;
 
 const REWARD_CONTENT: Record<RewardType, RewardContent> = {
   attendance: {
