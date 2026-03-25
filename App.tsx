@@ -58,9 +58,11 @@ type Step =
   | 'reward'
   | 'subscribe'
   | 'error';
+type BootStep = Exclude<Step, 'splash'>;
 
 export default function App() {
   const [step, setStep] = useState<Step>('splash');
+  const [bootTargetStep, setBootTargetStep] = useState<BootStep | null>(null);
   const [nickname, setNickname] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userSocialId, setUserSocialId] = useState('');
@@ -138,6 +140,7 @@ export default function App() {
   const WEEK_ATTENDANCE_WEEK_KEY = '@bat_week_attendance_week';
   const MONTHLY_GOAL_KEY = '@bat_monthly_goal';
   const TYPE_LABEL_KEY = '@bat_type_label';
+  const WEEKLY_GROWTH_CACHE_KEY = '@bat_weekly_growth_cache';
 
   // 포인트 기준 레벨 구간
   // 1레벨: 0 ~ 100
@@ -220,10 +223,14 @@ export default function App() {
   };
 
   const tryMoveToTakePicture = async () => {
-    const usage = await refreshOcrUsage();
-    if (!isSubscribed && isUsageLimitReached(usage)) {
-      setShowUsageExhaustedModal(true);
-      return;
+    try {
+      const usage = await refreshOcrUsage();
+      if (!isSubscribed && usage && isUsageLimitReached(usage)) {
+        setShowUsageExhaustedModal(true);
+        return;
+      }
+    } catch (error) {
+      console.error('자료입력 진입 전 OCR 사용량 확인 실패:', error);
     }
     setStep('takePicture');
   };
@@ -365,6 +372,13 @@ export default function App() {
         if (userInfo.email && userInfo.nickname) {
           setUserEmail(userInfo.email);
           setNickname(userInfo.nickname);
+          const storedTypeLabel = (await AsyncStorage.getItem(TYPE_LABEL_KEY))?.trim() ?? '';
+          if (storedTypeLabel) {
+            setTypeLabel(storedTypeLabel);
+          }
+          // 초기 진입 화면은 로컬 정보만으로 먼저 결정하고,
+          // 네트워크 상태 조회는 뒤에서 진행해 스플래시 고정을 막는다.
+          setBootTargetStep(storedTypeLabel ? 'home' : 'typeIntro');
           try {
             const homeStats = await getHomeStats(token);
             if (typeof homeStats.data.points === 'number' && Number.isFinite(homeStats.data.points)) {
@@ -378,20 +392,19 @@ export default function App() {
           } catch (e) {
             console.error('유저 상태 조회 실패:', e);
           }
-          await refreshOcrUsage();
-          const storedTypeLabel = (await AsyncStorage.getItem(TYPE_LABEL_KEY))?.trim() ?? '';
-          if (storedTypeLabel) {
-            setTypeLabel(storedTypeLabel);
+          try {
+            await refreshOcrUsage();
+          } catch (e) {
+            console.error('초기 OCR 사용량 조회 실패:', e);
           }
-          setTimeout(() => setStep(storedTypeLabel ? 'home' : 'typeIntro'), 2000);
           return;
         }
       }
       // 토큰이 없으면 로그인 화면으로
-      setTimeout(() => setStep('login'), 2000);
+      setBootTargetStep('login');
     } catch (error) {
       console.error('자동 로그인 확인 오류:', error);
-      setTimeout(() => setStep('login'), 2000);
+      setBootTargetStep('login');
     }
   };
 
@@ -421,26 +434,67 @@ export default function App() {
 
       // 통계 데이터 로드 (당월 학습 횟수는 /auth/home/stats에서 study_logs 기준으로 가져옴)
       (async () => {
-        try {
-          const token = await getToken();
-          const [weekly, monthly, homeStats] = await Promise.all([
-            getWeeklyGrowth(),
-            getMonthlyStats(),
-            token ? getHomeStats(token).catch(() => null) : Promise.resolve(null),
-          ]);
-          setWeeklyGrowth(weekly);
-          const compare = monthly.compare ?? {};
-          setMonthlyStats({
-            ...compare,
-            this_month_count: homeStats?.data?.this_month_count ?? compare.this_month_count ?? 0,
-          });
-          if (homeStats?.data?.monthly_goal != null && homeStats.data.monthly_goal > 0) {
-            setMonthlyGoal(homeStats.data.monthly_goal);
-          } else if (compare?.target_count > 0) {
-            setMonthlyGoal(compare.target_count);
+        const defaultWeeklyGrowth = {
+          labels: ['4주 전', '3주 전', '2주 전', '지난 주', '이번 주'],
+          data: [0, 0, 0, 0, 0],
+        };
+        const token = await getToken();
+        const [weeklyResult, monthlyResult, homeStatsResult] = await Promise.allSettled([
+          getWeeklyGrowth(),
+          getMonthlyStats(),
+          token ? getHomeStats(token) : Promise.resolve(null),
+        ]);
+
+        if (weeklyResult.status === 'fulfilled') {
+          setWeeklyGrowth(weeklyResult.value);
+          await AsyncStorage.setItem(WEEKLY_GROWTH_CACHE_KEY, JSON.stringify(weeklyResult.value));
+        } else {
+          console.error('주간 그래프 데이터 로드 실패:', weeklyResult.reason);
+          try {
+            const cachedWeeklyRaw = await AsyncStorage.getItem(WEEKLY_GROWTH_CACHE_KEY);
+            const cachedWeekly = cachedWeeklyRaw ? JSON.parse(cachedWeeklyRaw) : null;
+            if (Array.isArray(cachedWeekly?.labels) && Array.isArray(cachedWeekly?.data)) {
+              setWeeklyGrowth({
+                labels: cachedWeekly.labels,
+                data: cachedWeekly.data,
+              });
+            } else {
+              setWeeklyGrowth(defaultWeeklyGrowth);
+            }
+          } catch (cacheError) {
+            console.error('주간 그래프 캐시 로드 실패:', cacheError);
+            setWeeklyGrowth(defaultWeeklyGrowth);
           }
-        } catch (e) {
-          console.error('통계 데이터 로드 실패:', e);
+        }
+
+        const monthlyCompare: {
+          last_month_name?: string;
+          last_month_count?: number;
+          this_month_name?: string;
+          this_month_count?: number;
+          target_count?: number;
+          diff?: number;
+        } = monthlyResult.status === 'fulfilled'
+            ? (monthlyResult.value.compare ?? {})
+            : {};
+        if (monthlyResult.status === 'rejected') {
+          console.error('월간 통계 데이터 로드 실패:', monthlyResult.reason);
+        }
+
+        const homeStats = homeStatsResult.status === 'fulfilled' ? homeStatsResult.value : null;
+        if (homeStatsResult.status === 'rejected') {
+          console.error('홈 통계 데이터 로드 실패:', homeStatsResult.reason);
+        }
+
+        setMonthlyStats({
+          ...monthlyCompare,
+          this_month_count: homeStats?.data?.this_month_count ?? monthlyCompare.this_month_count ?? 0,
+        });
+
+        if (homeStats?.data?.monthly_goal != null && homeStats.data.monthly_goal > 0) {
+          setMonthlyGoal(homeStats.data.monthly_goal);
+        } else if ((monthlyCompare?.target_count ?? 0) > 0) {
+          setMonthlyGoal(monthlyCompare.target_count ?? null);
         }
       })();
     }
@@ -702,7 +756,13 @@ export default function App() {
       <SafeAreaView style={{ flex: 1 }} edges={safeAreaEdges}>
         <View style={{ flex: 1 }}>
           {step === 'splash' && (
-            <Splash duration={1500} onDone={() => { }} />
+            <Splash
+              duration={1500}
+              ready={bootTargetStep !== null}
+              onDone={() => {
+                setStep(bootTargetStep ?? 'login');
+              }}
+            />
           )}
 
           {step === 'login' && (

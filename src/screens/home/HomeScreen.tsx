@@ -94,6 +94,7 @@ export default function HomeScreen({
 }: Props) {
   const [graphWidth, setGraphWidth] = useState(0);
   const graphSvgHeight = scale(132);
+  const hasWeeklyGrowthData = !!weeklyGrowth?.labels?.length && !!weeklyGrowth?.data?.length;
   const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
   const getLevelBounds = (currentLevel: number) => {
     const idx = Math.min(Math.max(currentLevel, 1), 5) - 1;
@@ -224,7 +225,7 @@ export default function HomeScreen({
 
               {/* 선 그래프 */}
               <View style={styles.lineGraphContainer}>
-                {weeklyGrowth && weeklyGrowth.labels && weeklyGrowth.data ? (
+                {hasWeeklyGrowthData ? (
                   <View style={styles.lineChartWrapper}>
                     <View
                       style={styles.lineChartContainer}

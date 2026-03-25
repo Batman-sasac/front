@@ -6,8 +6,9 @@ import config from '../../lib/config';
 import { getToken } from '../../lib/storage';
 import type { Screen } from '../../components/Sidebar';
 import { confirmLogout } from '../../lib/auth';
+import { fetchWithTimeout } from '../../lib/network';
 
-const API_BASE_URL = config.apiBaseUrl;
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
 type Subject = {
     id: string;
@@ -69,13 +70,20 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
             if (reset) setLoading(true);
             else setLoadingMore(true);
             const token = await getToken();
+            if (!token) {
+                throw new Error('로그인 토큰이 없습니다.');
+            }
 
             // /ocr/list에서 복습 카드 데이터 조회
-            const response = await fetch(`${API_BASE_URL}/ocr/list?page=${nextPage}&size=${PAGE_SIZE}`, {
+            const response = await fetchWithTimeout(`${API_BASE_URL}/ocr/list?page=${nextPage}&size=${PAGE_SIZE}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                 },
-            });
+            }, 5000, '복습 카드를 불러오는 시간이 너무 오래 걸립니다.');
+
+            if (!response.ok) {
+                throw new Error(`복습 카드 조회 실패 (${response.status})`);
+            }
 
             const data = await response.json();
 

@@ -47,6 +47,7 @@ export type OcrUsageResponse = {
 };
 
 import config from '../lib/config';
+import { fetchWithTimeout } from '../lib/network';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
@@ -224,13 +225,13 @@ export async function getOcrUsage(): Promise<OcrUsageResponse> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/ocr/usage`, {
+    const res = await fetchWithTimeout(`${API_BASE}/ocr/usage`, {
         method: 'GET',
         headers: {
             'Accept': 'application/json',
             'Authorization': `Bearer ${token || ''}`,
         },
-    });
+    }, 4000, 'OCR 사용량 조회가 지연되고 있습니다.');
 
     if (!res.ok) {
         const errorText = await res.text();
@@ -343,13 +344,13 @@ export async function getQuizForReview(quizId: number): Promise<ScaffoldingPaylo
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/ocr/quiz/${quizId}`, {
+    const res = await fetchWithTimeout(`${API_BASE}/ocr/quiz/${quizId}`, {
         method: 'GET',
         headers: {
             'Accept': 'application/json',
             'Authorization': `Bearer ${token || ''}`,
         },
-    });
+    }, 5000, '복습 퀴즈 데이터를 불러오는 시간이 너무 오래 걸립니다.');
 
     if (!res.ok) throw new Error(`퀴즈 조회 HTTP ${res.status}`);
     const json = (await res.json()) as QuizForReviewResponse;
@@ -386,16 +387,23 @@ export async function getWeeklyGrowth(): Promise<WeeklyGrowthResponse> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/cycle/stats/weekly-growth`, {
+    const res = await fetchWithTimeout(`${API_BASE}/cycle/stats/weekly-growth`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token || ''}`,
         },
-    });
+    }, 5000, '주간 그래프 데이터를 불러오는 시간이 너무 오래 걸립니다.');
 
     if (!res.ok) throw new Error(`Weekly Stats HTTP ${res.status}`);
-    return res.json();
+    const json = await res.json();
+    if (json?.error) {
+        throw new Error(String(json.error));
+    }
+    return {
+        labels: Array.isArray(json?.labels) ? json.labels : [],
+        data: Array.isArray(json?.data) ? json.data : [],
+    };
 }
 
 // 복습 완료 시 리워드 지급 및 사용자 답변 저장
@@ -459,14 +467,28 @@ export async function getMonthlyStats(): Promise<MonthlyStatsResponse> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/cycle/learning-stats`, {
+    const res = await fetchWithTimeout(`${API_BASE}/cycle/learning-stats`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token || ''}`,
         },
-    });
+    }, 5000, '월간 통계 데이터를 불러오는 시간이 너무 오래 걸립니다.');
 
     if (!res.ok) throw new Error(`Monthly Stats HTTP ${res.status}`);
-    return res.json();
+    const json = await res.json();
+    if (json?.status && json.status !== 'success') {
+        throw new Error(json?.message || '월간 통계를 불러오지 못했습니다.');
+    }
+    return {
+        status: 'success',
+        compare: {
+            last_month_name: json?.compare?.last_month_name ?? '',
+            last_month_count: Number(json?.compare?.last_month_count ?? 0),
+            this_month_name: json?.compare?.this_month_name ?? '',
+            this_month_count: Number(json?.compare?.this_month_count ?? 0),
+            target_count: Number(json?.compare?.target_count ?? 0),
+            diff: Number(json?.compare?.diff ?? 0),
+        },
+    };
 }

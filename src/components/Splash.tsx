@@ -4,12 +4,18 @@ import { View, StyleSheet, Animated, Image, Dimensions } from 'react-native';
 type Props = {
   onDone?: () => void;
   duration?: number;
+  ready?: boolean;
 };
 
-export default function Splash({ onDone, duration = 1500 }: Props) {
+export default function Splash({ onDone, duration = 1500, ready = true }: Props) {
   const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    if (!ready) {
+      opacity.setValue(1);
+      return;
+    }
+
     const timer = setTimeout(() => {
       Animated.timing(opacity, {
         toValue: 0,
@@ -19,7 +25,7 @@ export default function Splash({ onDone, duration = 1500 }: Props) {
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [duration, onDone, opacity]);
+  }, [duration, onDone, opacity, ready]);
 
   const { width } = Dimensions.get('window');
   // 패드 기준 비율 유지용 – 화면 크기에 따라 살짝 조정
