@@ -61,7 +61,8 @@ export default function SubscribeScreen({ isSubscribed, ocrUsage, onBack, onSubs
     const pagesLimit = Math.max(usage?.pages_limit ?? (resolvedSubscribed ? 1000 : 50), 1);
     const pagesUsed = Math.max(usage?.pages_used ?? 0, 0);
     const remaining = usage?.remaining ?? Math.max(0, pagesLimit - pagesUsed);
-    const limitReached = remaining <= 0 || usage?.status === 'limit_reached';
+    const isUnlimitedUser = usage?.is_unlimited === true;
+    const limitReached = !isUnlimitedUser && (remaining <= 0 || usage?.status === 'limit_reached');
 
     const progress = useMemo(() => {
         const ratio = pagesUsed / pagesLimit;

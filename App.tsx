@@ -32,6 +32,7 @@ import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 import { getHomeStats, getUserStats } from './src/api/auth';
+import { getOcrUsageExhaustedMessage } from './src/lib/ocrUsage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 type SocialProvider = 'kakao' | 'naver';
@@ -94,6 +95,8 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [ocrUsage, setOcrUsage] = useState<OcrUsageResponse | null>(null);
   const [showUsageExhaustedModal, setShowUsageExhaustedModal] = useState(false);
+
+  const usageExhaustedMessage = getOcrUsageExhaustedMessage(ocrUsage);
 
   const resetBatchEarnedXp = () => {
     batchEarnedXpRef.current = 0;
@@ -1089,10 +1092,10 @@ export default function App() {
                 const keywordSet = new Set(keywords);
                 const pages = scaffoldingPayload.pages && scaffoldingPayload.pages.length > 0
                   ? scaffoldingPayload.pages
-                      .map((page) => ({
-                        ...page,
-                        keywords: (page.keywords ?? []).filter((word) => keywordSet.has(word)),
-                      }))
+                    .map((page) => ({
+                      ...page,
+                      keywords: (page.keywords ?? []).filter((word) => keywordSet.has(word)),
+                    }))
                   : [{ original_text: scaffoldingPayload.extractedText, keywords }];
                 const rawText = pages.map((p) => p.original_text ?? '').join('\n\n');
 
@@ -1286,7 +1289,7 @@ export default function App() {
 
                 <View style={stylesSub.modalBody}>
                   <Image source={require('./assets/character/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
-                  <Text style={stylesSub.modalDesc}>무료 AI 호출 사용량을 모두 사용했어요.</Text>
+                  <Text style={stylesSub.modalDesc}>{usageExhaustedMessage}</Text>
                   <Text style={stylesSub.modalDesc}>계속 학습하고 싶으시다면</Text>
                   <Text style={stylesSub.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>
                 </View>

@@ -61,7 +61,13 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [rotation, setRotation] = useState(0);
     const [subjectName, setSubjectName] = useState('');  // 과목명 추가
-    const [ocrUsage, setOcrUsage] = useState<{ remaining: number; pages_limit: number; status: string; message?: string } | null>(null);
+    const [ocrUsage, setOcrUsage] = useState<{
+        remaining: number;
+        pages_limit: number;
+        status: string;
+        message?: string;
+        is_unlimited?: boolean;
+    } | null>(null);
     const [ocrUsageError, setOcrUsageError] = useState<string | null>(null);
     const [showOcrLimitModal, setShowOcrLimitModal] = useState(false);
 
@@ -202,6 +208,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                         pages_limit: usage.pages_limit ?? 0,
                         status: usage.status,
                         message: usage.message,
+                        is_unlimited: usage.is_unlimited,
                     });
                     setOcrUsageError(null);
                 }
@@ -358,10 +365,28 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
     const handleStart = () => {
         if (!selectedSource) return;
-        if (exceedsRemainingOcr) {
-            setShowOcrLimitModal(true);
+        const isUnlimitedUser = ocrUsage?.is_unlimited === true;
+        const remaining = ocrUsage?.remaining ?? 0;
+        const limitReached = !isUnlimitedUser && (ocrUsage?.status === 'limit_reached' || remaining <= 0);
+
+        if (limitReached) {
+            Alert.alert(
+                '텍스트 추출 사용 한도',
+                ocrUsage?.message ?? '이용가능한 무료 횟수를 다 사용하셨습니다',
+                [{ text: '확인', onPress: onBack }],
+            );
             return;
         }
+
+        if (!isUnlimitedUser && ocrUsage && sources.length > remaining) {
+            Alert.alert(
+                '텍스트 추출 횟수 부족',
+                `선택한 사진은 ${sources.length}장인데 남은 텍스트 추출 횟수는 ${remaining}회예요. 사진 수를 줄인 뒤 다시 시도해 주세요.`,
+                [{ text: '확인', onPress: onBack }],
+            );
+            return;
+        }
+
         cropImage();
     };
 
@@ -597,12 +622,10 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         };
     }, [crop, containerW, containerH]);
 
-    const limitReached = ocrUsage?.status === 'limit_reached';
-    const exceedsRemainingOcr =
-        !!ocrUsage &&
-        !ocrUsageError &&
-        !limitReached &&
-        sources.length > Math.max(ocrUsage.remaining ?? 0, 0);
+    const isUnlimitedUser = ocrUsage?.is_unlimited === true;
+    const remainingOcr = ocrUsage?.remaining ?? 0;
+    const limitReached = !isUnlimitedUser && (ocrUsage?.status === 'limit_reached' || remainingOcr <= 0);
+    const exceedsRemainingOcr = !isUnlimitedUser && !!ocrUsage && sources.length > remainingOcr;
     const isCropUiReady =
         isCropReady &&
         imageW > 0 &&
@@ -672,7 +695,9 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                         {ocrUsage && (
                             <View style={styles.usageChip}>
                                 <Text style={styles.usageText}>
-                                    텍스트 추출 남은 횟수 {ocrUsage.remaining}/{ocrUsage.pages_limit}
+                                    {isUnlimitedUser
+                                        ? '텍스트 추출 무제한 이용 가능'
+                                        : `텍스트 추출 남은 횟수 ${remainingOcr}/${ocrUsage.pages_limit}`}
                                 </Text>
                             </View>
                         )}
@@ -683,176 +708,176 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                             <Text style={styles.usageErrorText}>{ocrUsage.message}</Text>
                         )}
                     </View>
-                </View>
 
-                <TextInput
-                    style={styles.subjectInput}
-                    placeholder="과목명 입력 (예: 수학, 영어)"
-                    placeholderTextColor="#999"
-                    value={subjectName}
-                    onChangeText={setSubjectName}
-                />
+                    <TextInput
+                        style={styles.subjectInput}
+                        placeholder="과목명 입력 (예: 수학, 영어)"
+                        placeholderTextColor="#999"
+                        value={subjectName}
+                        onChangeText={setSubjectName}
+                    />
 
-                <View style={styles.previewWrap}>
-                    {selectedSource ? (
-                        <View
-                            style={styles.previewInner}
-                            onLayout={(e) => {
-                                const { width, height } = e.nativeEvent.layout;
-                                setContainerW(width);
-                                setContainerH(height);
-                            }}
-                        >
-                            {isSelectedImage ? (
+                    <View style={styles.previewWrap}>
+                        {selectedSource ? (
+                            <View
+                                style={styles.previewInner}
+                                onLayout={(e) => {
+                                    const { width, height } = e.nativeEvent.layout;
+                                    setContainerW(width);
+                                    setContainerH(height);
+                                }}
+                            >
+                                {isSelectedImage ? (
+                                    <Image
+                                        source={{ uri: selectedSource.uri }}
+                                        style={[styles.previewImage, { transform: [{ rotate: `${rotation}deg` }] }]}
+                                        resizeMode="contain"
+                                    />
+                                ) : (
+                                    renderSourcePreview(selectedSource)
+                                )}
+
+                                {isSelectedImage && isCropUiReady && (
+                                    <View style={styles.cropArea}>
+                                        <View style={[styles.maskTop, overlayStyles.top, { pointerEvents: 'none' }]} />
+                                        <View style={[styles.maskBottom, overlayStyles.bottom, { pointerEvents: 'none' }]} />
+                                        <View style={[styles.maskLeft, overlayStyles.left, { pointerEvents: 'none' }]} />
+                                        <View style={[styles.maskRight, overlayStyles.right, { pointerEvents: 'none' }]} />
+
+                                        <View style={[styles.cropFrame, overlayStyles.frame, { pointerEvents: 'none' }]}>
+                                            <View style={[styles.cropCornerTL, { pointerEvents: 'none' }]} />
+                                            <View style={[styles.cropCornerTR, { pointerEvents: 'none' }]} />
+                                            <View style={[styles.cropCornerBL, { pointerEvents: 'none' }]} />
+                                            <View style={[styles.cropCornerBR, { pointerEvents: 'none' }]} />
+                                        </View>
+
+                                        {/* 크롭 프레임 이동 영역 (투명한 내부 영역) */}
+                                        <View style={[styles.cropMoveArea, overlayStyles.frame]} {...moveResponder.panHandlers} />
+
+                                        {/* 핸들들을 cropFrame 밖에 독립적으로 배치 */}
+                                        <View
+                                            style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top - 12 }]}
+                                            {...tlResponder.panHandlers}
+                                        >
+                                            <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                        </View>
+                                        <View
+                                            style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top - 12 }]}
+                                            {...trResponder.panHandlers}
+                                        >
+                                            <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                        </View>
+                                        <View
+                                            style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
+                                            {...blResponder.panHandlers}
+                                        >
+                                            <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                        </View>
+                                        <View
+                                            style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
+                                            {...brResponder.panHandlers}
+                                        >
+                                            <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
+                                        </View>
+                                    </View>
+                                )}
+                            </View>
+                        ) : (
+                            <View style={styles.empty}>
+                                <Text style={styles.emptyText}>선택된 자료가 없습니다.</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={styles.rotateRow}>
+                        {isSelectedImage ? (
+                            <Pressable style={styles.rotateBtnLeft} onPress={handleRotateLeft} hitSlop={10}>
                                 <Image
-                                    source={{ uri: selectedSource.uri }}
-                                    style={[styles.previewImage, { transform: [{ rotate: `${rotation}deg` }] }]}
+                                    source={require('../../../assets/turn-icon.png')}
+                                    style={styles.rotateIcon}
                                     resizeMode="contain"
                                 />
-                            ) : (
-                                renderSourcePreview(selectedSource)
-                            )}
+                            </Pressable>
+                        ) : (
+                            <View style={styles.rotateButtonSpacer} />
+                        )}
 
-                            {isSelectedImage && isCropUiReady && (
-                                <View style={styles.cropArea}>
-                                    <View style={[styles.maskTop, overlayStyles.top, { pointerEvents: 'none' }]} />
-                                    <View style={[styles.maskBottom, overlayStyles.bottom, { pointerEvents: 'none' }]} />
-                                    <View style={[styles.maskLeft, overlayStyles.left, { pointerEvents: 'none' }]} />
-                                    <View style={[styles.maskRight, overlayStyles.right, { pointerEvents: 'none' }]} />
-
-                                    <View style={[styles.cropFrame, overlayStyles.frame, { pointerEvents: 'none' }]}>
-                                        <View style={[styles.cropCornerTL, { pointerEvents: 'none' }]} />
-                                        <View style={[styles.cropCornerTR, { pointerEvents: 'none' }]} />
-                                        <View style={[styles.cropCornerBL, { pointerEvents: 'none' }]} />
-                                        <View style={[styles.cropCornerBR, { pointerEvents: 'none' }]} />
-                                    </View>
-
-                                    {/* 크롭 프레임 이동 영역 (투명한 내부 영역) */}
-                                    <View style={[styles.cropMoveArea, overlayStyles.frame]} {...moveResponder.panHandlers} />
-
-                                    {/* 핸들들을 cropFrame 밖에 독립적으로 배치 */}
-                                    <View
-                                        style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top - 12 }]}
-                                        {...tlResponder.panHandlers}
-                                    >
-                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                    </View>
-                                    <View
-                                        style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top - 12 }]}
-                                        {...trResponder.panHandlers}
-                                    >
-                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                    </View>
-                                    <View
-                                        style={[styles.handle, { left: overlayStyles.frame.left - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
-                                        {...blResponder.panHandlers}
-                                    >
-                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                    </View>
-                                    <View
-                                        style={[styles.handle, { left: overlayStyles.frame.left + overlayStyles.frame.width - 12, top: overlayStyles.frame.top + overlayStyles.frame.height - 12 }]}
-                                        {...brResponder.panHandlers}
-                                    >
-                                        <View style={[styles.handleDot, { pointerEvents: 'none' }]} />
-                                    </View>
-                                </View>
-                            )}
+                        <View style={styles.recentWrap}>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.recentRow}
+                            >
+                                {allSources.map((src, idx) => {
+                                    const active = idx === selectedIndex;
+                                    return (
+                                        <Pressable
+                                            key={String(idx)}
+                                            onPress={() => {
+                                                persistCurrentCropForIndex(selectedIndex);
+                                                setSelectedIndex(idx);
+                                            }}
+                                            style={[styles.thumbBtn, active && styles.thumbBtnActive]}
+                                        >
+                                            {renderSourcePreview(src, true)}
+                                        </Pressable>
+                                    );
+                                })}
+                            </ScrollView>
                         </View>
-                    ) : (
-                        <View style={styles.empty}>
-                            <Text style={styles.emptyText}>선택된 자료가 없습니다.</Text>
-                        </View>
-                    )}
-                </View>
 
-                <View style={styles.rotateRow}>
-                    {isSelectedImage ? (
-                        <Pressable style={styles.rotateBtnLeft} onPress={handleRotateLeft} hitSlop={10}>
-                            <Image
-                                source={require('../../../assets/turn-icon.png')}
-                                style={styles.rotateIcon}
-                                resizeMode="contain"
-                            />
-                        </Pressable>
-                    ) : (
-                        <View style={styles.rotateButtonSpacer} />
-                    )}
-
-                    <View style={styles.recentWrap}>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.recentRow}
-                        >
-                            {allSources.map((src, idx) => {
-                                const active = idx === selectedIndex;
-                                return (
-                                    <Pressable
-                                        key={String(idx)}
-                                        onPress={() => {
-                                            persistCurrentCropForIndex(selectedIndex);
-                                            setSelectedIndex(idx);
-                                        }}
-                                        style={[styles.thumbBtn, active && styles.thumbBtnActive]}
-                                    >
-                                        {renderSourcePreview(src, true)}
-                                    </Pressable>
-                                );
-                            })}
-                        </ScrollView>
+                        {isSelectedImage ? (
+                            <Pressable style={styles.rotateBtnRight} onPress={handleRotateRight} hitSlop={10}>
+                                <Image
+                                    source={require('../../../assets/turn-icon.png')}
+                                    style={[styles.rotateIcon, styles.rotateRight]}
+                                    resizeMode="contain"
+                                />
+                            </Pressable>
+                        ) : (
+                            <View style={styles.rotateButtonSpacer} />
+                        )}
                     </View>
-
-                    {isSelectedImage ? (
-                        <Pressable style={styles.rotateBtnRight} onPress={handleRotateRight} hitSlop={10}>
-                            <Image
-                                source={require('../../../assets/turn-icon.png')}
-                                style={[styles.rotateIcon, styles.rotateRight]}
-                                resizeMode="contain"
-                            />
-                        </Pressable>
-                    ) : (
-                        <View style={styles.rotateButtonSpacer} />
-                    )}
                 </View>
+
+                <Pressable
+                    style={[styles.fab, (!sources || sources.length === 0 || isCropping || limitReached || exceedsRemainingOcr || !isReadyToStart) && { opacity: 0.5 }]}
+                    onPress={handleStart}
+                    disabled={!sources || sources.length === 0 || isCropping || limitReached || exceedsRemainingOcr || !isReadyToStart}
+                >
+                    <Image
+                        source={require('../../../assets/study/start-study-button.png')}
+                        style={styles.fabImage}
+                        resizeMode="contain"
+                    />
+                </Pressable>
+
+                <Modal
+                    visible={showOcrLimitModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowOcrLimitModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalBox}>
+                            <Text style={styles.modalTitle}>텍스트 추출 횟수 부족</Text>
+                            <Text style={styles.modalMessage}>선택한 자료가 {sources.length}개예요.</Text>
+                            <Text style={styles.modalMessage}>
+                                현재 남은 텍스트 추출 {remainingOcr}회 이하로 줄여주세요.
+                            </Text>
+                            <Pressable
+                                style={styles.modalPrimaryButton}
+                                onPress={() => {
+                                    setShowOcrLimitModal(false);
+                                    onBack();
+                                }}
+                            >
+                                <Text style={styles.modalPrimaryText}>확인</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </Modal>
             </View>
-
-            <Pressable
-                style={[styles.fab, (!sources || sources.length === 0 || isCropping || limitReached || exceedsRemainingOcr || !isReadyToStart) && { opacity: 0.5 }]}
-                onPress={handleStart}
-                disabled={!sources || sources.length === 0 || isCropping || limitReached || exceedsRemainingOcr || !isReadyToStart}
-            >
-                <Image
-                    source={require('../../../assets/study/start-study-button.png')}
-                    style={styles.fabImage}
-                    resizeMode="contain"
-                />
-            </Pressable>
-
-            <Modal
-                visible={showOcrLimitModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowOcrLimitModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalBox}>
-                        <Text style={styles.modalTitle}>텍스트 추출 횟수 부족</Text>
-                        <Text style={styles.modalMessage}>선택한 자료가 {sources.length}개예요.</Text>
-                        <Text style={styles.modalMessage}>
-                            현재 남은 텍스트 추출 {ocrUsage?.remaining ?? 0}회 이하로 줄여주세요.
-                        </Text>
-                        <Pressable
-                            style={styles.modalPrimaryButton}
-                            onPress={() => {
-                                setShowOcrLimitModal(false);
-                                onBack();
-                            }}
-                        >
-                            <Text style={styles.modalPrimaryText}>확인</Text>
-                        </Pressable>
-                    </View>
-                </View>
-            </Modal>
         </View>
     );
 }
@@ -916,10 +941,9 @@ const styles = StyleSheet.create({
     },
     usageSlot: {
         width: '100%',
-        minHeight: scale(34),
+        minHeight: scale(40),
         alignItems: 'center',
         justifyContent: 'flex-start',
-        marginBottom: scale(8),
     },
     usageChip: {
         alignSelf: 'center',
