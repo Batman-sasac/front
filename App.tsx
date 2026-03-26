@@ -34,6 +34,7 @@ import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/st
 import { getHomeStats, getUserStats } from './src/api/auth';
 import { getOcrUsageExhaustedMessage } from './src/lib/ocrUsage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 type SocialProvider = 'kakao' | 'naver';
 type Step =
@@ -625,9 +626,59 @@ export default function App() {
       throw new Error(`${index + 1}번째 이미지 URI를 찾을 수 없습니다.`);
     }
 
-    return runOcr(uri, cropMap[index], {
-      fileName: target?.name ?? undefined,
-      mimeType: target?.mimeType ?? undefined,
+    const mimeType = target?.mimeType ?? '';
+    const isImage = typeof mimeType === 'string' ? mimeType.startsWith('image/') : false;
+    const cropInfo = cropMap[index];
+
+    // 서버에서 crop하는 대신, 업로드 전에 "크롭된 파일"을 만들어 전송한다.
+    // - 네트워크 전송량 감소
+    // - OCR 처리 시간/실패율(타임아웃/연결 끊김) 감소
+    // - crop 값 누락/좌표 문제를 줄이기 쉬움
+    let uploadUri = uri;
+    let uploadMimeType = target?.mimeType ?? undefined;
+    let uploadFileName = target?.name ?? undefined;
+    let shouldSendCropInfo = true;
+
+    if (isImage) {
+      try {
+        const actions: any[] = [];
+
+        if (cropInfo && cropInfo.pw > 0 && cropInfo.ph > 0) {
+          actions.push({
+            crop: {
+              originX: Math.max(0, Math.round(cropInfo.px)),
+              originY: Math.max(0, Math.round(cropInfo.py)),
+              width: Math.max(1, Math.round(cropInfo.pw)),
+              height: Math.max(1, Math.round(cropInfo.ph)),
+            },
+          });
+        }
+
+        // 너무 큰 이미지는 업로드 전에 축소 (가로 기준)
+        // OCR은 보통 1500~2200px 사이에서 품질/속도 균형이 좋다.
+        const MAX_WIDTH = 2000;
+        actions.push({ resize: { width: MAX_WIDTH } });
+
+        const result = await manipulateAsync(uploadUri, actions, {
+          compress: 0.82,
+          format: SaveFormat.JPEG,
+        });
+
+        if (result?.uri) {
+          uploadUri = result.uri;
+          uploadMimeType = 'image/jpeg';
+          uploadFileName = `ocr_${Date.now()}.jpg`;
+          shouldSendCropInfo = false; // 이미 크롭된 파일 자체를 보내므로 서버 crop 불필요
+        }
+      } catch (e) {
+        // 전처리가 실패해도 원본으로 계속 진행 (기존 동작 유지)
+        console.warn('OCR 업로드 전 이미지 전처리 실패, 원본으로 진행:', e);
+      }
+    }
+
+    return runOcr(uploadUri, shouldSendCropInfo ? cropInfo : undefined, {
+      fileName: uploadFileName,
+      mimeType: uploadMimeType,
     });
   };
 

@@ -114,7 +114,8 @@ export async function runOcr(
         } as any);
     }
 
-    // crop 정보가 있으면 form에 추가
+    // crop 정보가 있으면 form에 추가 (서버에서 crop)
+    // 참고: 상위에서 "크롭된 파일 자체"를 만들어 넘기는 경우 cropInfo는 undefined로 들어온다.
     if (cropInfo && mimeType.startsWith('image/')) {
         form.append('crop_x', String(cropInfo.px));
         form.append('crop_y', String(cropInfo.py));
@@ -127,14 +128,30 @@ export async function runOcr(
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/ocr`, {
+    let res: Response;
+    try {
+        res = await fetch(`${API_BASE}/ocr`, {
         method: 'POST',
         body: form,
         headers: {
             'Accept': 'application/json',
             'Authorization': `Bearer ${token || ''}`,
         },
-    });
+        });
+    } catch (e: any) {
+        // React Native/Expo에서 네트워크 레벨 실패는 "Network request failed"로 뭉뚱그려진다.
+        // URL/파일정보만이라도 남겨서 원인 파악을 쉽게 한다.
+        console.error('OCR 네트워크 실패:', {
+            message: e?.message ?? String(e),
+            apiBase: API_BASE,
+            url: `${API_BASE}/ocr`,
+            fileUri,
+            uploadFileName,
+            mimeType,
+            cropInfo,
+        });
+        throw e;
+    }
 
     console.log('OCR 응답 상태:', res.status);
 
