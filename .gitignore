@@ -7,6 +7,7 @@ node_modules/
 .expo/
 dist/
 web-build/
+storybook-static/
 expo-env.d.ts
 
 # Native
@@ -23,6 +24,7 @@ expo-env.d.ts
 
 # debug
 npm-debug.*
+debug-storybook.log
 yarn-debug.*
 yarn-error.*
 

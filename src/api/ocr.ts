@@ -50,6 +50,28 @@ import config from '../lib/config';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
+export type OcrProgressMessage = {
+    type: 'ocr_progress';
+    status: 'page_done' | 'page_error';
+    page: number;
+    total_pages: number;
+    filename?: string;
+};
+
+type RunOcrOptions = {
+    fileName?: string;
+    mimeType?: string;
+    jobId?: string;
+    onProgress?: (message: OcrProgressMessage) => void;
+};
+
+function getOcrWebSocketUrl(jobId: string) {
+    const normalizedBase = (API_BASE ?? '').trim().replace(/\/+$/, '');
+    return normalizedBase
+        .replace(/^https:\/\//i, 'wss://')
+        .replace(/^http:\/\//i, 'ws://') + `/ws/ocr/${jobId}`;
+}
+
 /** POST /ocr 의 pages[].tables 정규화 */
 function normalizeOcrTables(raw: unknown): OcrTableBlock[] | undefined {
     if (!Array.isArray(raw) || raw.length === 0) return undefined;
@@ -71,20 +93,20 @@ function normalizeOcrTables(raw: unknown): OcrTableBlock[] | undefined {
 export async function runOcr(
     fileUri: string,
     cropInfo?: { px: number; py: number; pw: number; ph: number },
-    fileMeta?: { fileName?: string; mimeType?: string },
+    options?: RunOcrOptions,
 ): Promise<ScaffoldingPayload> {
     console.log('OCR 요청 시작 - fileUri:', fileUri, 'cropInfo:', cropInfo);
 
     const form = new FormData();
 
-    const nameFromMeta = fileMeta?.fileName?.trim();
+    const nameFromMeta = options?.fileName?.trim();
     const nameFromUri = fileUri.split('/').pop()?.split('?')[0] ?? '';
     const normalizedFileName = nameFromMeta || nameFromUri || 'upload';
     const fileExtensionMatch = normalizedFileName.match(/\.([a-z0-9]+)$/i);
     const fileExtension = fileExtensionMatch?.[1]?.toLowerCase()
         || fileUri.split('.').pop()?.toLowerCase()
         || 'jpg';
-    const mimeType = fileMeta?.mimeType
+    const mimeType = options?.mimeType
         || (fileExtension === 'png'
             ? 'image/png'
             : fileExtension === 'pdf'
@@ -124,117 +146,181 @@ export async function runOcr(
         console.log('Crop 정보 추가:', cropInfo);
     }
 
+    if (options?.jobId) {
+        form.append('job_id', options.jobId);
+    }
+
     // 토큰 가져오기
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
+    const shouldTrackProgress = !!options?.jobId && typeof options?.onProgress === 'function';
+    let ws: WebSocket | null = null;
 
-    let res: Response;
-    try {
-        res = await fetch(`${API_BASE}/ocr`, {
-        method: 'POST',
-        body: form,
-        headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-        });
-    } catch (e: any) {
-        // React Native/Expo에서 네트워크 레벨 실패는 "Network request failed"로 뭉뚱그려진다.
-        // URL/파일정보만이라도 남겨서 원인 파악을 쉽게 한다.
-        console.error('OCR 네트워크 실패:', {
-            message: e?.message ?? String(e),
-            apiBase: API_BASE,
-            url: `${API_BASE}/ocr`,
-            fileUri,
-            uploadFileName,
-            mimeType,
-            cropInfo,
-        });
-        throw e;
-    }
+    if (shouldTrackProgress && options?.jobId) {
+        try {
+            ws = new WebSocket(getOcrWebSocketUrl(options.jobId));
+            ws.onmessage = (event) => {
+                try {
+                    const parsed = JSON.parse(String(event.data ?? '')) as OcrProgressMessage;
+                    if (parsed?.type === 'ocr_progress') {
+                        options.onProgress?.(parsed);
+                    }
+                } catch (error) {
+                    console.warn('OCR progress 메시지 파싱 실패:', error);
+                }
+            };
+            ws.onerror = (event) => {
+                console.warn('OCR progress WebSocket 오류:', event);
+            };
 
-    console.log('OCR 응답 상태:', res.status);
+            await new Promise<void>((resolve) => {
+                let settled = false;
+                const finish = () => {
+                    if (settled) return;
+                    settled = true;
+                    resolve();
+                };
 
-    if (!res.ok) {
-        const errorText = await res.text();
-        console.error('OCR 오류 응답:', errorText);
-        throw new Error(`OCR HTTP ${res.status}: ${errorText}`);
-    }
-    const data = (await res.json()) as any;
+                const timeout = setTimeout(finish, 1200);
 
-    if (data.status === 'limit_reached') {
-        throw new Error(data.message || '이용 가능한 무료 횟수를 모두 사용했습니다.');
-    }
-
-    const inner = data.data ?? data;
-
-    let pages: PageItem[] = [];
-    let originalText: string;
-    let blankItems: BlankItemSave[] = [];
-    const normalizeKeyword = (value: unknown) => String(value ?? '').trim();
-
-    // 백엔드가 pages 배열 반환 (PDF/다중 이미지)
-    if (Array.isArray(inner.pages) && inner.pages.length > 0) {
-        pages = inner.pages.map(
-            (p: { original_text?: string; keywords?: string[]; tables?: unknown }) => ({
-                original_text: p?.original_text ?? '',
-                keywords: Array.isArray(p?.keywords)
-                    ? p.keywords.map(normalizeKeyword).filter(Boolean)
-                    : [],
-                tables: normalizeOcrTables(p?.tables),
-            }),
-        );
-
-        originalText = pages
-            .map((p) => p.original_text ?? '')
-            .join('\n\n');
-
-        const kwSet = new Set<string>();
-        for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
-            const page = pages[pageIndex];
-            for (const word of page.keywords) {
-                if (kwSet.has(word)) continue;
-                kwSet.add(word);
-                blankItems.push({
-                    blank_index: blankItems.length,
-                    word,
-                    page_index: pageIndex,
-                });
-            }
+                ws!.onopen = () => {
+                    clearTimeout(timeout);
+                    finish();
+                };
+                ws!.onclose = () => {
+                    clearTimeout(timeout);
+                    finish();
+                };
+                ws!.onerror = () => {
+                    clearTimeout(timeout);
+                    finish();
+                };
+            });
+        } catch (error) {
+            console.warn('OCR progress WebSocket 연결 실패:', error);
+            ws = null;
         }
-    } else {
-        // 하위 호환: 단일 original_text, keywords
-        originalText = inner.original_text ?? '';
-        const rawKeywords = Array.isArray(inner.keywords)
-            ? inner.keywords.map(normalizeKeyword).filter(Boolean)
-            : [];
-        const kwSet = new Set<string>();
-        const keywords = rawKeywords.filter((word: string) => {
-            if (kwSet.has(word)) return false;
-            kwSet.add(word);
-            return true;
-        });
-        pages = [{ original_text: originalText, keywords }];
-        blankItems = keywords.map((word: string, idx: number) => ({
-            blank_index: idx,
-            word,
-            page_index: 0,
-        }));
     }
 
-    const blanks = blankItems.map((blank) => ({
-        id: blank.blank_index,
-        word: blank.word,
-        meaningLong: `${blank.word} 뜻 (AI 생성 예정)`,
-    }));
+    try {
+        let res: Response;
+        try {
+            res = await fetch(`${API_BASE}/ocr`, {
+            method: 'POST',
+            body: form,
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${token || ''}`,
+            },
+            });
+        } catch (e: any) {
+            // React Native/Expo에서 네트워크 레벨 실패는 "Network request failed"로 뭉뚱그려진다.
+            // URL/파일정보만이라도 남겨서 원인 파악을 쉽게 한다.
+            console.error('OCR 네트워크 실패:', {
+                message: e?.message ?? String(e),
+                apiBase: API_BASE,
+                url: `${API_BASE}/ocr`,
+                fileUri,
+                uploadFileName,
+                mimeType,
+                cropInfo,
+            });
+            throw e;
+        }
 
-    return {
-        title: '학습 자료',
-        extractedText: originalText,
-        blanks: blanks,
-        pages,
-        blankItems,
-    };
+        console.log('OCR 응답 상태:', res.status);
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error('OCR 오류 응답:', errorText);
+            throw new Error(`OCR HTTP ${res.status}: ${errorText}`);
+        }
+        const data = (await res.json()) as any;
+
+        if (data.status === 'limit_reached') {
+            throw new Error(data.message || '이용 가능한 무료 횟수를 모두 사용했습니다.');
+        }
+
+        const inner = data.data ?? data;
+
+        let pages: PageItem[] = [];
+        let originalText: string;
+        let blankItems: BlankItemSave[] = [];
+        const normalizeKeyword = (value: unknown) => String(value ?? '').trim();
+
+        // 백엔드가 pages 배열 반환 (PDF/다중 이미지)
+        if (Array.isArray(inner.pages) && inner.pages.length > 0) {
+            pages = inner.pages.map(
+                (p: { original_text?: string; keywords?: string[]; tables?: unknown }) => ({
+                    original_text: p?.original_text ?? '',
+                    keywords: Array.isArray(p?.keywords)
+                        ? p.keywords.map(normalizeKeyword).filter(Boolean)
+                        : [],
+                    tables: normalizeOcrTables(p?.tables),
+                }),
+            );
+
+            originalText = pages
+                .map((p) => p.original_text ?? '')
+                .join('\n\n');
+
+            const kwSet = new Set<string>();
+            for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+                const page = pages[pageIndex];
+                for (const word of page.keywords) {
+                    if (kwSet.has(word)) continue;
+                    kwSet.add(word);
+                    blankItems.push({
+                        blank_index: blankItems.length,
+                        word,
+                        page_index: pageIndex,
+                    });
+                }
+            }
+        } else {
+            // 하위 호환: 단일 original_text, keywords
+            originalText = inner.original_text ?? '';
+            const rawKeywords = Array.isArray(inner.keywords)
+                ? inner.keywords.map(normalizeKeyword).filter(Boolean)
+                : [];
+            const kwSet = new Set<string>();
+            const keywords = rawKeywords.filter((word: string) => {
+                if (kwSet.has(word)) return false;
+                kwSet.add(word);
+                return true;
+            });
+            pages = [{ original_text: originalText, keywords }];
+            blankItems = keywords.map((word: string, idx: number) => ({
+                blank_index: idx,
+                word,
+                page_index: 0,
+            }));
+        }
+
+        const blanks = blankItems.map((blank) => ({
+            id: blank.blank_index,
+            word: blank.word,
+            meaningLong: `${blank.word} 뜻 (AI 생성 예정)`,
+        }));
+
+        return {
+            title: '학습 자료',
+            extractedText: originalText,
+            blanks: blanks,
+            pages,
+            blankItems,
+        };
+    } finally {
+        if (ws) {
+            setTimeout(() => {
+                try {
+                    ws?.close();
+                } catch (error) {
+                    console.warn('OCR progress WebSocket 종료 실패:', error);
+                }
+            }, 300);
+        }
+    }
 }
 
 export async function getOcrUsage(): Promise<OcrUsageResponse> {

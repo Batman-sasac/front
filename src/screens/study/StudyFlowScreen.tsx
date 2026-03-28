@@ -7,39 +7,59 @@ type Props = {
   totalPages: number;
   currentPage: number;
   onStart?: () => void;
+  progress?: number;
 };
 
-export default function StudyFlowScreen({ mode, totalPages, currentPage, onStart }: Props) {
-  const [progress, setProgress] = useState(18);
+export default function StudyFlowScreen({
+  mode,
+  totalPages,
+  currentPage,
+  onStart,
+  progress = 0,
+}: Props) {
+  const [displayProgress, setDisplayProgress] = useState(18);
   const [trackWidth, setTrackWidth] = useState(0);
   const animatedProgress = useRef(new Animated.Value(18)).current;
+  const effectiveTrackWidth = trackWidth > 0 ? trackWidth : scale(320);
+
+  useEffect(() => {
+    if (mode !== 'loading') return;
+
+    setDisplayProgress((prev) => {
+      if (progress >= 100) return 100;
+      if (progress <= 0) return Math.max(prev, 18);
+      return Math.max(prev, Math.min(progress, 92));
+    });
+  }, [mode, progress]);
 
   useEffect(() => {
     if (mode !== 'loading') return;
 
     const timer = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 92) return prev;
+      setDisplayProgress((prev) => {
+        if (progress >= 100) return 100;
+        const upperBound = progress > 0 ? Math.max(Math.min(progress, 92), prev) : 92;
+        if (prev >= upperBound) return prev;
         const next = prev + Math.floor(Math.random() * 8) + 3;
-        return Math.min(next, 92);
+        return Math.min(next, upperBound);
       });
     }, 180);
 
     return () => clearInterval(timer);
-  }, [mode]);
+  }, [mode, progress]);
 
   useEffect(() => {
     Animated.timing(animatedProgress, {
-      toValue: progress,
+      toValue: displayProgress,
       duration: 280,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [animatedProgress, progress]);
+  }, [animatedProgress, displayProgress]);
 
   const animatedFillWidth = animatedProgress.interpolate({
     inputRange: [0, 100],
-    outputRange: [0, trackWidth],
+    outputRange: [0, effectiveTrackWidth],
     extrapolate: 'clamp',
   });
 
@@ -69,7 +89,7 @@ export default function StudyFlowScreen({ mode, totalPages, currentPage, onStart
 
         {mode === 'loading' ? (
           <View style={styles.progressCard}>
-            <Text style={styles.progressText}>{progress}%</Text>
+            <Text style={styles.progressText}>{displayProgress}%</Text>
             <View
               style={styles.progressTrack}
               onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
@@ -189,6 +209,7 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     flex: 1,
+    minWidth: scale(220),
     height: scale(18),
     borderRadius: scale(999),
     backgroundColor: '#D1D5DB',

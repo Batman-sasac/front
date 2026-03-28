@@ -7,6 +7,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "storybook": "storybook dev --port 6006",
+    "build-storybook": "storybook build",
     "test:study": "jest --config jest.config.js --runInBand --watchman=false"
   },
   "dependencies": {
@@ -42,7 +44,10 @@
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",
     "@react-native-community/cli": "^20.0.2",
+    "@storybook/react-native-web-vite": "^10.3.3",
     "@types/react": "~19.1.10",
-    "typescript": "^5.9.3"
+    "storybook": "^10.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   }
 }
