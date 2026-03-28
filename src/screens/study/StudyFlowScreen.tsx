@@ -21,32 +21,36 @@ export default function StudyFlowScreen({
   const [trackWidth, setTrackWidth] = useState(0);
   const animatedProgress = useRef(new Animated.Value(18)).current;
   const effectiveTrackWidth = trackWidth > 0 ? trackWidth : scale(320);
+  const targetProgress = progress >= 100 ? 100 : progress > 0 ? progress : 92;
 
   useEffect(() => {
     if (mode !== 'loading') return;
 
-    setDisplayProgress((prev) => {
-      if (progress >= 100) return 100;
-      if (progress <= 0) return Math.max(prev, 18);
-      return Math.max(prev, Math.min(progress, 92));
-    });
-  }, [mode, progress]);
+    setDisplayProgress((prev) => Math.max(prev, 18));
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== 'loading') return;
 
     const timer = setInterval(() => {
       setDisplayProgress((prev) => {
-        if (progress >= 100) return 100;
-        const upperBound = progress > 0 ? Math.max(Math.min(progress, 92), prev) : 92;
-        if (prev >= upperBound) return prev;
-        const next = prev + Math.floor(Math.random() * 8) + 3;
-        return Math.min(next, upperBound);
+        if (prev >= targetProgress) return prev;
+
+        const gap = targetProgress - prev;
+        const step = progress > 0
+          ? 1
+          : gap >= 20
+            ? 3
+            : gap >= 10
+              ? 2
+              : 1;
+
+        return Math.min(prev + step, targetProgress);
       });
-    }, 180);
+    }, progress > 0 ? 26 : 90);
 
     return () => clearInterval(timer);
-  }, [mode, progress]);
+  }, [mode, progress, targetProgress]);
 
   useEffect(() => {
     Animated.timing(animatedProgress, {

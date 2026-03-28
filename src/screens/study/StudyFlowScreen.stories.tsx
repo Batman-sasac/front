@@ -1,8 +1,35 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import StudyFlowScreen from './StudyFlowScreen';
+
+function SimulatedBackendLoadingScreen() {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(timer);
+          return 100;
+        }
+        return prev + 1;
+      });
+    }, 70);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <StudyFlowScreen
+      mode="loading"
+      totalPages={3}
+      currentPage={1}
+      progress={progress}
+    />
+  );
+}
 
 const meta = {
   title: 'Study/OCR Loading Screen',
@@ -29,7 +56,9 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const AutoAnimating: Story = {};
+export const AutoAnimating: Story = {
+  render: () => <SimulatedBackendLoadingScreen />,
+};
 
 export const MidProgress: Story = {
   args: {

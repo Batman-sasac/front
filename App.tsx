@@ -780,6 +780,12 @@ export default function App() {
       setScaffoldingPayloads(nextPayloads);
       setSelectedSourceIndex(0);
       setScaffoldingPayload(nextPayloads[0] ?? null);
+      setOcrProgressState((prev) => ({
+        ...prev,
+        completedPages: Math.max(prev.totalPages, prev.completedPages, 1),
+        totalPages: Math.max(prev.totalPages, prev.completedPages, 1),
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 420));
       setStep('studyIntro');
     } catch (e: any) {
       const message = e?.message ?? '텍스트 추출에 실패했습니다.';
