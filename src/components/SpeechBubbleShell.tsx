@@ -95,22 +95,32 @@ export default function SpeechBubbleShell({
         </View>
       </View>
 
-      <Svg
+      <View
         style={[
-          styles.tailSvg,
+          styles.tailWrap,
           {
             width: metrics.tailWidth,
             height: metrics.tailHeight,
-            marginTop: -metrics.tailOverlap,
+            marginTop: -Math.max(metrics.tailHeight * 0.04, 1),
           },
         ]}
-        viewBox={`0 0 ${metrics.tailWidth} ${metrics.tailHeight}`}
       >
-        <Path
-          d={buildTailPath(metrics.tailWidth, metrics.tailHeight)}
-          fill={backgroundColor}
-        />
-      </Svg>
+        <Svg
+          style={[
+            styles.tailSvg,
+            {
+              width: metrics.tailWidth,
+              height: metrics.tailHeight,
+            },
+          ]}
+          viewBox={`0 0 ${metrics.tailWidth} ${metrics.tailHeight}`}
+        >
+          <Path
+            d={buildTailPath(metrics.tailWidth, metrics.tailHeight)}
+            fill={backgroundColor}
+          />
+        </Svg>
+      </View>
     </View>
   );
 }
@@ -150,6 +160,11 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tailWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
   },
   tailSvg: {
     zIndex: 3,
