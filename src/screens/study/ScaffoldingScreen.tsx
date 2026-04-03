@@ -881,11 +881,11 @@ export default function ScaffoldingScreen({
 
         const blockHeightPx = pageCanvasHeight * Math.max(block.height, 0.018);
         const blockWidthPx = pageCanvasWidth * Math.max(block.width, 0.04);
-        const bodyFontSize = Math.max(8, Math.min(12, blockHeightPx * 0.48));
-        const bodyLineHeight = Math.max(bodyFontSize + 2, Math.min(16, blockHeightPx * 0.72));
-        const keywordFontSize = Math.max(8, Math.min(bodyFontSize, blockHeightPx * 0.44));
-        const keywordLineHeight = Math.max(keywordFontSize + 1, Math.min(bodyLineHeight, blockHeightPx * 0.68));
-        const horizontalPadding = Math.max(0, Math.min(scale(2), blockWidthPx * 0.01));
+        const bodyFontSize = Math.max(15, Math.min(15, blockHeightPx * 0.58));
+        const bodyLineHeight = Math.max(bodyFontSize + 2, Math.min(18, blockHeightPx * 0.82));
+        const keywordFontSize = Math.max(9, Math.min(bodyFontSize, blockHeightPx * 0.54));
+        const keywordLineHeight = Math.max(keywordFontSize + 1, Math.min(bodyLineHeight, blockHeightPx * 0.76));
+        const horizontalPadding = Math.max(0, Math.min(scale(3), blockWidthPx * 0.012));
         const marginHorizontal = Math.max(0, Math.min(scale(1), blockWidthPx * 0.004));
 
         return {
@@ -979,7 +979,12 @@ export default function ScaffoldingScreen({
                     <Pressable
                         key={key}
                         onPress={() => onToggleBlankSelection(instanceId)}
-                        style={[wordPillStyle, blankSpacingStyle, { backgroundColor: HIGHLIGHT_BG }]}
+                        style={[
+                            wordPillStyle,
+                            blankSpacingStyle,
+                            styles.blankBoxBase,
+                            { backgroundColor: HIGHLIGHT_BG },
+                        ]}
                         onLayout={recordTokenLayout(globalIndex)}
                     >
                         <View style={{ position: 'relative' }}>
@@ -993,7 +998,12 @@ export default function ScaffoldingScreen({
                 <Pressable
                     key={key}
                     onPress={() => onToggleBlankSelection(instanceId)}
-                    style={[wordPillStyle, blankSpacingStyle, { backgroundColor: HIGHLIGHT_BG }]}
+                    style={[
+                        wordPillStyle,
+                        blankSpacingStyle,
+                        styles.blankBoxBase,
+                        { backgroundColor: HIGHLIGHT_BG },
+                    ]}
                     onLayout={recordTokenLayout(globalIndex)}
                 >
                     <Text style={wordTextStyle}>{t.value}</Text>
@@ -1323,9 +1333,13 @@ export default function ScaffoldingScreen({
         if (!block) return null;
 
         const metrics = getStructuredTextMetrics(block);
-        const singleKeywordEntry = section.tokenEntries.length === 1
-            && section.tokenEntries[0].token.type === 'keyword'
-            ? section.tokenEntries[0]
+        const hasKeywordEntries = section.tokenEntries.some((entry) => entry.token.type === 'keyword');
+        const keywordEntries = section.tokenEntries.filter(
+            (entry): entry is RenderTokenEntry & { token: KeywordTokenWithId } => entry.token.type === 'keyword',
+        );
+        const singleKeywordEntry = keywordEntries.length === 1
+            && normalizeBlankWord(block.text) === normalizeBlankWord(keywordEntries[0].token.value)
+            ? keywordEntries[0]
             : null;
 
         return (
@@ -1343,6 +1357,10 @@ export default function ScaffoldingScreen({
             >
                 {singleKeywordEntry ? (
                     renderStructuredKeywordBlock(singleKeywordEntry, block)
+                ) : hasKeywordEntries ? (
+                    <View style={styles.layoutBlockFlow}>
+                        {section.tokenEntries.map((entry) => renderTokenEntry(entry, { block, compact: true }))}
+                    </View>
                 ) : (
                     <Text
                         style={[
@@ -1387,11 +1405,13 @@ export default function ScaffoldingScreen({
                         </View>
                     ) : (
                         <View style={styles.flow}>
-                            {sections.flatMap((section) => section.tokenEntries).map(renderTokenEntry)}
+                            {sections
+                                .flatMap((section) => section.tokenEntries)
+                                .map((entry) => renderTokenEntry(entry))}
                         </View>
                     )}
 
-                    {(page.tables ?? []).map(renderTable)}
+                    {!hasLayoutBlocks && (page.tables ?? []).map(renderTable)}
                 </View>
             </View>
         );
@@ -1603,7 +1623,7 @@ export default function ScaffoldingScreen({
                                 }}
                                 {...(dragResponder ? dragResponder.panHandlers : {})}
                             >
-                                {legacyTokenEntries.map(renderTokenEntry)}
+                                {legacyTokenEntries.map((entry) => renderTokenEntry(entry))}
                             </View>
                         )}
                     </ScrollView>
