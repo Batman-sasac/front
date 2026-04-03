@@ -963,8 +963,8 @@ export default function ScaffoldingScreen({
                 <View style={styles.rightCard}>
                     <ScrollView
                         contentContainerStyle={styles.textContainer}
-                        keyboardShouldPersistTaps="always"
-                        keyboardDismissMode="none"
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                     >
                         <View
                             style={styles.flow}
