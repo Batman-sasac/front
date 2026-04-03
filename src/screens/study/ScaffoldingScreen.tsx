@@ -23,8 +23,10 @@ import {
     buildKeywordInstances,
     normalizeBlankWord,
 } from './scaffoldingLogic';
+import SpeechBubbleShell from '../../components/SpeechBubbleShell';
 
 const API_BASE_URL = config.apiBaseUrl;
+const HINT_BUBBLE_WIDTH = scale(168);
 
 type Step = '1-1' | '1-2' | '1-3' | '2-1' | '2-2' | '2-3' | '3-1' | '3-2' | '3-3';
 type GradeState = 'idle' | 'correct' | 'wrong';
@@ -1185,11 +1187,16 @@ export default function ScaffoldingScreen({
                                             position: 'absolute' as const,
                                             top: hintPosition.y,
                                             left: hintPosition.x,
-                                            transform: [{ translateX: -60 }],
+                                            transform: [{ translateX: -(HINT_BUBBLE_WIDTH / 2) }],
                                         },
                                     ]}
                                 >
-                                    <View style={styles.hintBalloon}>
+                                    <SpeechBubbleShell
+                                        width={HINT_BUBBLE_WIDTH}
+                                        minHeightRatio={86 / 505}
+                                        tailRatio={34 / 505}
+                                        bubbleStyle={styles.hintBalloonBubble}
+                                    >
                                         <View style={styles.hintContent}>
                                             <Pressable
                                                 style={[styles.hintButton, hintType === 'first' && styles.hintButtonActive, hintType !== 'first' && styles.hintButtonInactive]}
@@ -1210,9 +1217,7 @@ export default function ScaffoldingScreen({
                                                 <Text style={[styles.hintButtonText, hintType === 'chosung' && styles.hintButtonTextActive, hintType !== 'chosung' && styles.hintButtonTextInactive]}>H3</Text>
                                             </Pressable>
                                         </View>
-                                        {/* 설명 */}
-                                        <View style={styles.hintArrow} />
-                                    </View>
+                                    </SpeechBubbleShell>
                                 </View>
                             </Pressable>
                         </Modal>
@@ -1577,15 +1582,21 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
     hintBalloonContainer: { alignItems: 'center', justifyContent: 'center' },
-    hintBalloon: { backgroundColor: '#FFFFFF', borderRadius: scale(12), paddingHorizontal: scale(12), paddingVertical: scale(8), shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+    hintBalloonBubble: {
+        paddingHorizontal: scale(14),
+        paddingVertical: scale(8),
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 4,
+    },
     hintContent: { flexDirection: 'row', gap: scale(8), justifyContent: 'center' },
-    hintButton: { paddingHorizontal: scale(12), paddingVertical: scale(6), borderRadius: scale(6), minWidth: scale(48), alignItems: 'center', justifyContent: 'center' },
+    hintButton: { paddingHorizontal: scale(10), paddingVertical: scale(6), borderRadius: scale(6), minWidth: scale(42), alignItems: 'center', justifyContent: 'center' },
     hintButtonActive: { backgroundColor: '#5E82FF' },
     hintButtonInactive: { backgroundColor: '#E5E7EB' },
     hintButtonText: { fontSize: fontScale(13), fontWeight: '700' },
     hintButtonTextActive: { color: '#FFFFFF' },
     hintButtonTextInactive: { color: '#9CA3AF' },
-    hintArrow: { width: 0, height: 0, borderLeftWidth: scale(8), borderRightWidth: scale(8), borderBottomWidth: scale(8), borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#FFFFFF', alignSelf: 'center', marginTop: scale(0) } as any,
     dragSelectionBox: {
         position: 'absolute',
         borderWidth: 1,
