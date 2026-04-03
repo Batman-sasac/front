@@ -15,9 +15,12 @@ import {
     Keyboard,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
-import { saveTest } from '../../api/ocr';
-import config from '../../lib/config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import type {
+    LayoutBlock,
+    OcrTableBlock,
+    PageItem,
+    ScaffoldingPayload,
+} from '../../api/ocr';
 import { StudySource } from '../input_data/studySource';
 import {
     buildKeywordInstances,
@@ -25,8 +28,8 @@ import {
 } from './scaffoldingLogic';
 import SpeechBubbleShell from '../../components/SpeechBubbleShell';
 
-const API_BASE_URL = config.apiBaseUrl;
 const HINT_BUBBLE_WIDTH = scale(168);
+const DEFAULT_PAGE_CANVAS_ASPECT_RATIO = 0.72;
 
 type Step = '1-1' | '1-2' | '1-3' | '2-1' | '2-2' | '2-3' | '3-1' | '3-2' | '3-3';
 type GradeState = 'idle' | 'correct' | 'wrong';
@@ -35,13 +38,6 @@ export type BlankItem = {
     id: number;
     word: string;
     meaningLong?: string;
-};
-
-export type ScaffoldingPayload = {
-    title: string;
-    extractedText: string;
-    blanks: BlankItem[];
-    user_answers?: string[]; // 이전 학습에서 작성한 답변 (복습용)
 };
 
 type SavePayload = {
@@ -118,6 +114,8 @@ export default function ScaffoldingScreen({
     const [hintPosition, setHintPosition] = useState<{ x: number; y: number } | null>(null); // 힌트 모달 위치
 
     const [blankDefsState, setBlankDefsState] = useState<BlankItem[]>([]);
+    const [pageCanvasWidth, setPageCanvasWidth] = useState(0);
+    const [pageCanvasAspectRatio, setPageCanvasAspectRatio] = useState(DEFAULT_PAGE_CANVAS_ASPECT_RATIO);
     const [pendingSelection, setPendingSelection] = useState<{ includeWord: string; excludeWords: string[] } | null>(null);
     const [dragConfirm, setDragConfirm] = useState<{ text: string; box: { x: number; y: number; w: number; h: number } } | null>(null);
     const [dragSelection, setDragSelection] = useState<{ text: string; box: { x: number; y: number; w: number; h: number } } | null>(null);
@@ -140,6 +138,28 @@ export default function ScaffoldingScreen({
         setBlankDefsState(payload?.blanks ?? []);
     }, [payload?.blanks, payload?.extractedText]);
 
+    useEffect(() => {
+        const fallback = () => setPageCanvasAspectRatio(DEFAULT_PAGE_CANVAS_ASPECT_RATIO);
+
+        const imageUri = payload?.imageUrl ?? sources[selectedIndex]?.uri;
+        if (!imageUri) {
+            fallback();
+            return;
+        }
+
+        Image.getSize(
+            imageUri,
+            (width, height) => {
+                if (width > 0 && height > 0) {
+                    setPageCanvasAspectRatio(width / height);
+                    return;
+                }
+                fallback();
+            },
+            () => fallback(),
+        );
+    }, [payload?.imageUrl, selectedIndex, sources]);
+
     const blankDefs = blankDefsState;
 
     /** 키워드 목록 */
@@ -152,12 +172,77 @@ export default function ScaffoldingScreen({
         return m;
     }, [blankDefs]);
 
+    const sourcePages = useMemo<PageItem[]>(() => {
+        if (payload?.pages && payload.pages.length > 0) {
+            return payload.pages;
+        }
+
+        return [{
+            original_text: extractedText,
+            keywords: keywordList,
+        }];
+    }, [payload?.pages, extractedText, keywordList]);
+
+    const hasStructuredPages = useMemo(
+        () => sourcePages.some(
+            (page) => (page.layout_blocks?.length ?? 0) > 0 || (page.tables?.length ?? 0) > 0,
+        ),
+        [sourcePages],
+    );
+
     /** 중요: 중복 단어마다 instanceId를 부여해서 입력/채점을 분리 */
-    const tokens = useMemo(() => {
-        const raw = tokenizeWithKeywords(extractedText, keywordList);
-        let seq = 1;
-        return raw.map((t) => (t.type === 'keyword' ? { ...t, instanceId: seq++ } : t));
-    }, [extractedText, keywordList]);
+    const pageRenderData = useMemo<PageRenderPage[]>(() => {
+        let nextInstanceId = 1;
+        let nextTokenIndex = 0;
+
+        return sourcePages.map((page, pageIndex) => {
+            const pageKeywords = page.keywords?.length ? page.keywords : keywordList;
+            const sectionsSource = page.layout_blocks && page.layout_blocks.length > 0
+                ? page.layout_blocks.map((block, blockIndex) => ({
+                    key: `page-${pageIndex}-block-${blockIndex}`,
+                    block,
+                    text: block.text ?? '',
+                }))
+                : [{
+                    key: `page-${pageIndex}-flow`,
+                    block: undefined,
+                    text: page.original_text ?? '',
+                }];
+
+            const sections = sectionsSource.map((section) => {
+                const rawTokens = tokenizeWithKeywords(section.text, pageKeywords);
+                const tokenEntries = rawTokens.map((token) => {
+                    const renderToken: RenderToken = token.type === 'keyword'
+                        ? { ...token, instanceId: nextInstanceId++ }
+                        : token;
+
+                    return {
+                        key: `${section.key}-token-${nextTokenIndex}`,
+                        globalIndex: nextTokenIndex++,
+                        token: renderToken,
+                    };
+                });
+
+                return {
+                    key: section.key,
+                    block: section.block,
+                    tokenEntries,
+                };
+            });
+
+            return {
+                pageIndex,
+                page,
+                sections,
+                hasLayoutBlocks: (page.layout_blocks?.length ?? 0) > 0,
+            };
+        });
+    }, [sourcePages, keywordList]);
+
+    const tokens = useMemo(
+        () => pageRenderData.flatMap((page) => page.sections.flatMap((section) => section.tokenEntries.map((entry) => entry.token))),
+        [pageRenderData],
+    );
 
     const keywordInstances = useMemo(() => {
         const keywordTokens = tokens.filter((t): t is KeywordTokenWithId => t.type === 'keyword');
@@ -271,6 +356,14 @@ export default function ScaffoldingScreen({
         keywordInstances.forEach((ki) => m.set(ki.instanceId, ki.blankId));
         return m;
     }, [keywordInstances]);
+    const keywordInstanceById = useMemo(() => {
+        const map = new Map<number, (typeof keywordInstances)[number]>();
+        keywordInstances.forEach((instance) => {
+            map.set(instance.instanceId, instance);
+        });
+        return map;
+    }, [keywordInstances]);
+    const pageCanvasHeight = pageCanvasWidth > 0 ? pageCanvasWidth / pageCanvasAspectRatio : 0;
 
     // 설명
     const totalKeywordCount = Math.min(20, keywordInstances.length);
@@ -663,20 +756,7 @@ export default function ScaffoldingScreen({
         setHintType(type); // 선택한 타입만 표시
     };
 
-    const getMissingAnswerCount = () => {
-        return orderedSelectedBlanks.reduce((count, instanceId) => {
-            const userValue = (answers[instanceId] ?? '').trim();
-            return count + (userValue ? 0 : 1);
-        }, 0);
-    };
-
     const onGrade = () => {
-        const missingAnswerCount = getMissingAnswerCount();
-        if (!isReviewMode && step === '3-2' && missingAnswerCount > 0) {
-            Alert.alert('입력 필요', `최종 리워드는 3라운드 ${orderedSelectedBlanks.length}문항 기준이에요. 모든 빈칸에 답을 입력한 뒤 채점해 주세요.`);
-            return;
-        }
-
         const next: Record<number, GradeState> = { ...graded };
         const newWrong = new Set(wrongInstances);
 
@@ -785,6 +865,539 @@ export default function ScaffoldingScreen({
             </View>
         );
     };
+
+    const getStructuredTextMetrics = (block?: LayoutBlock) => {
+        if (!block || pageCanvasHeight <= 0) {
+            return {
+                bodyFontSize: fontScale(11),
+                bodyLineHeight: fontScale(14),
+                keywordFontSize: fontScale(10),
+                keywordLineHeight: fontScale(13),
+                horizontalPadding: scale(1),
+                marginHorizontal: scale(1),
+                borderRadius: scale(2),
+            };
+        }
+
+        const blockHeightPx = pageCanvasHeight * Math.max(block.height, 0.018);
+        const blockWidthPx = pageCanvasWidth * Math.max(block.width, 0.04);
+        const bodyFontSize = Math.max(8, Math.min(12, blockHeightPx * 0.48));
+        const bodyLineHeight = Math.max(bodyFontSize + 2, Math.min(16, blockHeightPx * 0.72));
+        const keywordFontSize = Math.max(8, Math.min(bodyFontSize, blockHeightPx * 0.44));
+        const keywordLineHeight = Math.max(keywordFontSize + 1, Math.min(bodyLineHeight, blockHeightPx * 0.68));
+        const horizontalPadding = Math.max(0, Math.min(scale(2), blockWidthPx * 0.01));
+        const marginHorizontal = Math.max(0, Math.min(scale(1), blockWidthPx * 0.004));
+
+        return {
+            bodyFontSize,
+            bodyLineHeight,
+            keywordFontSize,
+            keywordLineHeight,
+            horizontalPadding,
+            marginHorizontal,
+            borderRadius: scale(2),
+        };
+    };
+
+    const renderTokenEntry = (entry: RenderTokenEntry, options?: { block?: LayoutBlock; compact?: boolean }) => {
+        const { token: t, globalIndex, key } = entry;
+        const compact = options?.compact === true;
+        const metrics = getStructuredTextMetrics(options?.block);
+        const bodyTextStyle = compact
+            ? [styles.bodyText, styles.compactBodyText, {
+                fontSize: metrics.bodyFontSize,
+                lineHeight: metrics.bodyLineHeight,
+            }]
+            : styles.bodyText;
+        const wordTextStyle = compact
+            ? [styles.wordText, styles.compactWordText, {
+                fontSize: metrics.keywordFontSize,
+                lineHeight: metrics.keywordLineHeight,
+            }]
+            : styles.wordText;
+        const wordPillStyle = compact
+            ? [
+                styles.wordPill,
+                styles.compactWordPill,
+                {
+                    paddingHorizontal: metrics.horizontalPadding,
+                    marginHorizontal: metrics.marginHorizontal,
+                    borderRadius: metrics.borderRadius,
+                },
+            ]
+            : styles.wordPill;
+        const blankSpacingStyle = compact
+            ? {
+                marginHorizontal: metrics.marginHorizontal,
+                paddingHorizontal: metrics.horizontalPadding,
+            }
+            : styles.blankTokenSpacing;
+
+        if (t.type === 'newline') {
+            return <View key={key} style={styles.newline} />;
+        }
+
+        if (t.type === 'space') {
+            return <Text key={key} onLayout={recordTokenLayout(globalIndex)}>{t.value}</Text>;
+        }
+
+        if (t.type === 'text') {
+            return (
+                <Text
+                    key={key}
+                    style={bodyTextStyle}
+                    onLayout={recordTokenLayout(globalIndex)}
+                >
+                    {t.value}
+                </Text>
+            );
+        }
+
+        const instanceId = t.instanceId;
+        const instanceInfo = keywordInstanceById.get(instanceId);
+        const grade = instanceInfo ? (graded[instanceInfo.blankId] ?? 'idle') : 'idle';
+        const userValue = answers[instanceId] ?? '';
+        const substep = step.split('-')[1];
+        const isSelected = selectedBlankSet.has(instanceId);
+        const shouldRenderPlainKeyword = isReviewMode && !isSelected;
+
+        if (substep === '1') {
+            if (shouldRenderPlainKeyword) {
+                return (
+                    <Text
+                        key={key}
+                        style={bodyTextStyle}
+                        onLayout={recordTokenLayout(globalIndex)}
+                    >
+                        {t.value}
+                    </Text>
+                );
+            }
+
+            if (isSelected) {
+                return (
+                    <Pressable
+                        key={key}
+                        onPress={() => onToggleBlankSelection(instanceId)}
+                        style={[wordPillStyle, blankSpacingStyle, { backgroundColor: HIGHLIGHT_BG }]}
+                        onLayout={recordTokenLayout(globalIndex)}
+                    >
+                        <View style={{ position: 'relative' }}>
+                            <Text style={[wordTextStyle, { opacity: 0 }]}>{t.value}</Text>
+                        </View>
+                    </Pressable>
+                );
+            }
+
+            return (
+                <Pressable
+                    key={key}
+                    onPress={() => onToggleBlankSelection(instanceId)}
+                    style={[wordPillStyle, blankSpacingStyle, { backgroundColor: HIGHLIGHT_BG }]}
+                    onLayout={recordTokenLayout(globalIndex)}
+                >
+                    <Text style={wordTextStyle}>{t.value}</Text>
+                </Pressable>
+            );
+        }
+
+        if (substep === '2') {
+            if (!isSelected) {
+                if (shouldRenderPlainKeyword) {
+                    return (
+                        <Text
+                            key={key}
+                            style={bodyTextStyle}
+                            onLayout={recordTokenLayout(globalIndex)}
+                        >
+                            {t.value}
+                        </Text>
+                    );
+                }
+
+                return (
+                    <Pressable
+                        key={key}
+                        style={[wordPillStyle, { backgroundColor: HIGHLIGHT_BG }]}
+                        onLayout={recordTokenLayout(globalIndex)}
+                    >
+                        <Text style={wordTextStyle}>{t.value}</Text>
+                    </Pressable>
+                );
+            }
+
+            const isActive = activeBlankId === instanceId;
+            const currentHintType = hintWord === instanceId ? hintType : null;
+            const textAlign = currentHintType === 'last' ? 'right' : 'left';
+
+            return (
+                <View
+                    key={key}
+                    ref={(ref) => {
+                        if (ref) blankRefs.current[instanceId] = ref;
+                    }}
+                >
+                    <Pressable
+                        onPress={() => onPressBlank(instanceId)}
+                        onLongPress={() => onLongPressBlank(instanceId)}
+                        delayLongPress={450}
+                        style={[
+                            wordPillStyle,
+                            blankSpacingStyle,
+                            styles.blankBoxBase,
+                            { backgroundColor: HIGHLIGHT_BG },
+                            isActive && styles.blankBoxActive,
+                        ]}
+                        onLayout={recordTokenLayout(globalIndex)}
+                    >
+                        <View style={{ position: 'relative' }}>
+                            <Text style={[wordTextStyle, { opacity: 0 }]}>{t.value}</Text>
+                            <View pointerEvents="none" style={styles.blankInputOverlay}>
+                                <TextInput
+                                    ref={(ref) => {
+                                        if (ref) inputRefs.current[instanceId] = ref;
+                                    }}
+                                    value={userValue}
+                                    onChangeText={(value) => setAnswers((prev) => ({ ...prev, [instanceId]: value }))}
+                                    onFocus={() => setActiveBlankId(instanceId)}
+                                    onKeyPress={(event) => {
+                                        if (event.nativeEvent.key === 'Tab') {
+                                            focusAdjacentBlank(instanceId, 1);
+                                        }
+                                    }}
+                                    onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
+                                    style={[
+                                        styles.blankInput,
+                                        compact && {
+                                            fontSize: metrics.keywordFontSize,
+                                            lineHeight: metrics.keywordLineHeight,
+                                        },
+                                        { textAlign },
+                                    ]}
+                                    selectTextOnFocus={isActive}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    spellCheck={false}
+                                    blurOnSubmit={false}
+                                    onBlur={() => {
+                                        requestAnimationFrame(() => {
+                                            const hasFocusedInput = orderedSelectedBlanks.some(
+                                                (id) => inputRefs.current[id]?.isFocused?.(),
+                                            );
+                                            if (!hasFocusedInput) {
+                                                setActiveBlankId((prev) => (prev === instanceId ? null : prev));
+                                            }
+                                        });
+                                    }}
+                                    maxFontSizeMultiplier={1.0}
+                                />
+                            </View>
+                        </View>
+                    </Pressable>
+                </View>
+            );
+        }
+
+        if (!isSelected) {
+            if (shouldRenderPlainKeyword) {
+                return (
+                    <Text
+                        key={key}
+                        style={bodyTextStyle}
+                        onLayout={recordTokenLayout(globalIndex)}
+                    >
+                        {t.value}
+                    </Text>
+                );
+            }
+
+            return (
+                <Pressable
+                    key={key}
+                    style={[wordPillStyle, { backgroundColor: HIGHLIGHT_BG }]}
+                    onLayout={recordTokenLayout(globalIndex)}
+                >
+                    <Text style={wordTextStyle}>{t.value}</Text>
+                </Pressable>
+            );
+        }
+
+        const backgroundColor =
+            grade === 'correct' ? CORRECT_BG : grade === 'wrong' ? WRONG_BG : HIGHLIGHT_BG;
+
+        return (
+            <View
+                key={key}
+                style={[wordPillStyle, blankSpacingStyle, { backgroundColor }]}
+                onLayout={recordTokenLayout(globalIndex)}
+            >
+                <Text style={wordTextStyle}>{t.value}</Text>
+            </View>
+        );
+    };
+
+    const renderTable = (table: OcrTableBlock, tableIndex: number) => {
+        const columnCount = Math.max(...table.rows.map((row) => row.length), 0);
+        if (columnCount === 0) return null;
+
+        return (
+            <View key={`table-${tableIndex}`} style={styles.pageTableWrap}>
+                <Text style={styles.pageTableTitle}>표 {tableIndex + 1}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.pageTable}>
+                        {table.rows.map((row, rowIndex) => {
+                            const normalizedRow = Array.from({ length: columnCount }, (_, colIndex) => row[colIndex] ?? '');
+                            return (
+                                <View key={`row-${rowIndex}`} style={styles.pageTableRow}>
+                                    {normalizedRow.map((cell, colIndex) => (
+                                        <View
+                                            key={`cell-${rowIndex}-${colIndex}`}
+                                            style={[
+                                                styles.pageTableCell,
+                                                rowIndex === 0 && styles.pageTableHeaderCell,
+                                            ]}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.pageTableCellText,
+                                                    rowIndex === 0 && styles.pageTableHeaderText,
+                                                ]}
+                                            >
+                                                {cell}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            );
+                        })}
+                    </View>
+                </ScrollView>
+            </View>
+        );
+    };
+
+    const renderStructuredKeywordBlock = (
+        entry: RenderTokenEntry,
+        block: LayoutBlock,
+    ) => {
+        const token = entry.token;
+        if (token.type !== 'keyword') return null;
+
+        const instanceId = token.instanceId;
+        const instanceInfo = keywordInstanceById.get(instanceId);
+        const grade = instanceInfo ? (graded[instanceInfo.blankId] ?? 'idle') : 'idle';
+        const userValue = answers[instanceId] ?? '';
+        const substep = step.split('-')[1];
+        const isSelected = selectedBlankSet.has(instanceId);
+        const shouldRenderPlainKeyword = isReviewMode && !isSelected;
+        const metrics = getStructuredTextMetrics(block);
+        const textStyle = [
+            styles.structuredBlockText,
+            {
+                fontSize: metrics.bodyFontSize,
+                lineHeight: metrics.bodyLineHeight,
+            },
+        ];
+
+        if (substep === '1') {
+            return (
+                <Pressable
+                    key={entry.key}
+                    onPress={() => onToggleBlankSelection(instanceId)}
+                    style={[
+                        styles.structuredKeywordBox,
+                        isSelected && styles.structuredKeywordBoxSelected,
+                    ]}
+                    onLayout={recordTokenLayout(entry.globalIndex)}
+                >
+                    <Text style={textStyle}>{token.value}</Text>
+                </Pressable>
+            );
+        }
+
+        if (substep === '2') {
+            if (!isSelected || shouldRenderPlainKeyword) {
+                return (
+                    <View
+                        key={entry.key}
+                        style={styles.structuredKeywordBox}
+                        onLayout={recordTokenLayout(entry.globalIndex)}
+                    >
+                        <Text style={textStyle}>{token.value}</Text>
+                    </View>
+                );
+            }
+
+            const isActive = activeBlankId === instanceId;
+            const currentHintType = hintWord === instanceId ? hintType : null;
+            const textAlign = currentHintType === 'last' ? 'right' : 'left';
+
+            return (
+                <View
+                    key={entry.key}
+                    ref={(ref) => {
+                        if (ref) blankRefs.current[instanceId] = ref;
+                    }}
+                >
+                    <Pressable
+                        onPress={() => onPressBlank(instanceId)}
+                        onLongPress={() => onLongPressBlank(instanceId)}
+                        delayLongPress={450}
+                        style={[
+                            styles.structuredKeywordBox,
+                            styles.structuredKeywordInputBox,
+                            isActive && styles.structuredKeywordInputBoxActive,
+                        ]}
+                        onLayout={recordTokenLayout(entry.globalIndex)}
+                    >
+                        <Text style={[textStyle, { opacity: 0 }]}>{token.value}</Text>
+                        <View pointerEvents="none" style={styles.blankInputOverlay}>
+                            <TextInput
+                                ref={(ref) => {
+                                    if (ref) inputRefs.current[instanceId] = ref;
+                                }}
+                                value={userValue}
+                                onChangeText={(value) => setAnswers((prev) => ({ ...prev, [instanceId]: value }))}
+                                onFocus={() => setActiveBlankId(instanceId)}
+                                onKeyPress={(event) => {
+                                    if (event.nativeEvent.key === 'Tab') {
+                                        focusAdjacentBlank(instanceId, 1);
+                                    }
+                                }}
+                                onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
+                                style={[
+                                    styles.blankInput,
+                                    {
+                                        textAlign,
+                                        fontSize: metrics.bodyFontSize,
+                                        lineHeight: metrics.bodyLineHeight,
+                                    },
+                                ]}
+                                selectTextOnFocus={isActive}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                spellCheck={false}
+                                blurOnSubmit={false}
+                                onBlur={() => {
+                                    requestAnimationFrame(() => {
+                                        const hasFocusedInput = orderedSelectedBlanks.some(
+                                            (id) => inputRefs.current[id]?.isFocused?.(),
+                                        );
+                                        if (!hasFocusedInput) {
+                                            setActiveBlankId((prev) => (prev === instanceId ? null : prev));
+                                        }
+                                    });
+                                }}
+                                maxFontSizeMultiplier={1.0}
+                            />
+                        </View>
+                    </Pressable>
+                </View>
+            );
+        }
+
+        const backgroundColor = !isSelected
+            ? 'transparent'
+            : grade === 'correct'
+                ? 'rgba(197, 255, 186, 0.45)'
+                : grade === 'wrong'
+                    ? 'rgba(255, 156, 173, 0.5)'
+                    : 'rgba(199, 207, 255, 0.35)';
+
+        return (
+            <View
+                key={entry.key}
+                style={[
+                    styles.structuredKeywordBox,
+                    backgroundColor !== 'transparent' && { backgroundColor },
+                ]}
+                onLayout={recordTokenLayout(entry.globalIndex)}
+            >
+                <Text style={textStyle}>{token.value}</Text>
+            </View>
+        );
+    };
+
+    const renderStructuredBlock = (section: PageRenderSection) => {
+        const block = section.block;
+        if (!block) return null;
+
+        const metrics = getStructuredTextMetrics(block);
+        const singleKeywordEntry = section.tokenEntries.length === 1
+            && section.tokenEntries[0].token.type === 'keyword'
+            ? section.tokenEntries[0]
+            : null;
+
+        return (
+            <View
+                key={section.key}
+                style={[
+                    styles.layoutBlock,
+                    {
+                        left: `${Math.max(block.x, 0) * 100}%`,
+                        top: `${Math.max(block.y, 0) * 100}%`,
+                        width: `${Math.max(block.width, 0.04) * 100}%`,
+                        height: `${Math.max(block.height, 0.028) * 100}%`,
+                    },
+                ]}
+            >
+                {singleKeywordEntry ? (
+                    renderStructuredKeywordBlock(singleKeywordEntry, block)
+                ) : (
+                    <Text
+                        style={[
+                            styles.structuredBlockText,
+                            {
+                                fontSize: metrics.bodyFontSize,
+                                lineHeight: metrics.bodyLineHeight,
+                            },
+                        ]}
+                    >
+                        {block.text}
+                    </Text>
+                )}
+            </View>
+        );
+    };
+
+    const renderStructuredPage = (pageRender: PageRenderPage) => {
+        const { page, sections, pageIndex, hasLayoutBlocks } = pageRender;
+
+        return (
+            <View key={`page-${pageIndex}`} style={styles.pageCard}>
+                {sourcePages.length > 1 && (
+                    <Text style={styles.pageCardTitle}>페이지 {pageIndex + 1}</Text>
+                )}
+
+                <View style={styles.pageSheet}>
+                    {hasLayoutBlocks ? (
+                        <View
+                            style={[
+                                styles.pageCanvas,
+                                { aspectRatio: pageCanvasAspectRatio },
+                            ]}
+                            onLayout={(event) => {
+                                const nextWidth = event.nativeEvent.layout.width;
+                                if (nextWidth > 0 && nextWidth !== pageCanvasWidth) {
+                                    setPageCanvasWidth(nextWidth);
+                                }
+                            }}
+                        >
+                            {sections.map(renderStructuredBlock)}
+                        </View>
+                    ) : (
+                        <View style={styles.flow}>
+                            {sections.flatMap((section) => section.tokenEntries).map(renderTokenEntry)}
+                        </View>
+                    )}
+
+                    {(page.tables ?? []).map(renderTable)}
+                </View>
+            </View>
+        );
+    };
+
+    const legacyTokenEntries = pageRenderData[0]?.sections[0]?.tokenEntries ?? [];
 
     return (
         <View
@@ -978,149 +1591,21 @@ export default function ScaffoldingScreen({
                         keyboardShouldPersistTaps="handled"
                         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                     >
-                        <View
-                            style={styles.flow}
-                            onLayout={(e) => {
-                                flowLayoutRef.current = e.nativeEvent.layout;
-                            }}
-                            {...(dragResponder ? dragResponder.panHandlers : {})}
-                        >
-                            {tokens.map((t, idx) => {
-                                if (t.type === 'newline') return <View key={idx} style={styles.newline} />;
-                                if (t.type === 'space') return <Text key={idx} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-                                if (t.type === 'text') return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-
-                                const instanceId = t.instanceId;
-                                const instanceInfo = keywordInstances.find(ki => ki.instanceId === instanceId);
-                                const grade = instanceInfo ? (graded[instanceInfo.blankId] ?? 'idle') : 'idle';
-                                const userValue = answers[instanceId] ?? '';
-                                const substep = step.split('-')[1];
-                                const isSelected = selectedBlankSet.has(instanceId); // 사용자가 선택한 빈칸인지
-                                const shouldRenderPlainKeyword = isReviewMode && !isSelected;
-
-                                if (substep === '1') {
-                                    // 설명
-                                    if (shouldRenderPlainKeyword) {
-                                        return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-                                    }
-                                    if (isSelected) {
-                                        // 설명
-                                        return (
-                                            <Pressable
-                                                key={idx}
-                                                onPress={() => onToggleBlankSelection(instanceId)}
-                                                style={[styles.wordPill, styles.blankTokenSpacing, { backgroundColor: HIGHLIGHT_BG }]}
-                                                onLayout={recordTokenLayout(idx)}
-                                            >
-                                                <View style={{ position: 'relative' }}>
-                                                    <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
-                                                </View>
-                                            </Pressable>
-                                        );
-                                    } else {
-                                        // 설명
-                                        return (
-                                            <Pressable
-                                                key={idx}
-                                                onPress={() => onToggleBlankSelection(instanceId)}
-                                                style={[styles.wordPill, styles.blankTokenSpacing, { backgroundColor: HIGHLIGHT_BG }]}
-                                                onLayout={recordTokenLayout(idx)}
-                                            >
-                                                <Text style={styles.wordText}>{t.value}</Text>
-                                            </Pressable>
-                                        );
-                                    }
-                                }
-
-                                if (substep === '2') {
-                                    // 설명
-                                    if (!isSelected) {
-                                        if (shouldRenderPlainKeyword) {
-                                            return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-                                        }
-                                        return (
-                                            <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
-                                                <Text style={styles.wordText}>{t.value}</Text>
-                                            </Pressable>
-                                        );
-                                    }
-                                    const isActive = activeBlankId === instanceId;
-                                    const currentHintType = hintWord === instanceId ? hintType : null;
-                                    const textAlign = currentHintType === 'last' ? 'right' : 'left';
-                                    return (
-                                        <View
-                                            key={idx}
-                                            ref={(r) => { if (r) blankRefs.current[instanceId] = r; }}
-                                        >
-                                            <Pressable
-                                                onPress={() => onPressBlank(instanceId)}
-                                                onLongPress={() => onLongPressBlank(instanceId)}
-                                                delayLongPress={450}
-                                                style={[styles.wordPill, styles.blankTokenSpacing, styles.blankBoxBase, { backgroundColor: HIGHLIGHT_BG }, isActive && styles.blankBoxActive]}
-                                                onLayout={recordTokenLayout(idx)}
-                                            >
-                                                <View style={{ position: 'relative' }}>
-                                                    <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
-                                                    <View pointerEvents="none" style={styles.blankInputOverlay}>
-                                                        <TextInput
-                                                            ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
-                                                            value={userValue}
-                                                            onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
-                                                            onFocus={() => setActiveBlankId(instanceId)}
-                                                            onKeyPress={(e) => {
-                                                                if (e.nativeEvent.key === 'Tab') {
-                                                                    focusAdjacentBlank(instanceId, 1);
-                                                                }
-                                                            }}
-                                                            onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
-                                                            style={[styles.blankInput, { textAlign }]}
-                                                            selectTextOnFocus={isActive}
-                                                            autoCapitalize="none"
-                                                            autoCorrect={false}
-                                                            spellCheck={false}
-                                                            blurOnSubmit={false}
-                                                            onBlur={() => {
-                                                                requestAnimationFrame(() => {
-                                                                    const hasFocusedInput = orderedSelectedBlanks.some((id) => inputRefs.current[id]?.isFocused?.());
-                                                                    if (!hasFocusedInput) {
-                                                                        setActiveBlankId((prev) => (prev === instanceId ? null : prev));
-                                                                    }
-                                                                });
-                                                            }}
-                                                            maxFontSizeMultiplier={1.0}
-                                                        />
-                                                    </View>
-                                                </View>
-                                            </Pressable>
-                                        </View>
-                                    );
-                                }
-
-                                // 설명
-                                if (!isSelected) {
-                                    if (shouldRenderPlainKeyword) {
-                                        return <Text key={idx} style={styles.bodyText} onLayout={recordTokenLayout(idx)}>{t.value}</Text>;
-                                    }
-                                    return (
-                                        <Pressable key={idx} style={[styles.wordPill, { backgroundColor: HIGHLIGHT_BG }]} onLayout={recordTokenLayout(idx)}>
-                                            <Text style={styles.wordText}>{t.value}</Text>
-                                        </Pressable>
-                                    );
-                                }
-                                const bg =
-                                    grade === 'correct' ? CORRECT_BG : grade === 'wrong' ? WRONG_BG : HIGHLIGHT_BG;
-
-                                return (
-                                    <View
-                                        key={idx}
-                                        style={[styles.wordPill, styles.blankTokenSpacing, { backgroundColor: bg }]}
-                                        onLayout={recordTokenLayout(idx)}
-                                    >
-                                        <Text style={styles.wordText}>{t.value}</Text>
-                                    </View>
-                                );
-                            })}
-                        </View>
+                        {hasStructuredPages ? (
+                            <View style={styles.pageList}>
+                                {pageRenderData.map(renderStructuredPage)}
+                            </View>
+                        ) : (
+                            <View
+                                style={styles.flow}
+                                onLayout={(e) => {
+                                    flowLayoutRef.current = e.nativeEvent.layout;
+                                }}
+                                {...(dragResponder ? dragResponder.panHandlers : {})}
+                            >
+                                {legacyTokenEntries.map(renderTokenEntry)}
+                            </View>
+                        )}
                     </ScrollView>
                     {dragSelection?.box && flowLayoutRef.current && dragEnabled && (
                         <View
@@ -1243,13 +1728,30 @@ export default function ScaffoldingScreen({
 }
 
 /** Tokenize */
-type Token =
-    | { type: 'text'; value: string }
-    | { type: 'space'; value: string }
-    | { type: 'newline'; value: '\n' }
-    | { type: 'keyword'; value: string; occ: number; baseWord: string };
+type TextToken = { type: 'text'; value: string };
+type SpaceToken = { type: 'space'; value: string };
+type NewlineToken = { type: 'newline'; value: '\n' };
+type KeywordToken = { type: 'keyword'; value: string; occ: number; baseWord: string };
 
-type KeywordTokenWithId = { type: 'keyword'; value: string; occ: number; instanceId: number; baseWord: string };
+type Token = TextToken | SpaceToken | NewlineToken | KeywordToken;
+type KeywordTokenWithId = KeywordToken & { instanceId: number };
+type RenderToken = TextToken | SpaceToken | NewlineToken | KeywordTokenWithId;
+type RenderTokenEntry = {
+    key: string;
+    globalIndex: number;
+    token: RenderToken;
+};
+type PageRenderSection = {
+    key: string;
+    block?: LayoutBlock;
+    tokenEntries: RenderTokenEntry[];
+};
+type PageRenderPage = {
+    pageIndex: number;
+    page: PageItem;
+    sections: PageRenderSection[];
+    hasLayoutBlocks: boolean;
+};
 
 /**
  * keyword가 text의 pos 위치에서 시작하는지 확인.
@@ -1496,13 +1998,116 @@ const styles = StyleSheet.create({
 
     rightCard: { flex: 1, backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: scale(16), overflow: 'hidden', position: 'relative' },
     textContainer: { paddingHorizontal: scale(14), paddingVertical: scale(14) },
+    pageList: { gap: scale(14) },
+    pageCard: {
+        gap: scale(8),
+    },
+    pageCardTitle: {
+        fontSize: fontScale(12),
+        lineHeight: fontScale(18),
+        fontWeight: '700',
+        color: '#6B7280',
+    },
+    pageSheet: {
+        padding: scale(14),
+        borderRadius: scale(14),
+        backgroundColor: '#F8FAFF',
+        borderWidth: 1,
+        borderColor: '#E3E8F8',
+        gap: scale(12),
+    },
+    pageCanvas: {
+        position: 'relative',
+        width: '100%',
+        borderRadius: scale(12),
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E8ECF8',
+        overflow: 'hidden',
+    },
+    layoutBlock: {
+        position: 'absolute',
+        paddingHorizontal: scale(3),
+        paddingVertical: scale(2),
+        overflow: 'visible',
+    },
+    structuredBlockText: {
+        color: '#111827',
+        fontWeight: '500',
+        padding: 0,
+        margin: 0,
+    },
+    structuredKeywordBox: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+    },
+    structuredKeywordBoxSelected: {
+        backgroundColor: 'rgba(199, 207, 255, 0.35)',
+        borderRadius: scale(2),
+    },
+    structuredKeywordInputBox: {
+        backgroundColor: 'rgba(199, 207, 255, 0.28)',
+        borderRadius: scale(2),
+    },
+    structuredKeywordInputBoxActive: {
+        borderWidth: 1,
+        borderColor: '#5E82FF',
+    },
+    layoutBlockFlow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'flex-start',
+    },
+    pageTableWrap: {
+        gap: scale(6),
+    },
+    pageTableTitle: {
+        fontSize: fontScale(12),
+        lineHeight: fontScale(18),
+        fontWeight: '700',
+        color: '#6B7280',
+    },
+    pageTable: {
+        borderWidth: 1,
+        borderColor: '#D8DEEF',
+        borderRadius: scale(10),
+        overflow: 'hidden',
+    },
+    pageTableRow: {
+        flexDirection: 'row',
+    },
+    pageTableCell: {
+        minWidth: scale(88),
+        paddingHorizontal: scale(10),
+        paddingVertical: scale(8),
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: '#D8DEEF',
+        backgroundColor: '#FFFFFF',
+    },
+    pageTableHeaderCell: {
+        backgroundColor: '#EEF2FF',
+    },
+    pageTableCellText: {
+        fontSize: fontScale(11),
+        lineHeight: fontScale(16),
+        fontWeight: '500',
+        color: '#1F2937',
+    },
+    pageTableHeaderText: {
+        fontWeight: '700',
+    },
     flow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
     newline: { width: '100%', height: fontScale(14) },
     bodyText: { fontSize: fontScale(14), lineHeight: fontScale(22), fontWeight: '600', color: '#111827' },
+    compactBodyText: { fontWeight: '500', color: '#1F2937' },
 
     wordPill: { paddingHorizontal: 0, paddingVertical: 0, borderRadius: scale(4), marginVertical: 0 },
+    compactWordPill: { marginVertical: 0, minHeight: 0 },
     blankTokenSpacing: { marginHorizontal: scale(3), paddingHorizontal: scale(4) },
     wordText: { fontSize: fontScale(13), lineHeight: fontScale(20), fontWeight: '600', color: '#111827' },
+    compactWordText: { fontWeight: '500' },
 
     blankBox: { paddingHorizontal: 0, paddingVertical: 0, borderRadius: scale(4), marginVertical: 0, justifyContent: 'center' },
     blankBoxBase: { borderWidth: 2, borderColor: 'transparent' },
