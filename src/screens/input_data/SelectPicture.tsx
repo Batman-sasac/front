@@ -249,10 +249,10 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
             return;
         }
 
-        const w = displayRect.dw * 0.62;
-        const h = displayRect.dh * 0.56;
-        const x = displayRect.dx + (displayRect.dw - w) / 2;
-        const y = displayRect.dy + (displayRect.dh - h) / 2;
+        const w = displayRect.dw;
+        const h = displayRect.dh;
+        const x = displayRect.dx;
+        const y = displayRect.dy;
 
         const nextCrop = { x, y, w, h };
         setCrop(nextCrop);

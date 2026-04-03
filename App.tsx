@@ -26,7 +26,7 @@ import RewardScreen, { RewardType } from './src/screens/reward/Reward';
 import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy } from './src/api/ocr';
+import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy, OcrProgressMessage } from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
@@ -96,6 +96,21 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [ocrUsage, setOcrUsage] = useState<OcrUsageResponse | null>(null);
   const [showUsageExhaustedModal, setShowUsageExhaustedModal] = useState(false);
+  const [ocrProgressState, setOcrProgressState] = useState<{
+    completedPages: number;
+    totalPages: number;
+    activeSourceIndex: number;
+    activeSourceName: string;
+    activeSourceCompletedPages: number;
+    activeSourceTotalPages: number;
+  }>({
+    completedPages: 0,
+    totalPages: 0,
+    activeSourceIndex: 0,
+    activeSourceName: '',
+    activeSourceCompletedPages: 0,
+    activeSourceTotalPages: 0,
+  });
 
   const usageExhaustedMessage = getOcrUsageExhaustedMessage(ocrUsage);
 
@@ -609,6 +624,16 @@ export default function App() {
   // 촬영 결과 임시 소스 목록
   const [capturedSources, setCapturedSources] = useState<StudySource[]>([]);
 
+  const createOcrJobId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+  const getSourceDisplayName = (source: StudySource | undefined, fallbackIndex: number) => {
+    const trimmedName = source?.name?.trim();
+    if (trimmedName) return trimmedName;
+    const rawName = source?.uri?.split('/').pop()?.split('?')[0]?.trim();
+    if (rawName) return rawName;
+    return `${fallbackIndex + 1}번째 파일`;
+  };
+
   const [scaffoldingPayload, setScaffoldingPayload] = useState<ScaffoldingPayload | null>(null);
   const [scaffoldingPayloads, setScaffoldingPayloads] = useState<ScaffoldingPayload[]>([]);
   const [scaffoldingLoading, setScaffoldingLoading] = useState(false);
@@ -676,9 +701,33 @@ export default function App() {
       }
     }
 
+    const jobId = createOcrJobId();
+
     return runOcr(uploadUri, shouldSendCropInfo ? cropInfo : undefined, {
       fileName: uploadFileName,
       mimeType: uploadMimeType,
+      jobId,
+      onProgress: (message: OcrProgressMessage) => {
+        if (message.status !== 'page_done') return;
+        setOcrProgressState((prev) => {
+          const completedBeforeActive = prev.activeSourceIndex === index
+            ? Math.max(prev.completedPages - prev.activeSourceCompletedPages, 0)
+            : Math.min(prev.completedPages, prev.totalPages);
+          const nextActiveCompletedPages = Math.max(0, message.page ?? 0);
+          const nextActiveTotalPages = Math.max(message.total_pages ?? 0, nextActiveCompletedPages, 1);
+          const nextCompletedPages = completedBeforeActive + nextActiveCompletedPages;
+          const nextTotalPages = completedBeforeActive + nextActiveTotalPages + Math.max(sources.length - index - 1, 0);
+
+          return {
+            completedPages: nextCompletedPages,
+            totalPages: nextTotalPages,
+            activeSourceIndex: index,
+            activeSourceName: message.filename || getSourceDisplayName(target, index),
+            activeSourceCompletedPages: nextActiveCompletedPages,
+            activeSourceTotalPages: nextActiveTotalPages,
+          };
+        });
+      },
     });
   };
 
@@ -691,17 +740,52 @@ export default function App() {
     setScaffoldingPayload(null);
     setScaffoldingPayloads([]);
     setSelectedSourceIndex(0);
+    setOcrProgressState({
+      completedPages: 0,
+      totalPages: Math.max(sources.length, 1),
+      activeSourceIndex: 0,
+      activeSourceName: getSourceDisplayName(sources[0], 0),
+      activeSourceCompletedPages: 0,
+      activeSourceTotalPages: 1,
+    });
 
     try {
       const nextPayloads: ScaffoldingPayload[] = [];
       for (let i = 0; i < sources.length; i += 1) {
+        setOcrProgressState((prev) => ({
+          ...prev,
+          activeSourceIndex: i,
+          activeSourceName: getSourceDisplayName(sources[i], i),
+          activeSourceCompletedPages: 0,
+          activeSourceTotalPages: prev.activeSourceIndex === i ? prev.activeSourceTotalPages : 1,
+        }));
         const payload = await runOcrForIndex(sources, i, cropMap);
         nextPayloads.push(payload);
+        const actualPages = Math.max(payload.pages?.length ?? 0, 1);
+        const completedBeforeCurrent = nextPayloads
+          .slice(0, -1)
+          .reduce((sum, item) => sum + Math.max(item.pages?.length ?? 0, 1), 0);
+        const remainingMinPages = Math.max(sources.length - i - 1, 0);
+
+        setOcrProgressState({
+          completedPages: completedBeforeCurrent + actualPages,
+          totalPages: completedBeforeCurrent + actualPages + remainingMinPages,
+          activeSourceIndex: i,
+          activeSourceName: getSourceDisplayName(sources[i], i),
+          activeSourceCompletedPages: actualPages,
+          activeSourceTotalPages: actualPages,
+        });
       }
 
       setScaffoldingPayloads(nextPayloads);
       setSelectedSourceIndex(0);
       setScaffoldingPayload(nextPayloads[0] ?? null);
+      setOcrProgressState((prev) => ({
+        ...prev,
+        completedPages: Math.max(prev.totalPages, prev.completedPages, 1),
+        totalPages: Math.max(prev.totalPages, prev.completedPages, 1),
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 420));
       setStep('studyIntro');
     } catch (e: any) {
       const message = e?.message ?? '텍스트 추출에 실패했습니다.';
@@ -957,6 +1041,14 @@ export default function App() {
                 resetBatchEarnedXp();
                 setPendingGradeParts({});
                 pendingGradePartsRef.current = {};
+                setOcrProgressState({
+                  completedPages: 0,
+                  totalPages: Math.max(finalSources.length, 1),
+                  activeSourceIndex: 0,
+                  activeSourceName: getSourceDisplayName(finalSources[0], 0),
+                  activeSourceCompletedPages: 0,
+                  activeSourceTotalPages: 1,
+                });
 
                 if (!finalSources.length) {
                   setScaffoldingError('학습할 이미지가 없습니다.');
@@ -975,6 +1067,9 @@ export default function App() {
               mode="loading"
               totalPages={capturedSources.length}
               currentPage={Math.min(selectedSourceIndex + 1, Math.max(capturedSources.length, 1))}
+              progress={ocrProgressState.totalPages > 0
+                ? Math.round((Math.min(ocrProgressState.completedPages, ocrProgressState.totalPages) / ocrProgressState.totalPages) * 100)
+                : 0}
             />
           )}
           {step === 'studyIntro' && (
