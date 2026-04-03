@@ -104,6 +104,13 @@ export default function HomeScreen({
 
   const effectiveLevel = level;
   const characterSource = getLevelUpCharacterSource(typeLabel, effectiveLevel);
+  const characterAsset = Image.resolveAssetSource(characterSource);
+  const characterAspectRatio =
+    characterAsset?.width && characterAsset?.height
+      ? characterAsset.width / characterAsset.height
+      : 1;
+  const characterHeight = scale(215);
+  const characterWidth = Math.min(scale(380), characterHeight * characterAspectRatio);
 
   const { min: levelMin, max: levelMax } = getLevelBounds(effectiveLevel);
   const expClamped = Math.max(levelMin, Math.min(exp, levelMax));
@@ -180,7 +187,15 @@ export default function HomeScreen({
               <View style={styles.characterWrapper}>
                 <Image
                   source={characterSource}
-                  style={[styles.characterImage, { transform: [{ scale: characterScale }] }]}
+                  style={[
+                    styles.characterImage,
+                    {
+                      width: characterWidth,
+                      height: characterHeight,
+                      transform: [{ scale: characterScale }],
+                    },
+                  ]}
+                  resizeMode="contain"
                 />
               </View>
 
@@ -555,14 +570,13 @@ const styles = StyleSheet.create({
 
   /* 캐릭터 + 버튼 */
   characterWrapper: {
+    width: '100%',
     alignItems: 'center',
-    marginBottom: scale(16),
+    marginBottom: scale(2),
   },
   characterImage: {
-    width: scale(190),
-    height: scale(190),
-    marginBottom: scale(20),
-    marginTop: scale(20),
+    marginBottom: scale(2),
+    marginTop: scale(2),
   },
   todayButton: {
     borderRadius: scale(16),
