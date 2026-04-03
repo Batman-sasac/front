@@ -12,6 +12,7 @@ import {
     Modal,
     ActivityIndicator,
     PanResponder,
+    Keyboard,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { saveTest } from '../../api/ocr';
@@ -127,6 +128,7 @@ export default function ScaffoldingScreen({
     const tokenLayoutsRef = useRef<Record<number, { x: number; y: number; width: number; height: number }>>({});
     const dragStartRef = useRef<{ x: number; y: number } | null>(null);
     const dragSelectionRef = useRef<{ text: string; box: { x: number; y: number; w: number; h: number } } | null>(null);
+    const suppressPressAfterLongPressRef = useRef(false);
 
     // 설명
     const title = payload?.title ?? '';
@@ -559,6 +561,10 @@ export default function ScaffoldingScreen({
 
 
     const onLongPressBlank = (instanceId: number) => {
+        suppressPressAfterLongPressRef.current = true;
+        Keyboard.dismiss();
+        inputRefs.current[instanceId]?.blur();
+        setActiveBlankId(null);
         setHintWord(instanceId);
         setHintType(null);
 
@@ -574,6 +580,10 @@ export default function ScaffoldingScreen({
         }
     };
     const onPressBlank = (instanceId: number) => {
+        if (suppressPressAfterLongPressRef.current) {
+            suppressPressAfterLongPressRef.current = false;
+            return;
+        }
         setActiveBlankId(instanceId);
         setHintWord(null);
         setHintType(null);
@@ -963,8 +973,8 @@ export default function ScaffoldingScreen({
                 <View style={styles.rightCard}>
                     <ScrollView
                         contentContainerStyle={styles.textContainer}
-                        keyboardShouldPersistTaps="always"
-                        keyboardDismissMode="none"
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                     >
                         <View
                             style={styles.flow}
@@ -1049,33 +1059,35 @@ export default function ScaffoldingScreen({
                                             >
                                                 <View style={{ position: 'relative' }}>
                                                     <Text style={[styles.wordText, { opacity: 0 }]}>{t.value}</Text>
-                                                    <TextInput
-                                                        ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
-                                                        value={userValue}
-                                                        onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
-                                                        onFocus={() => setActiveBlankId(instanceId)}
-                                                        onKeyPress={(e) => {
-                                                            if (e.nativeEvent.key === 'Tab') {
-                                                                focusAdjacentBlank(instanceId, 1);
-                                                            }
-                                                        }}
-                                                        onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
-                                                        style={[styles.blankInput, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, textAlign }]}
-                                                        selectTextOnFocus={isActive}
-                                                        autoCapitalize="none"
-                                                        autoCorrect={false}
-                                                        spellCheck={false}
-                                                        blurOnSubmit={false}
-                                                        onBlur={() => {
-                                                            requestAnimationFrame(() => {
-                                                                const hasFocusedInput = orderedSelectedBlanks.some((id) => inputRefs.current[id]?.isFocused?.());
-                                                                if (!hasFocusedInput) {
-                                                                    setActiveBlankId((prev) => (prev === instanceId ? null : prev));
+                                                    <View pointerEvents="none" style={styles.blankInputOverlay}>
+                                                        <TextInput
+                                                            ref={(r) => { if (r) inputRefs.current[instanceId] = r; }}
+                                                            value={userValue}
+                                                            onChangeText={(v) => setAnswers((prev) => ({ ...prev, [instanceId]: v }))}
+                                                            onFocus={() => setActiveBlankId(instanceId)}
+                                                            onKeyPress={(e) => {
+                                                                if (e.nativeEvent.key === 'Tab') {
+                                                                    focusAdjacentBlank(instanceId, 1);
                                                                 }
-                                                            });
-                                                        }}
-                                                        maxFontSizeMultiplier={1.0}
-                                                    />
+                                                            }}
+                                                            onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
+                                                            style={[styles.blankInput, { textAlign }]}
+                                                            selectTextOnFocus={isActive}
+                                                            autoCapitalize="none"
+                                                            autoCorrect={false}
+                                                            spellCheck={false}
+                                                            blurOnSubmit={false}
+                                                            onBlur={() => {
+                                                                requestAnimationFrame(() => {
+                                                                    const hasFocusedInput = orderedSelectedBlanks.some((id) => inputRefs.current[id]?.isFocused?.());
+                                                                    if (!hasFocusedInput) {
+                                                                        setActiveBlankId((prev) => (prev === instanceId ? null : prev));
+                                                                    }
+                                                                });
+                                                            }}
+                                                            maxFontSizeMultiplier={1.0}
+                                                        />
+                                                    </View>
                                                 </View>
                                             </Pressable>
                                         </View>
@@ -1490,7 +1502,11 @@ const styles = StyleSheet.create({
     blankBox: { paddingHorizontal: 0, paddingVertical: 0, borderRadius: scale(4), marginVertical: 0, justifyContent: 'center' },
     blankBoxBase: { borderWidth: 2, borderColor: 'transparent' },
     blankBoxActive: { borderColor: '#5E82FF' },
+    blankInputOverlay: {
+        ...StyleSheet.absoluteFillObject,
+    },
     blankInput: {
+        ...StyleSheet.absoluteFillObject,
         padding: 0,
         paddingVertical: 0,
         margin: 0,
