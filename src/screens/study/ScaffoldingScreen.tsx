@@ -1201,6 +1201,23 @@ export default function ScaffoldingScreen({
         const isSelected = selectedBlankSet.has(instanceId);
         const shouldRenderPlainKeyword = isReviewMode && !isSelected;
         const metrics = getStructuredTextMetrics(block);
+        const keywordTextStyle = [
+            styles.wordText,
+            styles.compactWordText,
+            {
+                fontSize: metrics.keywordFontSize,
+                lineHeight: metrics.keywordLineHeight,
+            },
+        ];
+        const keywordBoxStyle = [
+            styles.structuredKeywordInlineBox,
+            styles.blankBoxBase,
+            {
+                backgroundColor: HIGHLIGHT_BG,
+                paddingHorizontal: metrics.horizontalPadding,
+                borderRadius: metrics.borderRadius,
+            },
+        ];
         const textStyle = [
             styles.structuredBlockText,
             {
@@ -1214,13 +1231,10 @@ export default function ScaffoldingScreen({
                 <Pressable
                     key={entry.key}
                     onPress={() => onToggleBlankSelection(instanceId)}
-                    style={[
-                        styles.structuredKeywordBox,
-                        isSelected && styles.structuredKeywordBoxSelected,
-                    ]}
+                    style={keywordBoxStyle}
                     onLayout={recordTokenLayout(entry.globalIndex)}
                 >
-                    <Text style={textStyle}>{token.value}</Text>
+                    <Text style={[keywordTextStyle, isSelected && { opacity: 0 }]}>{token.value}</Text>
                 </Pressable>
             );
         }
@@ -1230,10 +1244,10 @@ export default function ScaffoldingScreen({
                 return (
                     <View
                         key={entry.key}
-                        style={styles.structuredKeywordBox}
+                        style={!shouldRenderPlainKeyword ? keywordBoxStyle : undefined}
                         onLayout={recordTokenLayout(entry.globalIndex)}
                     >
-                        <Text style={textStyle}>{token.value}</Text>
+                        <Text style={shouldRenderPlainKeyword ? textStyle : keywordTextStyle}>{token.value}</Text>
                     </View>
                 );
             }
@@ -1254,13 +1268,13 @@ export default function ScaffoldingScreen({
                         onLongPress={() => onLongPressBlank(instanceId)}
                         delayLongPress={450}
                         style={[
-                            styles.structuredKeywordBox,
+                            ...keywordBoxStyle,
                             styles.structuredKeywordInputBox,
                             isActive && styles.structuredKeywordInputBoxActive,
                         ]}
                         onLayout={recordTokenLayout(entry.globalIndex)}
                     >
-                        <Text style={[textStyle, { opacity: 0 }]}>{token.value}</Text>
+                        <Text style={[keywordTextStyle, { opacity: 0 }]}>{token.value}</Text>
                         <View pointerEvents="none" style={styles.blankInputOverlay}>
                             <TextInput
                                 ref={(ref) => {
@@ -1279,8 +1293,8 @@ export default function ScaffoldingScreen({
                                     styles.blankInput,
                                     {
                                         textAlign,
-                                        fontSize: metrics.bodyFontSize,
-                                        lineHeight: metrics.bodyLineHeight,
+                                        fontSize: metrics.keywordFontSize,
+                                        lineHeight: metrics.keywordLineHeight,
                                     },
                                 ]}
                                 selectTextOnFocus={isActive}
@@ -1318,12 +1332,12 @@ export default function ScaffoldingScreen({
             <View
                 key={entry.key}
                 style={[
-                    styles.structuredKeywordBox,
+                    keywordBoxStyle,
                     backgroundColor !== 'transparent' && { backgroundColor },
                 ]}
                 onLayout={recordTokenLayout(entry.globalIndex)}
             >
-                <Text style={textStyle}>{token.value}</Text>
+                <Text style={keywordTextStyle}>{token.value}</Text>
             </View>
         );
     };
@@ -2062,9 +2076,16 @@ const styles = StyleSheet.create({
         height: '100%',
         justifyContent: 'center',
     },
-    structuredKeywordBoxSelected: {
-        backgroundColor: 'rgba(199, 207, 255, 0.35)',
+    structuredKeywordInlineBox: {
+        alignSelf: 'flex-start',
+        justifyContent: 'center',
+    },
+    structuredKeywordBoxDefault: {
+        backgroundColor: HIGHLIGHT_BG,
         borderRadius: scale(2),
+    },
+    structuredKeywordBoxSelected: {
+        backgroundColor: 'rgba(199, 207, 255, 0.55)',
     },
     structuredKeywordInputBox: {
         backgroundColor: 'rgba(199, 207, 255, 0.28)',
