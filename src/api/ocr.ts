@@ -18,6 +18,16 @@ export type LayoutBlock = {
     height: number;
 };
 
+export type BlankCandidate = {
+    id: string;
+    text: string;
+    page_index: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
 // ocr_app.py의 /ocr/save 스펙: 페이지, 빈칸, 사용자 답변 모두 JSON
 export type PageItem = {
     original_text: string;
@@ -26,6 +36,8 @@ export type PageItem = {
     tables?: OcrTableBlock[];
     /** OCR 레이아웃 블록; 없으면 생략 */
     layout_blocks?: LayoutBlock[];
+    /** OCR 빈칸 후보 박스; 없으면 생략 */
+    blank_candidates?: BlankCandidate[];
 };
 
 export type BlankItemSave = {
@@ -144,11 +156,62 @@ function normalizeLayoutBlocks(raw: unknown): LayoutBlock[] | undefined {
     return out.length > 0 ? out : undefined;
 }
 
+function normalizeBlankCandidates(raw: unknown): BlankCandidate[] | undefined {
+    if (!Array.isArray(raw) || raw.length === 0) return undefined;
+
+    const out: BlankCandidate[] = [];
+    for (const candidate of raw) {
+        if (!candidate || typeof candidate !== 'object') continue;
+
+        const rawCandidate = candidate as {
+            id?: unknown;
+            text?: unknown;
+            page_index?: unknown;
+            x?: unknown;
+            y?: unknown;
+            width?: unknown;
+            height?: unknown;
+        };
+
+        const id = String(rawCandidate.id ?? '').trim();
+        const text = String(rawCandidate.text ?? '').trim();
+        const pageIndex = Number(rawCandidate.page_index);
+        const x = Number(rawCandidate.x);
+        const y = Number(rawCandidate.y);
+        const width = Number(rawCandidate.width);
+        const height = Number(rawCandidate.height);
+
+        if (!id || !text) continue;
+        if (
+            !Number.isFinite(pageIndex)
+            || !Number.isFinite(x)
+            || !Number.isFinite(y)
+            || !Number.isFinite(width)
+            || !Number.isFinite(height)
+        ) {
+            continue;
+        }
+
+        out.push({
+            id,
+            text,
+            page_index: pageIndex,
+            x,
+            y,
+            width,
+            height,
+        });
+    }
+
+    return out.length > 0 ? out : undefined;
+}
+
 function normalizePageItem(raw: {
     original_text?: string;
     keywords?: string[];
     tables?: unknown;
     layout_blocks?: unknown;
+    blank_candidates?: unknown;
 }): PageItem {
     const normalizeKeyword = (value: unknown) => String(value ?? '').trim();
 
@@ -159,6 +222,7 @@ function normalizePageItem(raw: {
             : [],
         tables: normalizeOcrTables(raw?.tables),
         layout_blocks: normalizeLayoutBlocks(raw?.layout_blocks),
+        blank_candidates: normalizeBlankCandidates(raw?.blank_candidates),
     };
 }
 
@@ -327,9 +391,22 @@ export async function runOcr(
                 .map((p) => p.original_text ?? '')
                 .join('\n\n');
 
-            const kwSet = new Set<string>();
             for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
                 const page = pages[pageIndex];
+                const pageCandidates = page.blank_candidates ?? [];
+
+                if (pageCandidates.length > 0) {
+                    for (const candidate of pageCandidates) {
+                        blankItems.push({
+                            blank_index: blankItems.length,
+                            word: candidate.text,
+                            page_index: candidate.page_index ?? pageIndex,
+                        });
+                    }
+                    continue;
+                }
+
+                const kwSet = new Set<string>();
                 for (const word of page.keywords) {
                     if (kwSet.has(word)) continue;
                     kwSet.add(word);

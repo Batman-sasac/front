@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import type {
+    BlankCandidate,
     LayoutBlock,
     OcrTableBlock,
     PageItem,
@@ -196,17 +197,27 @@ export default function ScaffoldingScreen({
         let nextTokenIndex = 0;
 
         return sourcePages.map((page, pageIndex) => {
-            const pageKeywords = page.keywords?.length ? page.keywords : keywordList;
+            const pageCandidates = !isReviewMode && (page.blank_candidates?.length ?? 0) > 0
+                ? page.blank_candidates ?? []
+                : [];
+            const pageKeywords = pageCandidates.length > 0
+                ? pageCandidates.map((candidate) => candidate.text)
+                : (isReviewMode ? keywordList : (page.keywords?.length ? page.keywords : keywordList));
+            const blankCandidateByText = new Map<string, BlankCandidate>(
+                pageCandidates.map((candidate) => [normalizeBlankWord(candidate.text), candidate] as const),
+            );
             const sectionsSource = page.layout_blocks && page.layout_blocks.length > 0
                 ? page.layout_blocks.map((block, blockIndex) => ({
                     key: `page-${pageIndex}-block-${blockIndex}`,
                     block,
                     text: block.text ?? '',
+                    blankCandidate: blankCandidateByText.get(normalizeBlankWord(block.text ?? '')),
                 }))
                 : [{
                     key: `page-${pageIndex}-flow`,
                     block: undefined,
                     text: page.original_text ?? '',
+                    blankCandidate: undefined,
                 }];
 
             const sections = sectionsSource.map((section) => {
@@ -226,6 +237,7 @@ export default function ScaffoldingScreen({
                 return {
                     key: section.key,
                     block: section.block,
+                    blankCandidate: section.blankCandidate,
                     tokenEntries,
                 };
             });
@@ -1351,10 +1363,10 @@ export default function ScaffoldingScreen({
         const keywordEntries = section.tokenEntries.filter(
             (entry): entry is RenderTokenEntry & { token: KeywordTokenWithId } => entry.token.type === 'keyword',
         );
-        const singleKeywordEntry = keywordEntries.length === 1
-            && normalizeBlankWord(block.text) === normalizeBlankWord(keywordEntries[0].token.value)
-            ? keywordEntries[0]
-            : null;
+        const singleKeywordEntry = section.blankCandidate && keywordEntries.length === 1
+            && normalizeBlankWord(section.blankCandidate.text) === normalizeBlankWord(keywordEntries[0].token.value)
+                ? keywordEntries[0]
+                : null;
 
         return (
             <View
@@ -1778,6 +1790,7 @@ type RenderTokenEntry = {
 type PageRenderSection = {
     key: string;
     block?: LayoutBlock;
+    blankCandidate?: BlankCandidate;
     tokenEntries: RenderTokenEntry[];
 };
 type PageRenderPage = {

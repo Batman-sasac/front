@@ -1235,13 +1235,8 @@ export default function App() {
                     handledCompletion: true,
                   };
                 }
-                const keywordSet = new Set(keywords);
                 const pages = scaffoldingPayload.pages && scaffoldingPayload.pages.length > 0
                   ? scaffoldingPayload.pages
-                    .map((page) => ({
-                      ...page,
-                      keywords: (page.keywords ?? []).filter((word) => keywordSet.has(word)),
-                    }))
                   : [{ original_text: scaffoldingPayload.extractedText, keywords }];
                 const rawText = pages.map((p) => p.original_text ?? '').join('\n\n');
 
