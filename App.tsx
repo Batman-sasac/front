@@ -26,7 +26,7 @@ import RewardScreen, { RewardType } from './src/screens/reward/Reward';
 import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy, OcrProgressMessage } from './src/api/ocr';
+import { runOcr, ScaffoldingPayload, PageItem, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy, OcrProgressMessage } from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
@@ -81,7 +81,7 @@ export default function App() {
   const [batchEarnedXp, setBatchEarnedXp] = useState(0);
   const batchEarnedXpRef = useRef(0);
   type PendingGradePart = {
-    pages: { original_text: string; keywords: string[] }[];
+    pages: PageItem[];
     blankItems: { blank_index: number; word: string; page_index: number }[];
     keywords: string[];
     userAnswers: string[];
@@ -1235,13 +1235,8 @@ export default function App() {
                     handledCompletion: true,
                   };
                 }
-                const keywordSet = new Set(keywords);
                 const pages = scaffoldingPayload.pages && scaffoldingPayload.pages.length > 0
                   ? scaffoldingPayload.pages
-                    .map((page) => ({
-                      ...page,
-                      keywords: (page.keywords ?? []).filter((word) => keywordSet.has(word)),
-                    }))
                   : [{ original_text: scaffoldingPayload.extractedText, keywords }];
                 const rawText = pages.map((p) => p.original_text ?? '').join('\n\n');
 
@@ -1277,7 +1272,7 @@ export default function App() {
                 const mergedParts: Record<number, PendingGradePart> = {
                   ...pendingGradePartsRef.current,
                 };
-                const mergedPages: { original_text: string; keywords: string[] }[] = [];
+                const mergedPages: PageItem[] = [];
                 const mergedBlanks: { blank_index: number; word: string; page_index: number }[] = [];
                 const mergedKeywords: string[] = [];
                 const mergedUserAnswers: string[] = [];

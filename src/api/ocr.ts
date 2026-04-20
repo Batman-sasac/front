@@ -10,12 +10,34 @@ export type OcrTableBlock = {
     rows: string[][];
 };
 
+export type LayoutBlock = {
+    text: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+export type BlankCandidate = {
+    id: string;
+    text: string;
+    page_index: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
 // ocr_app.py의 /ocr/save 스펙: 페이지, 빈칸, 사용자 답변 모두 JSON
 export type PageItem = {
     original_text: string;
     keywords: string[];
     /** General OCR 표 인식 결과; 없으면 생략 */
     tables?: OcrTableBlock[];
+    /** OCR 레이아웃 블록; 없으면 생략 */
+    layout_blocks?: LayoutBlock[];
+    /** OCR 빈칸 후보 박스; 없으면 생략 */
+    blank_candidates?: BlankCandidate[];
 };
 
 export type BlankItemSave = {
@@ -30,6 +52,9 @@ export type ScaffoldingPayload = {
     blanks: BlankItem[];
     pages?: PageItem[];
     blankItems?: BlankItemSave[];
+    layoutMeta?: Record<string, unknown>;
+    imageUrl?: string | null;
+    user_answers?: string[];
 };
 
 export type OcrResponse =
@@ -88,6 +113,117 @@ function normalizeOcrTables(raw: unknown): OcrTableBlock[] | undefined {
         }
     }
     return out.length > 0 ? out : undefined;
+}
+
+function normalizeLayoutBlocks(raw: unknown): LayoutBlock[] | undefined {
+    if (!Array.isArray(raw) || raw.length === 0) return undefined;
+
+    const out: LayoutBlock[] = [];
+    for (const block of raw) {
+        if (!block || typeof block !== 'object') continue;
+        const candidate = block as {
+            text?: unknown;
+            x?: unknown;
+            y?: unknown;
+            width?: unknown;
+            height?: unknown;
+        };
+        const text = String(candidate.text ?? '').trim();
+        const x = Number(candidate.x);
+        const y = Number(candidate.y);
+        const width = Number(candidate.width);
+        const height = Number(candidate.height);
+
+        if (!text) continue;
+        if (
+            !Number.isFinite(x)
+            || !Number.isFinite(y)
+            || !Number.isFinite(width)
+            || !Number.isFinite(height)
+        ) {
+            continue;
+        }
+
+        out.push({
+            text,
+            x,
+            y,
+            width,
+            height,
+        });
+    }
+
+    return out.length > 0 ? out : undefined;
+}
+
+function normalizeBlankCandidates(raw: unknown): BlankCandidate[] | undefined {
+    if (!Array.isArray(raw) || raw.length === 0) return undefined;
+
+    const out: BlankCandidate[] = [];
+    for (const candidate of raw) {
+        if (!candidate || typeof candidate !== 'object') continue;
+
+        const rawCandidate = candidate as {
+            id?: unknown;
+            text?: unknown;
+            page_index?: unknown;
+            x?: unknown;
+            y?: unknown;
+            width?: unknown;
+            height?: unknown;
+        };
+
+        const id = String(rawCandidate.id ?? '').trim();
+        const text = String(rawCandidate.text ?? '').trim();
+        const pageIndex = Number(rawCandidate.page_index);
+        const x = Number(rawCandidate.x);
+        const y = Number(rawCandidate.y);
+        const width = Number(rawCandidate.width);
+        const height = Number(rawCandidate.height);
+
+        if (!id || !text) continue;
+        if (
+            !Number.isFinite(pageIndex)
+            || !Number.isFinite(x)
+            || !Number.isFinite(y)
+            || !Number.isFinite(width)
+            || !Number.isFinite(height)
+        ) {
+            continue;
+        }
+
+        out.push({
+            id,
+            text,
+            page_index: pageIndex,
+            x,
+            y,
+            width,
+            height,
+        });
+    }
+
+    return out.length > 0 ? out : undefined;
+}
+
+function normalizePageItem(raw: {
+    original_text?: string;
+    keywords?: string[];
+    tables?: unknown;
+    layout_blocks?: unknown;
+    blank_candidates?: unknown;
+}): PageItem {
+    const normalizeKeyword = (value: unknown) => String(value ?? '').trim();
+
+    return {
+        original_text: raw?.original_text ?? '',
+        keywords: Array.isArray(raw?.keywords)
+            ? raw.keywords.map(normalizeKeyword).filter(Boolean)
+            : [],
+        tables: normalizeOcrTables(raw?.tables),
+        layout_blocks: normalizeLayoutBlocks(raw?.layout_blocks),
+        blank_candidates: normalizeBlankCandidates(raw?.blank_candidates),
+    };
 }
 
 export async function runOcr(
@@ -246,27 +382,31 @@ export async function runOcr(
         let pages: PageItem[] = [];
         let originalText: string;
         let blankItems: BlankItemSave[] = [];
-        const normalizeKeyword = (value: unknown) => String(value ?? '').trim();
 
         // 백엔드가 pages 배열 반환 (PDF/다중 이미지)
         if (Array.isArray(inner.pages) && inner.pages.length > 0) {
-            pages = inner.pages.map(
-                (p: { original_text?: string; keywords?: string[]; tables?: unknown }) => ({
-                    original_text: p?.original_text ?? '',
-                    keywords: Array.isArray(p?.keywords)
-                        ? p.keywords.map(normalizeKeyword).filter(Boolean)
-                        : [],
-                    tables: normalizeOcrTables(p?.tables),
-                }),
-            );
+            pages = inner.pages.map(normalizePageItem);
 
             originalText = pages
                 .map((p) => p.original_text ?? '')
                 .join('\n\n');
 
-            const kwSet = new Set<string>();
             for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
                 const page = pages[pageIndex];
+                const pageCandidates = page.blank_candidates ?? [];
+
+                if (pageCandidates.length > 0) {
+                    for (const candidate of pageCandidates) {
+                        blankItems.push({
+                            blank_index: blankItems.length,
+                            word: candidate.text,
+                            page_index: candidate.page_index ?? pageIndex,
+                        });
+                    }
+                    continue;
+                }
+
+                const kwSet = new Set<string>();
                 for (const word of page.keywords) {
                     if (kwSet.has(word)) continue;
                     kwSet.add(word);
@@ -281,7 +421,7 @@ export async function runOcr(
             // 하위 호환: 단일 original_text, keywords
             originalText = inner.original_text ?? '';
             const rawKeywords = Array.isArray(inner.keywords)
-                ? inner.keywords.map(normalizeKeyword).filter(Boolean)
+                ? inner.keywords.map((value: unknown) => String(value ?? '').trim()).filter(Boolean)
                 : [];
             const kwSet = new Set<string>();
             const keywords = rawKeywords.filter((word: string) => {
@@ -438,6 +578,9 @@ export type QuizForReviewResponse = {
         extractedText: string;
         blanks: BlankItem[];
         user_answers?: string[];
+        pages?: PageItem[];
+        layout_meta?: Record<string, unknown>;
+        image_url?: string | null;
     };
     message?: string;
 };
@@ -459,11 +602,23 @@ export async function getQuizForReview(quizId: number): Promise<ScaffoldingPaylo
     if (json.status !== 'success' || !json.data) throw new Error(json.message ?? '퀴즈를 불러올 수 없습니다.');
 
     const d = json.data;
+    const pages = Array.isArray(d.pages)
+        ? d.pages.map(normalizePageItem)
+        : undefined;
+
     return {
         title: d.title,
         extractedText: d.extractedText,
         blanks: d.blanks ?? [],
         user_answers: d.user_answers,
+        pages,
+        blankItems: (d.blanks ?? []).map((blank, index) => ({
+            blank_index: typeof blank.id === 'number' ? blank.id : index,
+            word: blank.word,
+            page_index: 0,
+        })),
+        layoutMeta: d.layout_meta,
+        imageUrl: d.image_url ?? null,
     };
 }
 
