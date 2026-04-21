@@ -14,9 +14,7 @@
     "production": {
       "autoIncrement": true,
       "env":{
-        "EXPO_PUBLIC_API_BASE_URL": "https://python-mlt6.onrender.com",
-        "EXPO_PUBLIC_KAKAO_REDIRECT_URI": "https://python-mlt6.onrender.com/auth/kakao/mobile",
-        "EXPO_PUBLIC_NAVER_REDIRECT_URI": "https://python-mlt6.onrender.com/auth/naver/mobile"
+        "EXPO_PUBLIC_API_BASE_URL": "https://python-mlt6.onrender.com"
       }
     }
   },
