@@ -17,6 +17,7 @@ import {
 import { scale, fontScale } from '../../lib/layout';
 import type {
     BlankCandidate,
+    BlankItemSave,
     LayoutBlock,
     OcrTableBlock,
     PageItem,
@@ -27,6 +28,7 @@ import {
     buildKeywordInstances,
     normalizeBlankWord,
 } from './scaffoldingLogic';
+import { tokenizeWithKeywords } from './tokenizeKeywords';
 import SpeechBubbleShell from '../../components/SpeechBubbleShell';
 
 const HINT_BUBBLE_WIDTH = scale(168);
@@ -184,6 +186,21 @@ export default function ScaffoldingScreen({
         }];
     }, [payload?.pages, extractedText, keywordList]);
 
+    const reviewBlankItems = useMemo<BlankItemSave[]>(
+        () => (isReviewMode ? (payload?.blankItems ?? []) : []),
+        [isReviewMode, payload?.blankItems],
+    );
+    const reviewBlankItemsByPage = useMemo(() => {
+        const map = new Map<number, BlankItemSave[]>();
+        reviewBlankItems.forEach((item) => {
+            const pageIndex = Number.isFinite(item.page_index) ? item.page_index : 0;
+            const existing = map.get(pageIndex) ?? [];
+            existing.push(item);
+            map.set(pageIndex, existing);
+        });
+        return map;
+    }, [reviewBlankItems]);
+
     const hasStructuredPages = useMemo(
         () => sourcePages.some(
             (page) => (page.layout_blocks?.length ?? 0) > 0 || (page.tables?.length ?? 0) > 0,
@@ -197,21 +214,27 @@ export default function ScaffoldingScreen({
         let nextTokenIndex = 0;
 
         return sourcePages.map((page, pageIndex) => {
-            const pageCandidates = !isReviewMode && (page.blank_candidates?.length ?? 0) > 0
-                ? page.blank_candidates ?? []
+            const allPageCandidates = page.blank_candidates ?? [];
+            const reviewPageBlankItems = reviewBlankItemsByPage.get(pageIndex) ?? [];
+            const pageCandidates = !isReviewMode && allPageCandidates.length > 0
+                ? allPageCandidates
                 : [];
-            const pageKeywords = pageCandidates.length > 0
-                ? pageCandidates.map((candidate) => candidate.text)
-                : (isReviewMode ? keywordList : (page.keywords?.length ? page.keywords : keywordList));
+            const pageKeywords = isReviewMode
+                ? reviewPageBlankItems.map((item) => item.word)
+                : pageCandidates.length > 0
+                    ? pageCandidates.map((candidate) => candidate.text)
+                    : (page.keywords?.length ? page.keywords : keywordList);
             const blankCandidateByText = new Map<string, BlankCandidate>(
-                pageCandidates.map((candidate) => [normalizeBlankWord(candidate.text), candidate] as const),
+                allPageCandidates.map((candidate) => [normalizeBlankWord(candidate.text), candidate] as const),
             );
             const sectionsSource = page.layout_blocks && page.layout_blocks.length > 0
                 ? page.layout_blocks.map((block, blockIndex) => ({
                     key: `page-${pageIndex}-block-${blockIndex}`,
                     block,
                     text: block.text ?? '',
-                    blankCandidate: blankCandidateByText.get(normalizeBlankWord(block.text ?? '')),
+                    blankCandidate:
+                        allPageCandidates[blockIndex]
+                        ?? blankCandidateByText.get(normalizeBlankWord(block.text ?? '')),
                 }))
                 : [{
                     key: `page-${pageIndex}-flow`,
@@ -230,6 +253,8 @@ export default function ScaffoldingScreen({
                     return {
                         key: `${section.key}-token-${nextTokenIndex}`,
                         globalIndex: nextTokenIndex++,
+                        pageIndex,
+                        candidateId: token.type === 'keyword' ? section.blankCandidate?.id : undefined,
                         token: renderToken,
                     };
                 });
@@ -249,7 +274,7 @@ export default function ScaffoldingScreen({
                 hasLayoutBlocks: (page.layout_blocks?.length ?? 0) > 0,
             };
         });
-    }, [sourcePages, keywordList]);
+    }, [sourcePages, keywordList, isReviewMode, reviewBlankItemsByPage]);
 
     const tokens = useMemo(
         () => pageRenderData.flatMap((page) => page.sections.flatMap((section) => section.tokenEntries.map((entry) => entry.token))),
@@ -263,6 +288,22 @@ export default function ScaffoldingScreen({
             base: instance.base ?? baseInfoByWord.get(instance.word) ?? null,
         }));
     }, [tokens, blankDefs, baseInfoByWord]);
+    const keywordOccurrenceOrder = useMemo(
+        () =>
+            pageRenderData.flatMap((page) =>
+                page.sections.flatMap((section) =>
+                    section.tokenEntries
+                        .filter((entry): entry is RenderTokenEntry & { token: KeywordTokenWithId } => entry.token.type === 'keyword')
+                        .map((entry) => ({
+                            instanceId: entry.token.instanceId,
+                            pageIndex: entry.pageIndex,
+                            candidateId: entry.candidateId,
+                            normalizedWord: normalizeBlankWord(entry.token.baseWord),
+                        })),
+                ),
+            ),
+        [pageRenderData],
+    );
 
     useEffect(() => {
         if (!isReviewMode || reviewInitRef.current) return;
@@ -271,11 +312,30 @@ export default function ScaffoldingScreen({
         const userAnswers = payload?.user_answers || [];
         let selected: number[] = [];
 
+        if (reviewBlankItems.length > 0) {
+            const remaining = [...keywordOccurrenceOrder];
+            selected = reviewBlankItems
+                .map((item) => {
+                    const normalizedWord = normalizeBlankWord(item.word);
+                    const matchIndex = remaining.findIndex((occurrence) => {
+                        if (occurrence.pageIndex !== item.page_index) return false;
+                        if (item.candidate_id && occurrence.candidateId) {
+                            return occurrence.candidateId === item.candidate_id;
+                        }
+                        return occurrence.normalizedWord === normalizedWord;
+                    });
+                    if (matchIndex < 0) return null;
+                    const [matched] = remaining.splice(matchIndex, 1);
+                    return matched.instanceId;
+                })
+                .filter((instanceId): instanceId is number => typeof instanceId === 'number');
+        }
+
         // 1) 저장된 빈칸 정의를 최우선으로 사용
         const savedBlankIdSet = new Set(
             (payload?.blanks ?? []).map((b, idx) => (typeof b.id === 'number' ? b.id : idx))
         );
-        if (savedBlankIdSet.size > 0) {
+        if (selected.length === 0 && savedBlankIdSet.size > 0) {
             selected = keywordInstances
                 .filter((ki) => savedBlankIdSet.has(ki.blankId))
                 .map((ki) => ki.instanceId);
@@ -293,12 +353,6 @@ export default function ScaffoldingScreen({
         const targetCount = Math.min(20, keywordInstances.length);
         if (selected.length === 0) {
             selected = keywordInstances.slice(0, targetCount).map((ki) => ki.instanceId);
-        } else if (selected.length < targetCount) {
-            const selectedSet = new Set(selected);
-            const remain = keywordInstances
-                .map((ki) => ki.instanceId)
-                .filter((id) => !selectedSet.has(id));
-            selected = [...selected, ...remain.slice(0, targetCount - selected.length)];
         } else if (selected.length > targetCount) {
             selected = selected.slice(0, targetCount);
         }
@@ -313,7 +367,7 @@ export default function ScaffoldingScreen({
         });
         selectionSeqRef.current = selected.length;
         reviewInitRef.current = true;
-    }, [isReviewMode, keywordInstances, payload?.blanks, payload?.user_answers]);
+    }, [isReviewMode, keywordInstances, keywordOccurrenceOrder, payload?.blanks, payload?.user_answers, reviewBlankItems]);
 
     useEffect(() => {
         if (!pendingSelection) return;
@@ -1785,6 +1839,8 @@ type RenderToken = TextToken | SpaceToken | NewlineToken | KeywordTokenWithId;
 type RenderTokenEntry = {
     key: string;
     globalIndex: number;
+    pageIndex: number;
+    candidateId?: string;
     token: RenderToken;
 };
 type PageRenderSection = {
@@ -1805,105 +1861,6 @@ type PageRenderPage = {
  * OCR 단어 중간에 공백이 끼는 경우("연 구")를 매칭하기 위해 텍스트의 공백을 건너뛰며 비교.
  * 반환: 매칭 시 원문 기준 길이(공백 포함), 아니면 0.
  */
-function matchKeywordAllowingSpaces(
-    text: string,
-    textLower: string,
-    pos: number,
-    keyword: string
-): number {
-    const kwLower = keyword.toLowerCase();
-    let ti = pos;
-    let ki = 0;
-    while (ki < kwLower.length && ti < text.length) {
-        if (kwLower[ki] === ' ' || kwLower[ki] === '\t') {
-            ki++;
-            continue;
-        }
-        if (text[ti] === ' ' || text[ti] === '\t') {
-            ti++;
-            continue;
-        }
-        if (textLower[ti] !== kwLower[ki]) return 0;
-        ti++;
-        ki++;
-    }
-    while (ki < kwLower.length && (kwLower[ki] === ' ' || kwLower[ki] === '\t')) {
-        ki++;
-    }
-    return ki === kwLower.length ? ti - pos : 0;
-}
-
-function tokenizeWithKeywords(text: string, keywords: string[]): Token[] {
-    const normalized = [...keywords]
-        .map((k) => (k && typeof k === 'string' ? k.trim() : ''))
-        .filter(Boolean);
-    const sorted = [...normalized].sort((a, b) => b.length - a.length);
-    const textLower = text.toLowerCase();
-    const out: Token[] = [];
-    const occMap = new Map<string, number>();
-    let i = 0;
-
-    while (i < text.length) {
-        const ch = text[i];
-
-        if (ch === '\n') {
-            out.push({ type: 'newline', value: '\n' });
-            i += 1;
-            continue;
-        }
-
-        if (ch === ' ' || ch === '\t') {
-            let j = i;
-            while (j < text.length && (text[j] === ' ' || text[j] === '\t')) j++;
-            out.push({ type: 'space', value: text.slice(i, j) });
-            i = j;
-            continue;
-        }
-
-        let matched: string | null = null;
-        let matchedLen = 0;
-        for (const kw of sorted) {
-            if (!kw) continue;
-            const len = matchKeywordAllowingSpaces(text, textLower, i, kw);
-            if (len > 0) {
-                matched = kw;
-                matchedLen = len;
-                break;
-            }
-        }
-
-        if (matched !== null && matchedLen > 0) {
-            const sliceFromText = text.slice(i, i + matchedLen);
-            const prev = occMap.get(matched) ?? 0;
-            const nextOcc = prev + 1;
-            occMap.set(matched, nextOcc);
-            out.push({ type: 'keyword', value: sliceFromText, occ: nextOcc, baseWord: matched });
-            i += matchedLen;
-            continue;
-        }
-
-        let j = i + 1;
-        while (j < text.length) {
-            if (text[j] === '\n' || text[j] === ' ' || text[j] === '\t') break;
-
-            let willBreak = false;
-            for (const kw of sorted) {
-                if (kw && matchKeywordAllowingSpaces(text, textLower, j, kw) > 0) {
-                    willBreak = true;
-                    break;
-                }
-            }
-            if (willBreak) break;
-            j++;
-        }
-
-        out.push({ type: 'text', value: text.slice(i, j) });
-        i = j;
-    }
-
-    return out;
-}
-
 function normalize(s: string) {
     return normalizeBlankWord(s);
 }

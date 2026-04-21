@@ -8,6 +8,7 @@ export type BlankItemSave = {
     blank_index: number;
     word: string;
     page_index: number;
+    candidate_id?: string;
 };
 
 export type KeywordTokenWithId = {
@@ -70,6 +71,14 @@ export function buildOrderedStudySaveData(params: {
     blanks: BlankItem[];
     rawBlankItems: BlankItemSave[];
 }) {
+    type OrderedEntry = {
+        blank_index: number;
+        blankId: number;
+        word: string;
+        page_index: number;
+        candidate_id: string | undefined;
+    };
+
     const { selectedBlankIds, blanks, rawBlankItems } = params;
     const blankById = new Map(blanks.map((blank) => [blank.id, blank] as const));
     const blankItemById = new Map(rawBlankItems.map((item) => [item.blank_index, item] as const));
@@ -85,25 +94,18 @@ export function buildOrderedStudySaveData(params: {
                 blankId,
                 word: item?.word ?? blank?.word ?? '',
                 page_index: item?.page_index ?? 0,
+                candidate_id: item?.candidate_id,
             };
         })
-        .filter(
-            (
-                entry,
-            ): entry is {
-                blank_index: number;
-                blankId: number;
-                word: string;
-                page_index: number;
-            } => entry != null,
-        );
+        .filter((entry): entry is OrderedEntry => entry != null);
 
     return {
         keywords: orderedEntries.map((entry) => entry.word),
-        blankItems: orderedEntries.map(({ blank_index, word, page_index }) => ({
+        blankItems: orderedEntries.map(({ blank_index, word, page_index, candidate_id }) => ({
             blank_index,
             word,
             page_index,
+            ...(candidate_id ? { candidate_id } : {}),
         })),
     };
 }
