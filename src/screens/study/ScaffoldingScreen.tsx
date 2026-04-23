@@ -200,9 +200,9 @@ export default function ScaffoldingScreen({
             const pageCandidates = !isReviewMode && (page.blank_candidates?.length ?? 0) > 0
                 ? page.blank_candidates ?? []
                 : [];
-            const pageKeywords = pageCandidates.length > 0
-                ? pageCandidates.map((candidate) => candidate.text)
-                : (isReviewMode ? keywordList : (page.keywords?.length ? page.keywords : keywordList));
+            const pageKeywords = isReviewMode
+                ? keywordList
+                : pageCandidates.map((candidate) => candidate.text);
             const blankCandidateByText = new Map<string, BlankCandidate>(
                 pageCandidates.map((candidate) => [normalizeBlankWord(candidate.text), candidate] as const),
             );
