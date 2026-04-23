@@ -488,18 +488,6 @@ export async function runOcr(
                             candidate_id: candidate.id,
                         });
                     }
-                    continue;
-                }
-
-                const kwSet = new Set<string>();
-                for (const word of page.keywords) {
-                    if (kwSet.has(word)) continue;
-                    kwSet.add(word);
-                    blankItems.push({
-                        blank_index: blankItems.length,
-                        word,
-                        page_index: pageIndex,
-                    });
                 }
             }
         } else {
@@ -515,11 +503,7 @@ export async function runOcr(
                 return true;
             });
             pages = [{ original_text: originalText, keywords }];
-            blankItems = keywords.map((word: string, idx: number) => ({
-                blank_index: idx,
-                word,
-                page_index: 0,
-            }));
+            blankItems = [];
         }
 
         const blanks = blankItems.map((blank) => ({
