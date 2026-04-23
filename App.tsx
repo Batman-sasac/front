@@ -26,7 +26,7 @@ import RewardScreen, { RewardType } from './src/screens/reward/Reward';
 import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, PageItem, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy, OcrProgressMessage } from './src/api/ocr';
+import { runOcr, ScaffoldingPayload, PageItem, BlankItemSave, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy, OcrProgressMessage } from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
 import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
@@ -82,7 +82,7 @@ export default function App() {
   const batchEarnedXpRef = useRef(0);
   type PendingGradePart = {
     pages: PageItem[];
-    blankItems: { blank_index: number; word: string; page_index: number }[];
+    blankItems: BlankItemSave[];
     keywords: string[];
     userAnswers: string[];
     correctCount: number;
@@ -1196,7 +1196,7 @@ export default function App() {
                   blanks,
                   rawBlankItems,
                 });
-                if (keywords.length === 0) {
+                if (keywords.length === 0 && !isReviewMode) {
                   throw new Error('선택된 빈칸 정보가 없습니다.');
                 }
 
@@ -1208,10 +1208,19 @@ export default function App() {
 
                 // 복습 모드에서는 저장하지 않음
                 if (isReviewMode) {
-                  setExp((prev) => prev + reviewEarnedXp);
+                  const exactReviewAnswerWords = rawBlankItems.length > 0
+                    ? rawBlankItems.map((item) => item.word)
+                    : blanks.map((blank) => blank.word);
+                  const exactReviewCorrectCount = userAnswers.reduce((acc, ua, idx) => {
+                    const isCorrect = (ua ?? '').trim().toLowerCase() === (exactReviewAnswerWords[idx] ?? '').trim().toLowerCase();
+                    return acc + (isCorrect ? 1 : 0);
+                  }, 0);
+                  const exactReviewEarnedXp = exactReviewCorrectCount * 2;
+
+                  setExp((prev) => prev + exactReviewEarnedXp);
                   setIsReviewMode(false);
                   setReviewQuizId(null);
-                  showRewardScreen('reviewComplete', reviewEarnedXp, () => setStep('home'));
+                  showRewardScreen('reviewComplete', exactReviewEarnedXp, () => setStep('home'));
 
                   if (reviewQuizId != null) {
                     void submitReviewStudy({
@@ -1230,8 +1239,8 @@ export default function App() {
                       });
                   }
                   return {
-                    earnedXp: reviewEarnedXp,
-                    totalEarnedXp: reviewEarnedXp,
+                    earnedXp: exactReviewEarnedXp,
+                    totalEarnedXp: exactReviewEarnedXp,
                     handledCompletion: true,
                   };
                 }
@@ -1273,7 +1282,7 @@ export default function App() {
                   ...pendingGradePartsRef.current,
                 };
                 const mergedPages: PageItem[] = [];
-                const mergedBlanks: { blank_index: number; word: string; page_index: number }[] = [];
+                const mergedBlanks: BlankItemSave[] = [];
                 const mergedKeywords: string[] = [];
                 const mergedUserAnswers: string[] = [];
                 let pageOffset = 0;
@@ -1295,6 +1304,7 @@ export default function App() {
                       blank_index: blankOffset + b,
                       word: bi.word,
                       page_index: pageOffset + (bi.page_index ?? 0),
+                      ...(bi.candidate_id ? { candidate_id: bi.candidate_id } : {}),
                     });
                   }
 
@@ -1311,6 +1321,14 @@ export default function App() {
                   pages: mergedPages,
                   blanks: mergedBlanks,
                   quiz: { raw: mergedRawText },
+                  layout_meta: {
+                    selected_blank_refs: mergedBlanks.map((blank) => ({
+                      blank_index: blank.blank_index,
+                      word: blank.word,
+                      page_index: blank.page_index,
+                      ...(blank.candidate_id ? { candidate_id: blank.candidate_id } : {}),
+                    })),
+                  },
                 };
 
                 // 페이지별 문항/정답 집계 (mergedBlanks.page_index 기준)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Modal, ActivityIndicator } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
@@ -36,12 +36,12 @@ type Props = {
 
 const SUBJECTS: Subject[] = [
     { id: 'all', icon: '📚', name: '전체', emoji: '📚' },
-    { id: 'korean', icon: '📝', name: '국어', emoji: '📝' },
+    { id: 'korean', icon: '📖', name: '국어', emoji: '📖' },
     { id: 'english', icon: 'abc', name: '영어', emoji: 'abc' },
-    { id: 'math', icon: '📐', name: '수학', emoji: '📐' },
+    { id: 'math', icon: '🧮', name: '수학', emoji: '🧮' },
     { id: 'science', icon: '🔬', name: '과학', emoji: '🔬' },
     { id: 'society', icon: '🌍', name: '사회', emoji: '🌍' },
-    { id: 'history', icon: '🏛️', name: '역사', emoji: '🏛️' },
+    { id: 'history', icon: '🏺', name: '역사', emoji: '🏺' },
     { id: 'law', icon: '⚖️', name: '법', emoji: '⚖️' },
 ];
 
@@ -82,7 +82,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
             if (data.data && Array.isArray(data.data)) {
                 // OCR 데이터를 카드 형식으로 변환
                 const cardList: Card[] = data.data.map((item: any) => {
-                    // 날짜 계산
+                    // 경과 일수 계산
                     const created = new Date(item.created_at);
                     const now = new Date();
                     const daysAgo = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
@@ -107,7 +107,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                 setHasMore(false);
             }
         } catch (error) {
-            console.error('카드 로드 에러:', error);
+            console.error('카드 로드 오류:', error);
             if (reset) setCards([]);
             setHasMore(false);
         } finally {
@@ -165,7 +165,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                 alert('삭제에 실패했습니다.');
             }
         } catch (error) {
-            console.error('삭제 에러:', error);
+            console.error('삭제 오류:', error);
             alert('삭제 중 오류가 발생했습니다.');
         }
     };
@@ -232,7 +232,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
 
                     {/* 검색 바 */}
                     <View style={styles.searchBar}>
-                        <Text style={styles.searchBarPlaceholder}>검색어를 입력하세요..</Text>
+                        <Text style={styles.searchBarPlaceholder}>검색어를 입력하세요.</Text>
                         <Pressable
                             style={styles.searchButton}
                             onPress={() => setSearchModalVisible(true)}
@@ -251,7 +251,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                     {loading ? (
                         <View style={styles.loadingContainer}>
                             <ActivityIndicator size="large" color="#5E82FF" />
-                            <Text style={styles.loadingText}>복습 카드를 불러오는 중..</Text>
+                            <Text style={styles.loadingText}>복습 카드를 불러오는 중.</Text>
                         </View>
                     ) : filteredCards.length === 0 ? (
                         <View style={styles.emptyContainer}>
@@ -273,7 +273,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                                         onPressIn={() => setSuppressCardPress(true)}
                                         onPress={() => handleDeletePress(card)}
                                     >
-                                        <Text style={styles.closeText}>×</Text>
+                                        <Text style={styles.closeText}>횞</Text>
                                     </Pressable>
 
                                     {/* 카드 클릭 영역 */}
@@ -294,7 +294,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                                         {/* 설명 */}
                                         <Text style={styles.cardDesc} numberOfLines={2}>{card.description}</Text>
 
-                                        {/* 기간 */}
+                                        {/* 경과 기간 */}
                                         <View style={styles.cardFooter}>
                                             <Text ></Text>
                                             <Text style={styles.cardDays}>{card.daysAgo}일 전</Text>
@@ -336,7 +336,7 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>정말 삭제하시겠어요?</Text>
                         <Text style={styles.modalMessage}>
-                            삭제된 기록은 복구할 수 없어요.{'\n'}그래도 삭제할까요?
+                            삭제한 기록은 복구할 수 없어요.{'\n'}그래도 삭제할까요?
                         </Text>
 
                         <View style={styles.modalButtons}>
@@ -369,13 +369,13 @@ export default function BrushUPScreen({ onBack, onCardPress, onNavigate, onLogou
                         <View style={styles.searchModalHeader}>
                             <Text style={styles.searchModalTitle}>카드 검색</Text>
                             <Pressable onPress={() => setSearchModalVisible(false)}>
-                                <Text style={styles.searchModalClose}>×</Text>
+                                <Text style={styles.searchModalClose}>횞</Text>
                             </Pressable>
                         </View>
 
                         <View style={styles.searchInputContainer}>
-                            <Text style={styles.searchIcon}>🔍</Text>
-                            <Text style={styles.searchPlaceholder}>검색어를 입력하세요..</Text>
+                            <Text style={styles.searchIcon}>🔎</Text>
+                            <Text style={styles.searchPlaceholder}>검색어를 입력하세요.</Text>
                         </View>
 
                         <Text style={styles.searchHint}>제목, 과목명, 설명에서 검색할 수 있어요.</Text>
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
         marginTop: scale(10),
         marginBottom: scale(24),
     },
-    // ?곷떒 ?ㅻ뜑 移대뱶
+    // 상단 카드 컨테이너
     headerCard: {
         backgroundColor: '#FFFFFF',
         marginHorizontal: scale(20),
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
         color: '#111827',
         marginBottom: scale(20),
     },
-    // 寃??諛?
+    // 검색 바
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
         height: scale(24),
         tintColor: '#FFFFFF',
     },
-    // 濡쒕뵫 諛?鍮??곹깭
+    // 로딩 상태
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
         color: '#9CA3AF',
         textAlign: 'center',
     },
-    // ?곷떒 移대뱶 ?ㅽ???(?ъ슜 ???? ?쒓굅 媛??
+    // 상단 카드 스크롤 영역
     topCardsScroll: {
         paddingHorizontal: scale(24),
         paddingBottom: scale(20),
@@ -549,7 +549,7 @@ const styles = StyleSheet.create({
     topCardCountActive: {
         color: '#5E82FF',
     },
-    // 湲곗〈 怨쇰ぉ ?꾪꽣
+    // 과목 필터 스크롤
     subjectScroll: {
         paddingBottom: scale(4),
         gap: scale(10),
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
         color: '#5E82FF',
         fontWeight: '700',
     },
-    // 移대뱶 紐⑸줉 (??以꾩뿉 2媛쒖뵫)
+    // 카드 목록 레이아웃 (2열 그리드)
     cardList: {
         paddingHorizontal: scale(20),
         paddingTop: scale(4),
