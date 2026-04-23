@@ -13,8 +13,8 @@
     },
     "production": {
       "autoIncrement": true,
-      "env":{
-        "EXPO_PUBLIC_API_BASE_URL": "http://54.206.80.239:8000"
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://54.180.79.16:8080"
       }
     }
   },
