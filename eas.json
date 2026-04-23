@@ -14,7 +14,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://54.180.79.16:8080"
+        "EXPO_PUBLIC_API_BASE_URL": "http://54.180.79.16:8000"
       }
     }
   },
