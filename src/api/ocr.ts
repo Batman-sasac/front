@@ -44,6 +44,7 @@ export type BlankItemSave = {
     blank_index: number;
     word: string;
     page_index: number;
+    candidate_id?: string;
 };
 
 export type ScaffoldingPayload = {
@@ -226,6 +227,89 @@ function normalizePageItem(raw: {
     };
 }
 
+function normalizeReviewWord(value: unknown) {
+    return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function normalizeStoredBlankItem(raw: unknown, fallbackIndex: number): BlankItemSave | null {
+    if (!raw || typeof raw !== 'object') return null;
+
+    const item = raw as {
+        blank_index?: unknown;
+        word?: unknown;
+        page_index?: unknown;
+        candidate_id?: unknown;
+    };
+
+    const word = String(item.word ?? '').trim();
+    if (!word) return null;
+
+    const blankIndexRaw = Number(item.blank_index);
+    const pageIndexRaw = Number(item.page_index);
+    const candidateId = String(item.candidate_id ?? '').trim();
+
+    return {
+        blank_index: Number.isFinite(blankIndexRaw) ? blankIndexRaw : fallbackIndex,
+        word,
+        page_index: Number.isFinite(pageIndexRaw) ? pageIndexRaw : 0,
+        ...(candidateId ? { candidate_id: candidateId } : {}),
+    };
+}
+
+function buildFallbackReviewBlankItems(blanks: BlankItem[], pages?: PageItem[]): BlankItemSave[] {
+    const candidatePool: Array<{ word: string; page_index: number; candidate_id?: string }> = [];
+
+    (pages ?? []).forEach((page, pageIndex) => {
+        const pageCandidates = page.blank_candidates ?? [];
+        if (pageCandidates.length > 0) {
+            pageCandidates.forEach((candidate) => {
+                candidatePool.push({
+                    word: candidate.text,
+                    page_index: candidate.page_index ?? pageIndex,
+                    candidate_id: candidate.id,
+                });
+            });
+            return;
+        }
+
+        page.keywords.forEach((word) => {
+            candidatePool.push({
+                word,
+                page_index: pageIndex,
+            });
+        });
+    });
+
+    const usedCandidateIndexes = new Set<number>();
+
+    return blanks.map((blank, index) => {
+        const blankIndex = typeof blank.id === 'number' ? blank.id : index;
+        const normalizedWord = normalizeReviewWord(blank.word);
+        const matchedCandidateIndex = candidatePool.findIndex(
+            (candidate, candidateIndex) =>
+                !usedCandidateIndexes.has(candidateIndex)
+                && normalizeReviewWord(candidate.word) === normalizedWord,
+        );
+
+        if (matchedCandidateIndex >= 0) {
+            usedCandidateIndexes.add(matchedCandidateIndex);
+            const matchedCandidate = candidatePool[matchedCandidateIndex];
+            return {
+                blank_index: blankIndex,
+                word: matchedCandidate.word || blank.word,
+                page_index: matchedCandidate.page_index,
+                ...(matchedCandidate.candidate_id ? { candidate_id: matchedCandidate.candidate_id } : {}),
+            };
+        }
+
+        return {
+            blank_index: blankIndex,
+            word: blank.word,
+            page_index: 0,
+        };
+    });
+}
+
 export async function runOcr(
     fileUri: string,
     cropInfo?: { px: number; py: number; pw: number; ph: number },
@@ -401,6 +485,7 @@ export async function runOcr(
                             blank_index: blankItems.length,
                             word: candidate.text,
                             page_index: candidate.page_index ?? pageIndex,
+                            candidate_id: candidate.id,
                         });
                     }
                 }
@@ -509,6 +594,7 @@ export type GradeStudyRequest = {
         pages: PageItem[];
         blanks: BlankItemSave[];
         quiz: { raw: string };
+        layout_meta?: Record<string, unknown>;
     };
     /** 페이지별 정답 수 (pages index 기준) */
     page_correct_counts?: number[];
@@ -589,6 +675,15 @@ export async function getQuizForReview(quizId: number): Promise<ScaffoldingPaylo
     const pages = Array.isArray(d.pages)
         ? d.pages.map(normalizePageItem)
         : undefined;
+    const rawSelectedBlankRefs = Array.isArray((d.layout_meta as { selected_blank_refs?: unknown } | undefined)?.selected_blank_refs)
+        ? ((d.layout_meta as { selected_blank_refs?: unknown[] }).selected_blank_refs ?? [])
+        : [];
+    const normalizedSelectedBlankRefs = rawSelectedBlankRefs
+        .map((item, index) => normalizeStoredBlankItem(item, index))
+        .filter((item): item is BlankItemSave => item != null);
+    const blankItems = normalizedSelectedBlankRefs.length > 0
+        ? normalizedSelectedBlankRefs
+        : buildFallbackReviewBlankItems(d.blanks ?? [], pages);
 
     return {
         title: d.title,
@@ -596,11 +691,7 @@ export async function getQuizForReview(quizId: number): Promise<ScaffoldingPaylo
         blanks: d.blanks ?? [],
         user_answers: d.user_answers,
         pages,
-        blankItems: (d.blanks ?? []).map((blank, index) => ({
-            blank_index: typeof blank.id === 'number' ? blank.id : index,
-            word: blank.word,
-            page_index: 0,
-        })),
+        blankItems,
         layoutMeta: d.layout_meta,
         imageUrl: d.image_url ?? null,
     };

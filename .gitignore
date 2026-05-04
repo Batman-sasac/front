@@ -47,7 +47,7 @@ yarn-error.*
 build-*.ipa
 build-*.apk
 *.ipa
-*.apk 
+*.apk
 
 .env
 

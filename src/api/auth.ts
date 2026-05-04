@@ -1,12 +1,35 @@
-import config from '../lib/config';
+﻿import config from '../lib/config';
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
 
-// API Base URL - 실제 백엔드 서버 주소
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 const ENV_KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY ?? '';
 const ENV_NAVER_CLIENT_ID = process.env.EXPO_PUBLIC_NAVER_CLIENT_ID ?? '';
 const ENV_KAKAO_REDIRECT_URI = process.env.EXPO_PUBLIC_KAKAO_REDIRECT_URI ?? '';
 const ENV_NAVER_REDIRECT_URI = process.env.EXPO_PUBLIC_NAVER_REDIRECT_URI ?? '';
+const DEFAULT_KAKAO_REDIRECT_URI = `${API_BASE_URL}/auth/kakao/mobile`;
+const DEFAULT_NAVER_REDIRECT_URI = `${API_BASE_URL}/auth/naver/mobile`;
+const APPLE_BUNDLE_ID_HINT = 'com.batman.bat';
+
+function buildAuthErrorMessage(params: {
+    error: Record<string, unknown>;
+    fallback: string;
+    provider: 'kakao' | 'naver' | 'apple';
+}) {
+    const { error, fallback, provider } = params;
+    const errorMessage = String(error.error ?? fallback);
+    const detail = String(error.detail ?? error.details ?? '').trim();
+    const baseMessage = detail ? `${errorMessage}: ${detail}` : errorMessage;
+
+    if (provider === 'kakao') {
+        return `${baseMessage}\nredirect_uri=${DEFAULT_KAKAO_REDIRECT_URI}\nRender KAKAO_REDIRECT_URI와 카카오 콘솔 Redirect URI를 같은 값으로 맞추세요.`;
+    }
+
+    if (provider === 'apple') {
+        return `${baseMessage}\nRender APPLE_BUNDLE_ID / APPLE_CLIENT_ID가 ${APPLE_BUNDLE_ID_HINT}와 같은지 확인하세요.`;
+    }
+
+    return baseMessage;
+}
 
 export interface LoginResponse {
     status: 'success' | 'nickname_required' | 'NICKNAME_REQUIRED';
@@ -44,14 +67,16 @@ export async function loginWithOAuth(
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        const msg = error.detail ? `${error.error || '로그인 실패'}: ${error.detail}` : (error.error || '로그인 실패');
-        throw new Error(msg);
+        throw new Error(buildAuthErrorMessage({
+            error,
+            fallback: '로그인 실패',
+            provider,
+        }));
     }
 
     return await response.json();
 }
 
-/** Apple Sign In: identity_token을 백엔드로 전송 */
 export async function loginWithApple(identityToken: string): Promise<LoginResponse> {
     const endpoint = `${API_BASE_URL}/auth/apple/mobile`;
     const response = await fetch(endpoint, {
@@ -62,8 +87,11 @@ export async function loginWithApple(identityToken: string): Promise<LoginRespon
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        const msg = error.detail ? `${error.error || '로그인 실패'}: ${error.detail}` : (error.error || '로그인 실패');
-        throw new Error(msg);
+        throw new Error(buildAuthErrorMessage({
+            error,
+            fallback: '로그인 실패',
+            provider: 'apple',
+        }));
     }
 
     return await response.json();
@@ -108,13 +136,6 @@ export interface OAuthConfig {
     naver_redirect_uri?: string;
 }
 
-/** /config API 응답 타입 */
-export interface OAuthConfig {
-    kakao_rest_api_key?: string;
-    kakao_redirect_uri?: string;
-    naver_client_id?: string;
-    naver_redirect_uri?: string;
-}
 
 /** 백엔드 /config에서 OAuth 설정 로드 */
 export async function fetchOAuthConfig(): Promise<OAuthConfig> {
@@ -129,15 +150,13 @@ export async function fetchOAuthConfig(): Promise<OAuthConfig> {
 export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
     let kakaoRestApiKey = ENV_KAKAO_REST_API_KEY;
     let naverClientId = ENV_NAVER_CLIENT_ID;
-    let kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || `${API_BASE_URL}/auth/kakao/mobile`;
-    let naverRedirectUri = ENV_NAVER_REDIRECT_URI || `${API_BASE_URL}/auth/naver/mobile`;
+    const kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || DEFAULT_KAKAO_REDIRECT_URI;
+    const naverRedirectUri = ENV_NAVER_REDIRECT_URI || DEFAULT_NAVER_REDIRECT_URI;
 
-    if (!kakaoRestApiKey || !naverClientId || !ENV_KAKAO_REDIRECT_URI || !ENV_NAVER_REDIRECT_URI) {
+    if (!kakaoRestApiKey || !naverClientId) {
         const serverConfig = await fetchOAuthConfig();
         kakaoRestApiKey = kakaoRestApiKey || serverConfig.kakao_rest_api_key || '';
         naverClientId = naverClientId || serverConfig.naver_client_id || '';
-        kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || serverConfig.kakao_redirect_uri || kakaoRedirectUri;
-        naverRedirectUri = ENV_NAVER_REDIRECT_URI || serverConfig.naver_redirect_uri || naverRedirectUri;
     }
 
     if (provider === 'kakao') {
@@ -205,7 +224,7 @@ export async function getUserInfo(token: string): Promise<{
 }
 
 /**
- * 외부 계정 연동
+ * 외부 계정 연결
  */
 export async function connectAccount(
     token: string,
@@ -221,18 +240,18 @@ export async function connectAccount(
     const result = await loginWithOAuth(provider, code);
 
     if (result.status !== 'success') {
-        throw new Error(result.message || '계정 연동 실패');
+        throw new Error(result.message || '계정 연결 실패');
     }
 
     return {
         status: 'success',
-        message: '계정이 연동되었습니다.',
+        message: '계정이 연결되었습니다.',
         connected_email: result.email,
     };
 }
 
 /**
- * 외부 계정 연동 해제
+ * 외부 계정 연결 해제
  */
 export async function disconnectAccount(
     token: string,
@@ -243,7 +262,7 @@ export async function disconnectAccount(
 }> {
     void token;
     void provider;
-    throw new Error('백엔드에서 연동 해제를 지원하지 않습니다.');
+    throw new Error('백엔드에서 계정 연결 해제를 지원하지 않습니다.');
 }
 
 /**
@@ -320,7 +339,7 @@ export async function getHomeStats(token: string): Promise<{
     });
 
     if (!res.ok) {
-        throw new Error(`홈 통계 조회 실패 (${res.status})`);
+        throw new Error(`홈 화면 통계 조회 실패 (${res.status})`);
     }
 
     const json = await res.json();

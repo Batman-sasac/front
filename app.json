@@ -20,8 +20,8 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSCameraUsageDescription": "이 앱은 학습 자료를 촬영하여 OCR로 텍스트를 인식하고 학습 콘텐츠를 생성하기 위해 카메라 접근 권한을 요청합니다. 예를 들어 사용자는 교재, 필기, 문제집 페이지를 촬영해 학습에 활용할 수 있습니다.",
-        "NSPhotoLibraryUsageDescription": "이 앱은 사진 보관함의 학습 자료 이미지를 선택하여 OCR로 텍스트를 인식하고 학습 콘텐츠를 생성하기 위해 사진 접근 권한을 요청합니다. 예를 들어 사용자는 교재, 필기, 문제집 이미지를 불러와 학습에 활용할 수 있습니다.",
+        "NSCameraUsageDescription": "학습 자료를 촬영해 OCR로 텍스트를 인식하고 학습 콘텐츠를 생성하기 위해 카메라 접근 권한을 요청합니다. 촬영한 이미지는 학습 자료 분석과 복습 생성에만 사용됩니다.",
+        "NSPhotoLibraryUsageDescription": "사진 보관함의 학습 자료 이미지를 선택해 OCR로 텍스트를 인식하고 학습 콘텐츠를 생성하기 위해 사진 접근 권한을 요청합니다. 선택한 이미지는 학습 자료 분석과 복습 생성에만 사용됩니다.",
         "UIBackgroundModes": [
           "fetch",
           "remote-notification"

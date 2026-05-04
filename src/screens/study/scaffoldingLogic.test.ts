@@ -27,6 +27,23 @@ describe('키워드 인스턴스 매핑', () => {
     });
 });
 
+test('candidate_id 값이 있으면 저장 데이터에 그대로 유지된다', () => {
+    const blanks: BlankItem[] = [{ id: 4, word: '핵심 문장' }];
+    const rawBlankItems: BlankItemSave[] = [
+        { blank_index: 4, word: '핵심 문장', page_index: 2, candidate_id: '2-7' },
+    ];
+
+    const result = buildOrderedStudySaveData({
+        selectedBlankIds: [4],
+        blanks,
+        rawBlankItems,
+    });
+
+    expect(result.blankItems).toEqual([
+        { blank_index: 0, word: '핵심 문장', page_index: 2, candidate_id: '2-7' },
+    ]);
+});
+
 describe('학습 저장 데이터 생성', () => {
     test('같은 blankId가 여러 번 선택되어도 3라운드 답안이 모두 채점되도록 유지되어야 함', () => {
         const blanks: BlankItem[] = [
