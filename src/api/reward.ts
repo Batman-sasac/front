@@ -7,6 +7,13 @@ export type RewardLeaderboardItem = {
     nickname: string;
 };
 
+export type MyRewardRankResponse = {
+    status: string;
+    rank: number | null;
+    total_reward: number;
+    message?: string;
+};
+
 export type AttendanceRewardResponse = {
     status: string;
     is_new_reward: boolean;
@@ -58,4 +65,30 @@ export async function getRewardLeaderboard(): Promise<{
     }
 
     return await response.json();
+}
+
+export async function getMyRewardRank(): Promise<MyRewardRankResponse> {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const response = await fetch(`${API_BASE_URL}/reward/my-rank`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
+    });
+
+    const json = await response.json().catch(() => ({}));
+
+    if (!response.ok || json.status === 'error') {
+        throw new Error(json.error || json.message || '내 리그 순위 조회 실패');
+    }
+
+    return {
+        status: json.status ?? 'success',
+        rank: Number.isFinite(Number(json.rank)) ? Number(json.rank) : null,
+        total_reward: Number(json.total_reward ?? 0),
+        message: json.message,
+    };
 }

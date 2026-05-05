@@ -28,7 +28,7 @@ import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
 import { runOcr, ScaffoldingPayload, PageItem, BlankItemSave, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy, OcrProgressMessage } from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
-import { checkAttendanceReward, getRewardLeaderboard } from './src/api/reward';
+import { checkAttendanceReward, getMyRewardRank, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 import { getHomeStats, getUserStats } from './src/api/auth';
@@ -70,6 +70,7 @@ export default function App() {
   const [typeLabel, setTypeLabel] = useState(''); // 학습 유형 라벨
   const [level, setLevel] = useState(1);
   const [exp, setExp] = useState(0);
+  const [myRewardRank, setMyRewardRank] = useState<number | null>(null);
   const [monthlyGoal, setMonthlyGoal] = useState<number | null>(null);
   const [streak, setStreak] = useState(0);                 // 연속 학습 일수
   const [lastAttendanceDate, setLastAttendanceDate] = useState<string | null>(null);
@@ -217,6 +218,21 @@ export default function App() {
       return users;
     } catch (error) {
       console.error('리그 데이터 로드 실패:', error);
+      return null;
+    }
+  };
+
+  const refreshMyRewardRank = async () => {
+    try {
+      const response = await getMyRewardRank();
+      if (response.status !== 'success') {
+        return null;
+      }
+
+      setMyRewardRank(response.rank);
+      return response.rank;
+    } catch (error) {
+      console.error('내 리그 순위 로드 실패:', error);
       return null;
     }
   };
@@ -442,12 +458,16 @@ export default function App() {
       (async () => {
         try {
           const token = await getToken();
-          const [weekly, monthly, homeStats] = await Promise.all([
+          const [weekly, monthly, homeStats, rank] = await Promise.all([
             getWeeklyGrowth(),
             getMonthlyStats(),
             token ? getHomeStats(token).catch(() => null) : Promise.resolve(null),
+            token ? getMyRewardRank().catch(() => null) : Promise.resolve(null),
           ]);
           setWeeklyGrowth(weekly);
+          if (rank?.status === 'success') {
+            setMyRewardRank(rank.rank);
+          }
           const compare = monthly.compare ?? {};
           setMonthlyStats({
             ...compare,
@@ -597,6 +617,7 @@ export default function App() {
       } else {
         setExp((prev) => prev + baseXP + streakXP + bonusXP);
       }
+      void refreshMyRewardRank();
       void refreshLeagueLeaderboard();
       showRewardScreen('attendance', baseXP, () => {
         if (streakXP > 0) {
@@ -914,6 +935,7 @@ export default function App() {
               weeklyGrowth={weeklyGrowth}
               monthlyStats={monthlyStats}
               monthlyGoal={monthlyGoal}
+              myRewardRank={myRewardRank}
               onNavigate={handleMainNavigate}
               onLogout={handleLogout}
             />
