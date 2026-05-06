@@ -71,6 +71,7 @@ export default function App() {
   const [level, setLevel] = useState(1);
   const [exp, setExp] = useState(0);
   const [myRewardRank, setMyRewardRank] = useState<number | null>(null);
+  const [myRewardTotal, setMyRewardTotal] = useState<number | null>(null);
   const [monthlyGoal, setMonthlyGoal] = useState<number | null>(null);
   const [streak, setStreak] = useState(0);                 // 연속 학습 일수
   const [lastAttendanceDate, setLastAttendanceDate] = useState<string | null>(null);
@@ -230,7 +231,8 @@ export default function App() {
       }
 
       setMyRewardRank(response.rank);
-      return response.rank;
+      setMyRewardTotal(response.total_reward);
+      return response;
     } catch (error) {
       console.error('내 리그 순위 로드 실패:', error);
       return null;
@@ -458,15 +460,24 @@ export default function App() {
       (async () => {
         try {
           const token = await getToken();
-          const [weekly, monthly, homeStats, rank] = await Promise.all([
+          const [weekly, monthly, homeStats, rank, leaderboard] = await Promise.all([
             getWeeklyGrowth(),
             getMonthlyStats(),
             token ? getHomeStats(token).catch(() => null) : Promise.resolve(null),
             token ? getMyRewardRank().catch(() => null) : Promise.resolve(null),
+            token ? getRewardLeaderboard().catch(() => null) : Promise.resolve(null),
           ]);
           setWeeklyGrowth(weekly);
           if (rank?.status === 'success') {
             setMyRewardRank(rank.rank);
+            setMyRewardTotal(rank.total_reward);
+          }
+          if (leaderboard?.status === 'success' && leaderboard.leaderboard) {
+            setLeagueUsers(leaderboard.leaderboard.map((item, idx) => ({
+              id: `user_${idx}`,
+              nickname: item.nickname,
+              xp: item.total_reward,
+            })));
           }
           const compare = monthly.compare ?? {};
           setMonthlyStats({
@@ -936,6 +947,8 @@ export default function App() {
               monthlyStats={monthlyStats}
               monthlyGoal={monthlyGoal}
               myRewardRank={myRewardRank}
+              myRewardTotal={myRewardTotal}
+              leagueUsers={leagueUsers}
               onNavigate={handleMainNavigate}
               onLogout={handleLogout}
             />
@@ -1254,7 +1267,10 @@ export default function App() {
                         if (Number.isFinite(nextPoints)) {
                           setExp(nextPoints);
                         }
-                        return refreshLeagueLeaderboard();
+                        return Promise.all([
+                          refreshMyRewardRank(),
+                          refreshLeagueLeaderboard(),
+                        ]);
                       })
                       .catch((error) => {
                         console.error('복습 결과 저장 실패:', error);
@@ -1397,7 +1413,10 @@ export default function App() {
                   setExp((prev) => prev + totalEarned);
                 }
                 if (totalEarned > 0) {
-                  void refreshLeagueLeaderboard();
+                  void Promise.all([
+                    refreshMyRewardRank(),
+                    refreshLeagueLeaderboard(),
+                  ]);
                   showRewardScreen('studyComplete', totalEarned, () => setStep('home'));
                 }
                 return {
