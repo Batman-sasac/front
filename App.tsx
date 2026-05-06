@@ -89,9 +89,14 @@ export default function App() {
     userAnswers: string[];
     correctCount: number;
   };
+  type PendingReviewPart = {
+    userAnswers: string[];
+    correctCount: number;
+  };
   // 멀티 이미지 학습 시: 페이지별 결과를 모았다가 마지막에 1번만 /study/grade 호출
   const [pendingGradeParts, setPendingGradeParts] = useState<Record<number, PendingGradePart>>({});
   const pendingGradePartsRef = useRef<Record<number, PendingGradePart>>({});
+  const pendingReviewPartsRef = useRef<Record<number, PendingReviewPart>>({});
   const [rewardScreenState, setRewardScreenState] = useState<{ type: RewardType; xp: number } | null>(null);
   const rewardCloseActionRef = useRef<(() => void) | null>(null);
   const [pushTokenSynced, setPushTokenSynced] = useState(false);
@@ -514,7 +519,13 @@ export default function App() {
     setScaffoldingError(null);
     getQuizForReview(reviewQuizId)
       .then((payload) => {
-        if (!cancelled) setScaffoldingPayload(payload);
+        if (!cancelled) {
+          const reviewPayloads = buildReviewPayloadsByPage(payload);
+          pendingReviewPartsRef.current = {};
+          setScaffoldingPayloads(reviewPayloads);
+          setSelectedSourceIndex(0);
+          setScaffoldingPayload(reviewPayloads[0] ?? payload);
+        }
       })
       .catch((e: any) => {
         if (!cancelled) {
@@ -670,6 +681,54 @@ export default function App() {
   const [scaffoldingPayloads, setScaffoldingPayloads] = useState<ScaffoldingPayload[]>([]);
   const [scaffoldingLoading, setScaffoldingLoading] = useState(false);
   const [scaffoldingError, setScaffoldingError] = useState<string | null>(null);
+
+  const buildReviewPayloadsByPage = (payload: ScaffoldingPayload): ScaffoldingPayload[] => {
+    const pages = payload.pages ?? [];
+    if (pages.length <= 1) return [payload];
+
+    return pages.map((page, pageIndex) => {
+      const pageBlankItems = (payload.blankItems ?? [])
+        .filter((item) => (Number.isFinite(item.page_index) ? item.page_index : 0) === pageIndex)
+        .map((item, blankIndex) => ({
+          blank_index: blankIndex,
+          word: item.word,
+          page_index: 0,
+          ...(item.candidate_id ? { candidate_id: item.candidate_id } : {}),
+        }));
+      const blanks = pageBlankItems.length > 0
+        ? pageBlankItems.map((item) => ({
+          id: item.blank_index,
+          word: item.word,
+          meaningLong: '',
+        }))
+        : (page.keywords ?? []).map((word, index) => ({
+          id: index,
+          word,
+          meaningLong: '',
+        }));
+
+      return {
+        ...payload,
+        title: pages.length > 1 ? `${payload.title} (${pageIndex + 1}/${pages.length})` : payload.title,
+        extractedText: page.original_text ?? '',
+        pages: [{
+          ...page,
+          blank_candidates: page.blank_candidates?.map((candidate) => ({
+            ...candidate,
+            page_index: 0,
+          })),
+        }],
+        blanks,
+        blankItems: pageBlankItems.length > 0
+          ? pageBlankItems
+          : blanks.map((blank) => ({
+            blank_index: blank.id,
+            word: blank.word,
+            page_index: 0,
+          })),
+      };
+    });
+  };
 
   const runOcrForIndex = async (
     sources: StudySource[],
@@ -1125,18 +1184,32 @@ export default function App() {
 
           {step === 'scaffolding' && (
             <ScaffoldingScreen
-              key={`study-${isReviewMode ? `review-${reviewQuizId ?? 'none'}` : `new-${selectedSourceIndex}`}`}
+              key={`study-${isReviewMode ? `review-${reviewQuizId ?? 'none'}-${selectedSourceIndex}` : `new-${selectedSourceIndex}`}`}
               onBack={() => {
                 // 복습 모드에서 복습 화면으로
                 if (isReviewMode) {
                   setIsReviewMode(false);
                   setReviewQuizId(null);
+                  pendingReviewPartsRef.current = {};
+                  setScaffoldingPayloads([]);
                   setStep('brushup');
                 } else {
                   setStep('selectPicture');
                 }
               }}
               onBackFromCompletion={async () => {
+                if (isReviewMode && selectedSourceIndex < scaffoldingPayloads.length - 1) {
+                  const nextIndex = selectedSourceIndex + 1;
+                  const nextPayload = scaffoldingPayloads[nextIndex];
+                  if (nextPayload) {
+                    setSelectedSourceIndex(nextIndex);
+                    setScaffoldingPayload(nextPayload);
+                    setScaffoldingError(null);
+                    setStep('scaffolding');
+                    return;
+                  }
+                }
+
                 if (!isReviewMode && selectedSourceIndex < capturedSources.length - 1) {
                   const nextIndex = selectedSourceIndex + 1;
                   const nextPayload = scaffoldingPayloads[nextIndex];
@@ -1181,6 +1254,7 @@ export default function App() {
                 // 전체 학습 완료 후 홈 이동
                 setIsReviewMode(false);
                 setReviewQuizId(null);
+                pendingReviewPartsRef.current = {};
                 resetBatchEarnedXp();
                 setCropBySourceIndex({});
                 setScaffoldingPayloads([]);
@@ -1199,7 +1273,7 @@ export default function App() {
               reviewQuizId={reviewQuizId} // 복습 퀴즈 ID 전달
               subjectName={subjectName} // 과목명 전달
               currentStudyIndex={selectedSourceIndex}
-              totalStudyCount={capturedSources.length}
+              totalStudyCount={isReviewMode ? Math.max(scaffoldingPayloads.length, 1) : capturedSources.length}
               accumulatedEarnedXp={batchEarnedXp}
               onRetry={async () => {
                 setScaffoldingLoading(true);
@@ -1250,17 +1324,47 @@ export default function App() {
                     const isCorrect = (ua ?? '').trim().toLowerCase() === (exactReviewAnswerWords[idx] ?? '').trim().toLowerCase();
                     return acc + (isCorrect ? 1 : 0);
                   }, 0);
-                  const exactReviewEarnedXp = exactReviewCorrectCount * 2;
+                  const nextReviewParts = {
+                    ...pendingReviewPartsRef.current,
+                    [selectedSourceIndex]: {
+                      userAnswers,
+                      correctCount: exactReviewCorrectCount,
+                    },
+                  };
+                  pendingReviewPartsRef.current = nextReviewParts;
 
-                  setExp((prev) => prev + exactReviewEarnedXp);
+                  const reviewPageCount = Math.max(scaffoldingPayloads.length, 1);
+                  const isLastReviewPage = selectedSourceIndex >= reviewPageCount - 1;
+                  const completedReviewParts = Object.values(nextReviewParts);
+                  const accumulatedReviewCorrectCount = completedReviewParts.reduce((acc, part) => acc + part.correctCount, 0);
+                  const accumulatedReviewEarnedXp = accumulatedReviewCorrectCount * 2;
+
+                  if (!isLastReviewPage) {
+                    return {
+                      earnedXp: exactReviewCorrectCount * 2,
+                      totalEarnedXp: accumulatedReviewEarnedXp,
+                      handledCompletion: false,
+                    };
+                  }
+
+                  const mergedReviewUserAnswers: string[] = [];
+                  for (let idx = 0; idx < reviewPageCount; idx += 1) {
+                    const part = nextReviewParts[idx];
+                    if (!part) throw new Error(`${idx + 1}번째 복습 답안이 없어 저장할 수 없습니다.`);
+                    mergedReviewUserAnswers.push(...part.userAnswers);
+                  }
+
+                  setExp((prev) => prev + accumulatedReviewEarnedXp);
                   setIsReviewMode(false);
                   setReviewQuizId(null);
-                  showRewardScreen('reviewComplete', exactReviewEarnedXp, () => setStep('home'));
+                  pendingReviewPartsRef.current = {};
+                  setScaffoldingPayloads([]);
+                  showRewardScreen('reviewComplete', accumulatedReviewEarnedXp, () => setStep('home'));
 
                   if (reviewQuizId != null) {
                     void submitReviewStudy({
                       quiz_id: reviewQuizId,
-                      user_answers: userAnswers,
+                      user_answers: mergedReviewUserAnswers,
                     })
                       .then((reviewResult) => {
                         const nextPoints = Number(reviewResult?.new_points);
@@ -1277,8 +1381,8 @@ export default function App() {
                       });
                   }
                   return {
-                    earnedXp: exactReviewEarnedXp,
-                    totalEarnedXp: exactReviewEarnedXp,
+                    earnedXp: exactReviewCorrectCount * 2,
+                    totalEarnedXp: accumulatedReviewEarnedXp,
                     handledCompletion: true,
                   };
                 }
@@ -1438,6 +1542,10 @@ export default function App() {
               onCardPress={(card) => {
                 setIsReviewMode(true);
                 setReviewQuizId(card.quiz_id || null);
+                setSelectedSourceIndex(0);
+                setScaffoldingPayload(null);
+                setScaffoldingPayloads([]);
+                pendingReviewPartsRef.current = {};
                 setStep('scaffolding');
               }}
             />

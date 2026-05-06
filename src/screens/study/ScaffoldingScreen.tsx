@@ -1490,6 +1490,18 @@ export default function ScaffoldingScreen({
     ];
 
     if (substep === "1") {
+      if (shouldRenderPlainKeyword) {
+        return (
+          <Text
+            key={entry.key}
+            style={textStyle}
+            onLayout={recordTokenLayout(entry.globalIndex)}
+          >
+            {token.value}
+          </Text>
+        );
+      }
+
       return (
         <Pressable
           key={entry.key}
@@ -1595,6 +1607,18 @@ export default function ScaffoldingScreen({
       );
     }
 
+    if (shouldRenderPlainKeyword) {
+      return (
+        <Text
+          key={entry.key}
+          style={textStyle}
+          onLayout={recordTokenLayout(entry.globalIndex)}
+        >
+          {token.value}
+        </Text>
+      );
+    }
+
     const backgroundColor = !isSelected
       ? "transparent"
       : grade === "correct"
@@ -1608,7 +1632,7 @@ export default function ScaffoldingScreen({
         key={entry.key}
         style={[
           keywordBoxStyle,
-          backgroundColor !== "transparent" && { backgroundColor },
+          { backgroundColor },
         ]}
         onLayout={recordTokenLayout(entry.globalIndex)}
       >
@@ -1850,7 +1874,7 @@ export default function ScaffoldingScreen({
                         answers: answerList,
                         selectedBlankIds: orderedBlankIds,
                       });
-                      if (isReviewMode) {
+                      if (isReviewMode && saveResult?.handledCompletion) {
                         return;
                       }
                       if (saveResult?.handledCompletion) {
