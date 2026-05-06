@@ -1850,7 +1850,7 @@ export default function ScaffoldingScreen({
                         answers: answerList,
                         selectedBlankIds: orderedBlankIds,
                       });
-                      if (isReviewMode) {
+                      if (isReviewMode && saveResult?.handledCompletion) {
                         return;
                       }
                       if (saveResult?.handledCompletion) {
