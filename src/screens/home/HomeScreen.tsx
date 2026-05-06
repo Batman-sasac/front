@@ -72,6 +72,9 @@ type Props = {
   weeklyGrowth?: { labels: string[]; data: number[] };
   monthlyStats?: { last_month_name: string; last_month_count: number; this_month_name: string; this_month_count: number; target_count: number; diff: number };
   monthlyGoal?: number | null;
+  myRewardRank?: number | null;
+  myRewardTotal?: number | null;
+  leagueUsers?: { xp: number }[];
   //
   onNavigate: (screen: 'home' | 'league' | 'alarm' | 'mypage' | 'takePicture' | 'brushup') => void;
   onLogout?: () => void;
@@ -89,6 +92,9 @@ export default function HomeScreen({
   weeklyGrowth,
   monthlyStats,
   monthlyGoal,
+  myRewardRank,
+  myRewardTotal,
+  leagueUsers = [],
   onNavigate,
   onLogout,
 }: Props) {
@@ -111,6 +117,26 @@ export default function HomeScreen({
       : 1;
   const characterHeight = scale(215);
   const characterWidth = Math.min(scale(380), characterHeight * characterAspectRatio);
+  const displayRewardRank = typeof myRewardRank === 'number' && Number.isFinite(myRewardRank)
+    ? myRewardRank
+    : 5;
+  const xpToRankUp = (() => {
+    if (displayRewardRank <= 1) return 0;
+    if (myRewardTotal == null) return null;
+
+    const higherUsers = leagueUsers
+      .filter((user) => user.xp > myRewardTotal)
+      .sort((a, b) => a.xp - b.xp);
+    const nextHigherUser = higherUsers[0];
+    if (!nextHigherUser) return null;
+
+    return Math.max(nextHigherUser.xp - myRewardTotal + 1, 1);
+  })();
+  const leagueSubText = xpToRankUp === 0
+    ? '와 리그 1등이에요!'
+    : xpToRankUp != null
+      ? `${xpToRankUp}XP만 획득하면 순위 UP!`
+      : '학습하면 순위를 올릴 수 있어요!';
 
   const { min: levelMin, max: levelMax } = getLevelBounds(effectiveLevel);
   const expClamped = Math.max(levelMin, Math.min(exp, levelMax));
@@ -393,11 +419,11 @@ export default function HomeScreen({
 
                 {/* 리그명 + 순위 */}
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.leagueMainText}>아이언 리그 <Text style={styles.leagueRank}>5</Text> 위</Text>
+                  <Text style={styles.leagueMainText}>아이언 리그 <Text style={styles.leagueRank}>{displayRewardRank}</Text> 위</Text>
 
                   {/* XP 부족분 계산 */}
                   <Text style={styles.leagueSubText}>
-                    10XP만 획득하면 순위 UP!
+                    {leagueSubText}
                   </Text>
                   {/* 1등일 때는 ↓ */}
                   {/* <Text style={styles.leagueSubText}>와 리그 1등이에요!</Text> */}
