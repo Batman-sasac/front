@@ -8,27 +8,97 @@ const ENV_KAKAO_REDIRECT_URI = process.env.EXPO_PUBLIC_KAKAO_REDIRECT_URI ?? '';
 const ENV_NAVER_REDIRECT_URI = process.env.EXPO_PUBLIC_NAVER_REDIRECT_URI ?? '';
 const DEFAULT_KAKAO_REDIRECT_URI = `${API_BASE_URL}/auth/kakao/mobile`;
 const DEFAULT_NAVER_REDIRECT_URI = `${API_BASE_URL}/auth/naver/mobile`;
+const KAKAO_REDIRECT_URI = ENV_KAKAO_REDIRECT_URI || DEFAULT_KAKAO_REDIRECT_URI;
+const NAVER_REDIRECT_URI = ENV_NAVER_REDIRECT_URI || DEFAULT_NAVER_REDIRECT_URI;
 const APPLE_BUNDLE_ID_HINT = 'com.batman.bat';
+
+const OAUTH_STEP_LABEL = {
+    configFetch: 'OAUTH_CONFIG_FETCH_FAILED',
+    authUrlBuild: 'OAUTH_AUTH_URL_BUILD_FAILED',
+    tokenRequest: 'OAUTH_TOKEN_REQUEST_FAILED',
+    tokenExchange: 'OAUTH_TOKEN_EXCHANGE_FAILED',
+    responseParse: 'OAUTH_RESPONSE_PARSE_FAILED',
+} as const;
+
+function stringifyErrorValue(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (value === null || value === undefined) return '';
+
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return String(value);
+    }
+}
+
+function providerLabel(provider: 'kakao' | 'naver' | 'apple'): string {
+    if (provider === 'kakao') return 'KAKAO';
+    if (provider === 'naver') return 'NAVER';
+    return 'APPLE';
+}
+
+function buildStepErrorMessage(params: {
+    step: string;
+    provider: 'kakao' | 'naver' | 'apple';
+    message: string;
+    endpoint?: string;
+    status?: number;
+    redirectUri?: string;
+}) {
+    const { step, provider, message, endpoint, status, redirectUri } = params;
+    const lines = [
+        `[${providerLabel(provider)}_${step}]`,
+        message,
+    ];
+
+    if (status) lines.push(`status=${status}`);
+    if (endpoint) lines.push(`endpoint=${endpoint}`);
+    if (redirectUri) lines.push(`redirect_uri=${redirectUri}`);
+
+    return lines.join('\n');
+}
 
 function buildAuthErrorMessage(params: {
     error: Record<string, unknown>;
     fallback: string;
     provider: 'kakao' | 'naver' | 'apple';
+    endpoint: string;
+    status: number;
 }) {
-    const { error, fallback, provider } = params;
-    const errorMessage = String(error.error ?? fallback);
-    const detail = String(error.detail ?? error.details ?? '').trim();
+    const { error, fallback, provider, endpoint, status } = params;
+    const errorMessage = stringifyErrorValue(error.error ?? fallback);
+    const detail = stringifyErrorValue(error.detail ?? error.details).trim();
     const baseMessage = detail ? `${errorMessage}: ${detail}` : errorMessage;
 
     if (provider === 'kakao') {
-        return `${baseMessage}\nredirect_uri=${DEFAULT_KAKAO_REDIRECT_URI}\nRender KAKAO_REDIRECT_URI와 카카오 콘솔 Redirect URI를 같은 값으로 맞추세요.`;
+        return buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.tokenExchange,
+            provider,
+            message: `${baseMessage}\nRender KAKAO_REDIRECT_URI와 카카오 콘솔 Redirect URI를 같은 값으로 맞추세요.`,
+            endpoint,
+            status,
+            redirectUri: KAKAO_REDIRECT_URI,
+        });
     }
 
     if (provider === 'apple') {
-        return `${baseMessage}\nRender APPLE_BUNDLE_ID / APPLE_CLIENT_ID가 ${APPLE_BUNDLE_ID_HINT}와 같은지 확인하세요.`;
+        return buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.tokenExchange,
+            provider,
+            message: `${baseMessage}\nRender APPLE_BUNDLE_ID / APPLE_CLIENT_ID가 ${APPLE_BUNDLE_ID_HINT}와 같은지 확인하세요.`,
+            endpoint,
+            status,
+        });
     }
 
-    return baseMessage;
+    return buildStepErrorMessage({
+        step: OAUTH_STEP_LABEL.tokenExchange,
+        provider,
+        message: baseMessage,
+        endpoint,
+        status,
+        redirectUri: NAVER_REDIRECT_URI,
+    });
 }
 
 export interface LoginResponse {
@@ -60,10 +130,21 @@ export async function loginWithOAuth(
         formData.append('state', 'naver_mobile');
     }
 
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
-    });
+    let response: Response;
+    try {
+        response = await fetch(endpoint, {
+            method: 'POST',
+            body: formData,
+        });
+    } catch (error) {
+        throw new Error(buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.tokenRequest,
+            provider,
+            message: stringifyErrorValue(error) || '백엔드 토큰 교환 API 호출에 실패했습니다.',
+            endpoint,
+            redirectUri: provider === 'kakao' ? KAKAO_REDIRECT_URI : NAVER_REDIRECT_URI,
+        }));
+    }
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
@@ -71,19 +152,41 @@ export async function loginWithOAuth(
             error,
             fallback: '로그인 실패',
             provider,
+            endpoint,
+            status: response.status,
         }));
     }
 
-    return await response.json();
+    try {
+        return await response.json();
+    } catch (error) {
+        throw new Error(buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.responseParse,
+            provider,
+            message: stringifyErrorValue(error) || '백엔드 로그인 응답을 JSON으로 읽지 못했습니다.',
+            endpoint,
+            status: response.status,
+        }));
+    }
 }
 
 export async function loginWithApple(identityToken: string): Promise<LoginResponse> {
     const endpoint = `${API_BASE_URL}/auth/apple/mobile`;
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identity_token: identityToken }),
-    });
+    let response: Response;
+    try {
+        response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identity_token: identityToken }),
+        });
+    } catch (error) {
+        throw new Error(buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.tokenRequest,
+            provider: 'apple',
+            message: stringifyErrorValue(error) || 'Apple 로그인 API 호출에 실패했습니다.',
+            endpoint,
+        }));
+    }
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
@@ -91,10 +194,22 @@ export async function loginWithApple(identityToken: string): Promise<LoginRespon
             error,
             fallback: '로그인 실패',
             provider: 'apple',
+            endpoint,
+            status: response.status,
         }));
     }
 
-    return await response.json();
+    try {
+        return await response.json();
+    } catch (error) {
+        throw new Error(buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.responseParse,
+            provider: 'apple',
+            message: stringifyErrorValue(error) || 'Apple 로그인 응답을 JSON으로 읽지 못했습니다.',
+            endpoint,
+            status: response.status,
+        }));
+    }
 }
 
 export async function setNickname(
@@ -139,9 +254,40 @@ export interface OAuthConfig {
 
 /** 백엔드 /config에서 OAuth 설정 로드 */
 export async function fetchOAuthConfig(): Promise<OAuthConfig> {
-    const res = await fetch(`${API_BASE_URL}/config`);
-    if (!res.ok) throw new Error('OAuth 설정을 불러올 수 없습니다.');
-    return res.json();
+    const endpoint = `${API_BASE_URL}/config`;
+    let res: Response;
+    try {
+        res = await fetch(endpoint);
+    } catch (error) {
+        throw new Error(buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.configFetch,
+            provider: 'kakao',
+            message: stringifyErrorValue(error) || '백엔드 OAuth 설정 API 호출에 실패했습니다.',
+            endpoint,
+        }));
+    }
+
+    if (!res.ok) {
+        throw new Error(buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.configFetch,
+            provider: 'kakao',
+            message: '백엔드 OAuth 설정을 불러올 수 없습니다.',
+            endpoint,
+            status: res.status,
+        }));
+    }
+
+    try {
+        return await res.json();
+    } catch (error) {
+        throw new Error(buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.responseParse,
+            provider: 'kakao',
+            message: stringifyErrorValue(error) || '백엔드 OAuth 설정 응답을 JSON으로 읽지 못했습니다.',
+            endpoint,
+            status: res.status,
+        }));
+    }
 }
 
 /**
@@ -150,8 +296,6 @@ export async function fetchOAuthConfig(): Promise<OAuthConfig> {
 export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> {
     let kakaoRestApiKey = ENV_KAKAO_REST_API_KEY;
     let naverClientId = ENV_NAVER_CLIENT_ID;
-    const kakaoRedirectUri = ENV_KAKAO_REDIRECT_URI || DEFAULT_KAKAO_REDIRECT_URI;
-    const naverRedirectUri = ENV_NAVER_REDIRECT_URI || DEFAULT_NAVER_REDIRECT_URI;
 
     if (!kakaoRestApiKey || !naverClientId) {
         const serverConfig = await fetchOAuthConfig();
@@ -161,15 +305,25 @@ export async function getOAuthUrl(provider: 'kakao' | 'naver'): Promise<string> 
 
     if (provider === 'kakao') {
         if (!kakaoRestApiKey) {
-            throw new Error('KAKAO_REST_API_KEY가 없습니다. .env 파일 또는 서버 설정을 확인하세요.');
+            throw new Error(buildStepErrorMessage({
+                step: OAUTH_STEP_LABEL.authUrlBuild,
+                provider,
+                message: 'KAKAO_REST_API_KEY가 없습니다. .env 파일 또는 서버 설정을 확인하세요.',
+                redirectUri: KAKAO_REDIRECT_URI,
+            }));
         }
-        return `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(kakaoRestApiKey)}&redirect_uri=${encodeURIComponent(kakaoRedirectUri)}&response_type=code`;
+        return `https://kauth.kakao.com/oauth/authorize?client_id=${encodeURIComponent(kakaoRestApiKey)}&redirect_uri=${encodeURIComponent(KAKAO_REDIRECT_URI)}&response_type=code`;
     }
 
     if (!naverClientId) {
-        throw new Error('NAVER_CLIENT_ID가 없습니다. .env 파일 또는 서버 설정을 확인하세요.');
+        throw new Error(buildStepErrorMessage({
+            step: OAUTH_STEP_LABEL.authUrlBuild,
+            provider,
+            message: 'NAVER_CLIENT_ID가 없습니다. .env 파일 또는 서버 설정을 확인하세요.',
+            redirectUri: NAVER_REDIRECT_URI,
+        }));
     }
-    return `https://nid.naver.com/oauth2.0/authorize?client_id=${encodeURIComponent(naverClientId)}&redirect_uri=${encodeURIComponent(naverRedirectUri)}&response_type=code&state=naver_mobile`;
+    return `https://nid.naver.com/oauth2.0/authorize?client_id=${encodeURIComponent(naverClientId)}&redirect_uri=${encodeURIComponent(NAVER_REDIRECT_URI)}&response_type=code&state=naver_mobile`;
 }
 
 /**
