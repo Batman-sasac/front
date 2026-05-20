@@ -23,6 +23,15 @@ export type AttendanceRewardResponse = {
     message?: string;
 };
 
+export type RandomEventRewardResponse = {
+    status: string;
+    today_is_event_day: boolean;
+    is_new_reward: boolean;
+    reward_amount: number;
+    total_points: number;
+    message?: string;
+};
+
 export async function checkAttendanceReward(): Promise<AttendanceRewardResponse> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
@@ -41,6 +50,34 @@ export async function checkAttendanceReward(): Promise<AttendanceRewardResponse>
     }
 
     return await response.json();
+}
+
+export async function claimRandomEventReward(): Promise<RandomEventRewardResponse> {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const response = await fetch(`${API_BASE_URL}/reward/random-event`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
+    });
+
+    const json = await response.json().catch(() => ({}));
+
+    if (!response.ok || json.status === 'error') {
+        throw new Error(json.error || json.message || '랜덤 리워드 조회 실패');
+    }
+
+    return {
+        status: json.status ?? 'success',
+        today_is_event_day: Boolean(json.today_is_event_day),
+        is_new_reward: Boolean(json.is_new_reward),
+        reward_amount: Number(json.reward_amount ?? 0),
+        total_points: Number(json.total_points ?? 0),
+        message: json.message,
+    };
 }
 
 export async function getRewardLeaderboard(): Promise<{

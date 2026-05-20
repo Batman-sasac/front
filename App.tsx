@@ -28,7 +28,7 @@ import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
 import { runOcr, ScaffoldingPayload, PageItem, BlankItemSave, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy, OcrProgressMessage } from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
-import { checkAttendanceReward, getMyRewardRank, getRewardLeaderboard } from './src/api/reward';
+import { checkAttendanceReward, claimRandomEventReward, getMyRewardRank, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 import { getHomeStats, getUserStats } from './src/api/auth';
@@ -612,12 +612,22 @@ export default function App() {
         bonusXP = result.bonusXP ?? 0;
         totalPoints = Number.isFinite(Number(result.total_points)) ? Number(result.total_points) : null;
       }
+
     } catch (error) {
       console.error('출석 보상 API 실패, 로컬 처리로 대체', error);
-      bonusXP = Math.random() < 0.5 ? 10 : 0;
     }
 
     // 연속 출석 계산
+    try {
+      const randomResult = await claimRandomEventReward();
+      if (randomResult.status === 'success' && randomResult.is_new_reward) {
+        bonusXP = Number.isFinite(Number(randomResult.reward_amount)) ? Number(randomResult.reward_amount) : 0;
+        totalPoints = Number.isFinite(Number(randomResult.total_points)) ? Number(randomResult.total_points) : totalPoints;
+      }
+    } catch (error) {
+      console.error('랜덤 리워드 API 실패:', error);
+    }
+
     setStreak(nextStreak);
     setLastAttendanceDate(todayKey);
 
@@ -633,7 +643,7 @@ export default function App() {
       return next;
     });
 
-    if (shouldReward && (baseXP > 0 || bonusXP > 0)) {
+    if ((shouldReward && baseXP > 0) || bonusXP > 0) {
       if (totalPoints != null) {
         setExp(totalPoints + streakXP);
       } else {
@@ -641,23 +651,31 @@ export default function App() {
       }
       void refreshMyRewardRank();
       void refreshLeagueLeaderboard();
-      showRewardScreen('attendance', baseXP, () => {
-        if (streakXP > 0) {
-          showRewardScreen('streak', streakXP, () => {
-            if (bonusXP > 0) {
-              showRewardScreen('randomBonus', bonusXP, () => setStep('home'));
-              return;
-            }
-            setStep('home');
-          });
-          return;
-        }
-        if (bonusXP > 0) {
-          showRewardScreen('randomBonus', bonusXP, () => setStep('home'));
-          return;
-        }
-        setStep('home');
-      });
+      if (shouldReward && baseXP > 0) {
+        showRewardScreen('attendance', baseXP, () => {
+          if (streakXP > 0) {
+            showRewardScreen('streak', streakXP, () => {
+              if (bonusXP > 0) {
+                showRewardScreen('randomBonus', bonusXP, () => setStep('home'));
+                return;
+              }
+              setStep('home');
+            });
+            return;
+          }
+          if (bonusXP > 0) {
+            showRewardScreen('randomBonus', bonusXP, () => setStep('home'));
+            return;
+          }
+          setStep('home');
+        });
+        return;
+      }
+
+      if (bonusXP > 0) {
+        showRewardScreen('randomBonus', bonusXP, () => setStep('home'));
+        return;
+      }
     }
   };
 
