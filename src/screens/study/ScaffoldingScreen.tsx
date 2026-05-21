@@ -229,16 +229,6 @@ export default function ScaffoldingScreen({
     () => (isReviewMode ? (payload?.blankItems ?? []) : []),
     [isReviewMode, payload?.blankItems],
   );
-  const reviewBlankItemsByPage = useMemo(() => {
-    const map = new Map<number, BlankItemSave[]>();
-    reviewBlankItems.forEach((item) => {
-      const pageIndex = Number.isFinite(item.page_index) ? item.page_index : 0;
-      const existing = map.get(pageIndex) ?? [];
-      existing.push(item);
-      map.set(pageIndex, existing);
-    });
-    return map;
-  }, [reviewBlankItems]);
 
   const hasStructuredPages = useMemo(
     () =>
@@ -257,17 +247,12 @@ export default function ScaffoldingScreen({
 
     return sourcePages.map((page, pageIndex) => {
       const allPageCandidates = page.blank_candidates ?? [];
-      const reviewPageBlankItems = reviewBlankItemsByPage.get(pageIndex) ?? [];
-      const pageCandidates =
-        !isReviewMode && allPageCandidates.length > 0 ? allPageCandidates : [];
       const pageKeywords =
-        pageCandidates.length > 0
-          ? pageCandidates.map((candidate) => candidate.text)
-          : isReviewMode
-            ? keywordList
-            : page.keywords?.length
-              ? page.keywords
-              : keywordList;
+        isReviewMode
+          ? keywordList
+          : page.keywords?.length
+            ? page.keywords
+            : keywordList;
       const blankCandidateByText = new Map<string, BlankCandidate>(
         allPageCandidates.map(
           (candidate) =>
@@ -326,7 +311,7 @@ export default function ScaffoldingScreen({
         hasLayoutBlocks: (page.layout_blocks?.length ?? 0) > 0,
       };
     });
-  }, [sourcePages, keywordList, isReviewMode, reviewBlankItemsByPage]);
+  }, [sourcePages, keywordList, isReviewMode]);
 
   const tokens = useMemo(
     () =>

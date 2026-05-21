@@ -478,16 +478,29 @@ export async function runOcr(
             for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
                 const page = pages[pageIndex];
                 const pageCandidates = page.blank_candidates ?? [];
+                const usedCandidateIndexes = new Set<number>();
 
-                if (pageCandidates.length > 0) {
-                    for (const candidate of pageCandidates) {
-                        blankItems.push({
-                            blank_index: blankItems.length,
-                            word: candidate.text,
-                            page_index: candidate.page_index ?? pageIndex,
-                            candidate_id: candidate.id,
-                        });
+                for (const keyword of page.keywords ?? []) {
+                    const normalizedKeyword = normalizeReviewWord(keyword);
+                    const matchedCandidateIndex = pageCandidates.findIndex(
+                        (candidate, candidateIndex) =>
+                            !usedCandidateIndexes.has(candidateIndex)
+                            && normalizeReviewWord(candidate.text) === normalizedKeyword,
+                    );
+                    const matchedCandidate = matchedCandidateIndex >= 0
+                        ? pageCandidates[matchedCandidateIndex]
+                        : null;
+
+                    if (matchedCandidateIndex >= 0) {
+                        usedCandidateIndexes.add(matchedCandidateIndex);
                     }
+
+                    blankItems.push({
+                        blank_index: blankItems.length,
+                        word: keyword,
+                        page_index: matchedCandidate?.page_index ?? pageIndex,
+                        ...(matchedCandidate?.id ? { candidate_id: matchedCandidate.id } : {}),
+                    });
                 }
             }
         } else {
