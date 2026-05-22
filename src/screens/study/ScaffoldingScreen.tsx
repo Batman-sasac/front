@@ -262,21 +262,21 @@ export default function ScaffoldingScreen({
       const sectionsSource =
         page.layout_blocks && page.layout_blocks.length > 0
           ? page.layout_blocks.map((block, blockIndex) => ({
-              key: `page-${pageIndex}-block-${blockIndex}`,
-              block,
-              text: block.text ?? "",
-              blankCandidate:
-                allPageCandidates[blockIndex] ??
-                blankCandidateByText.get(normalizeBlankWord(block.text ?? "")),
-            }))
+            key: `page-${pageIndex}-block-${blockIndex}`,
+            block,
+            text: block.text ?? "",
+            blankCandidate:
+              allPageCandidates[blockIndex] ??
+              blankCandidateByText.get(normalizeBlankWord(block.text ?? "")),
+          }))
           : [
-              {
-                key: `page-${pageIndex}-flow`,
-                block: undefined,
-                text: page.original_text ?? "",
-                blankCandidate: undefined,
-              },
-            ];
+            {
+              key: `page-${pageIndex}-flow`,
+              block: undefined,
+              text: page.original_text ?? "",
+              blankCandidate: undefined,
+            },
+          ];
 
       const sections = sectionsSource.map((section) => {
         const rawTokens = tokenizeWithKeywords(section.text, pageKeywords);
@@ -1119,47 +1119,53 @@ export default function ScaffoldingScreen({
 
   const renderTokenEntry = (
     entry: RenderTokenEntry,
-    options?: { block?: LayoutBlock; compact?: boolean },
+    options?: {
+      block?: LayoutBlock;
+      compact?: boolean;
+      metrics?: StructuredTextMetrics;
+      spacingStyle?: Record<string, number>;
+    },
   ) => {
     const { token: t, globalIndex, key } = entry;
     const compact = options?.compact === true;
-    const metrics = getStructuredTextMetrics(options?.block);
+    const metrics = options?.metrics ?? getStructuredTextMetrics(options?.block);
     const bodyTextStyle = compact
       ? [
-          styles.bodyText,
-          styles.compactBodyText,
-          {
-            fontSize: metrics.bodyFontSize,
-            lineHeight: metrics.bodyLineHeight,
-          },
-        ]
+        styles.bodyText,
+        styles.compactBodyText,
+        {
+          fontSize: metrics.bodyFontSize,
+          lineHeight: metrics.bodyLineHeight,
+        },
+      ]
       : styles.bodyText;
     const wordTextStyle = compact
       ? [
-          styles.wordText,
-          styles.compactWordText,
-          {
-            fontSize: metrics.keywordFontSize,
-            lineHeight: metrics.keywordLineHeight,
-          },
-        ]
+        styles.wordText,
+        styles.compactWordText,
+        {
+          fontSize: metrics.keywordFontSize,
+          lineHeight: metrics.keywordLineHeight,
+        },
+      ]
       : styles.wordText;
     const wordPillStyle = compact
       ? [
-          styles.wordPill,
-          styles.compactWordPill,
-          {
-            paddingHorizontal: metrics.horizontalPadding,
-            marginHorizontal: metrics.marginHorizontal,
-            borderRadius: metrics.borderRadius,
-          },
-        ]
+        styles.wordPill,
+        styles.compactWordPill,
+        {
+          paddingHorizontal: metrics.horizontalPadding,
+          marginHorizontal: metrics.marginHorizontal,
+          borderRadius: metrics.borderRadius,
+        },
+      ]
       : styles.wordPill;
     const blankSpacingStyle = compact
       ? {
-          marginHorizontal: metrics.marginHorizontal,
-          paddingHorizontal: metrics.horizontalPadding,
-        }
+        marginHorizontal: metrics.marginHorizontal,
+        paddingHorizontal: metrics.horizontalPadding,
+        ...(options?.spacingStyle ?? {}),
+      }
       : styles.blankTokenSpacing;
 
     if (t.type === "newline") {
@@ -1432,6 +1438,210 @@ export default function ScaffoldingScreen({
     );
   };
 
+  const getCoordinateBlockSections = (sections: PageRenderSection[]) =>
+    sections
+      .filter((section): section is PageRenderSection & { block: LayoutBlock } => !!section.block)
+      .sort((a, b) => {
+        const ay = a.block.y + a.block.height / 2;
+        const by = b.block.y + b.block.height / 2;
+        if (Math.abs(ay - by) > 0.006) return ay - by;
+        return a.block.x - b.block.x;
+      });
+
+  const buildCoordinateColumns = (
+    sections: PageRenderSection[],
+    options?: { allowSplitColumns?: boolean },
+  ): CoordinateColumn[] => {
+    const blockSections = getCoordinateBlockSections(sections);
+
+    if (blockSections.length === 0) return [];
+
+    if (!options?.allowSplitColumns) {
+      return [{ key: "coordinate-column-main", sections: blockSections, widthRatio: 1 }];
+    }
+
+    const left = blockSections.filter(
+      (section) => section.block.x + section.block.width / 2 < 0.5,
+    );
+    const right = blockSections.filter(
+      (section) => section.block.x + section.block.width / 2 >= 0.5,
+    );
+    const minColumnCount = Math.max(8, Math.floor(blockSections.length * 0.18));
+    const crossingCenterCount = blockSections.filter(
+      (section) => section.block.x < 0.5 && section.block.x + section.block.width > 0.5,
+    ).length;
+    const shouldSplitColumns =
+      left.length >= minColumnCount &&
+      right.length >= minColumnCount &&
+      Math.min(left.length, right.length) / Math.max(left.length, right.length) >= 0.22 &&
+      crossingCenterCount <= Math.max(2, blockSections.length * 0.04);
+
+    if (!shouldSplitColumns) {
+      return [{ key: "coordinate-column-main", sections: blockSections, widthRatio: 1 }];
+    }
+
+    return [
+      { key: "coordinate-column-left", sections: left, widthRatio: 0.5 },
+      { key: "coordinate-column-right", sections: right, widthRatio: 0.5 },
+    ];
+  };
+
+  const buildCoordinateLines = (
+    blockSections: Array<PageRenderSection & { block: LayoutBlock }>,
+    containerWidthRatio = 1,
+  ) => {
+    blockSections.sort((a, b) => {
+      const ay = a.block.y + a.block.height / 2;
+      const by = b.block.y + b.block.height / 2;
+      if (Math.abs(ay - by) > 0.006) return ay - by;
+      return a.block.x - b.block.x;
+    });
+
+    if (blockSections.length === 0) return [];
+
+    const heights = blockSections
+      .map((section) => section.block.height)
+      .filter((height) => Number.isFinite(height) && height > 0)
+      .sort((a, b) => a - b);
+    const medianHeight = heights[Math.floor(heights.length / 2)] ?? 0.02;
+    const yThreshold = Math.max(0.012, medianHeight * 0.82);
+    const lines: Array<Array<PageRenderSection & { block: LayoutBlock }>> = [];
+
+    blockSections.forEach((section) => {
+      const centerY = section.block.y + section.block.height / 2;
+      const current = lines[lines.length - 1];
+      if (!current || current.length === 0) {
+        lines.push([section]);
+        return;
+      }
+
+      const anchorY =
+        current.reduce((sum, item) => sum + item.block.y + item.block.height / 2, 0) /
+        current.length;
+      if (Math.abs(centerY - anchorY) <= yThreshold) {
+        current.push(section);
+      } else {
+        lines.push([section]);
+      }
+    });
+
+    const minX = Math.min(...blockSections.map((section) => section.block.x));
+    const maxX = Math.max(
+      ...blockSections.map((section) => section.block.x + section.block.width),
+    );
+    const contentWidth = Math.max(maxX - minX, 0.1);
+
+    return lines.map((line, lineIndex) => {
+      const ordered = [...line].sort((a, b) => a.block.x - b.block.x);
+      const lineMinX = Math.min(...ordered.map((section) => section.block.x));
+      const lineMaxX = Math.max(
+        ...ordered.map((section) => section.block.x + section.block.width),
+      );
+      const normalizedX = (lineMinX - minX) / contentWidth;
+      const normalizedWidth = (lineMaxX - lineMinX) / contentWidth;
+      const blockWidthSum = ordered.reduce((sum, section) => sum + section.block.width, 0);
+
+      return {
+        key: `coordinate-line-${lineIndex}`,
+        sections: ordered,
+        x: clampNumber(normalizedX, 0, 0.18),
+        width: clampNumber(normalizedWidth, 0.18, 1),
+        containerWidthRatio,
+        density: blockWidthSum / Math.max(lineMaxX - lineMinX, 0.02),
+      };
+    });
+  };
+
+  const getCoordinateLineMetrics = (line: CoordinateLine): StructuredTextMetrics => {
+    const availableWidth = Math.max(
+      pageCanvasWidth * line.containerWidthRatio * line.width,
+      scale(220),
+    );
+    const chars = Math.max(
+      line.sections.reduce((sum, section) => sum + (section.block.text ?? "").length, 0),
+      1,
+    );
+    const densityAdjustment =
+      line.density > 0.78 ? 0.9 : line.density < 0.38 ? 1.08 : 1;
+    const bodyFontSize = clampNumber(
+      (availableWidth / Math.max(chars * 0.78, 1)) * densityAdjustment,
+      fontScale(11),
+      fontScale(15),
+    );
+    const bodyLineHeight = Math.round(bodyFontSize * 1.55);
+    const keywordFontSize = clampNumber(bodyFontSize * 0.94, fontScale(10), fontScale(14));
+    const keywordLineHeight = Math.round(keywordFontSize * 1.45);
+
+    return {
+      bodyFontSize,
+      bodyLineHeight,
+      keywordFontSize,
+      keywordLineHeight,
+      horizontalPadding: scale(4),
+      marginHorizontal: 0,
+      borderRadius: scale(4),
+    };
+  };
+
+  const getCoordinateGap = (
+    previous: LayoutBlock | undefined,
+    current: LayoutBlock,
+    line: CoordinateLine,
+  ) => {
+    if (!previous || pageCanvasWidth <= 0) return 0;
+    const rawGap = Math.max(current.x - (previous.x + previous.width), 0);
+    const pxGap = rawGap * pageCanvasWidth * line.containerWidthRatio;
+    const maxGap = line.density < 0.42 ? scale(8) : scale(12);
+    return clampNumber(pxGap, scale(3), maxGap);
+  };
+
+  const renderCoordinateColumn = (column: CoordinateColumn) => (
+    <View key={column.key} style={styles.coordinateColumn}>
+      {buildCoordinateLines(column.sections, column.widthRatio).map(renderCoordinateLine)}
+    </View>
+  );
+
+  const renderCoordinateLine = (line: CoordinateLine) => {
+    const metrics = getCoordinateLineMetrics(line);
+
+    return (
+      <View
+        key={line.key}
+        style={[
+          styles.coordinateLine,
+          {
+            marginLeft: `${line.x * 100}%`,
+            minHeight: metrics.bodyLineHeight,
+            marginBottom: Math.max(scale(4), metrics.bodyLineHeight * 0.22),
+          },
+        ]}
+      >
+        {line.sections.map((section, sectionIndex) => {
+          const previous = line.sections[sectionIndex - 1]?.block;
+          const gap = getCoordinateGap(previous, section.block, line);
+          return (
+            <View
+              key={section.key}
+              style={[
+                styles.coordinateWord,
+                sectionIndex > 0 && { marginLeft: gap },
+              ]}
+            >
+              {section.tokenEntries.map((entry) =>
+                renderTokenEntry(entry, {
+                  block: section.block,
+                  compact: true,
+                  metrics,
+                  spacingStyle: { paddingHorizontal: scale(4) },
+                }),
+              )}
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
   const renderStructuredKeywordBlock = (
     entry: RenderTokenEntry,
     block: LayoutBlock,
@@ -1640,8 +1850,8 @@ export default function ScaffoldingScreen({
     );
     const singleKeywordEntry =
       section.blankCandidate &&
-      keywordEntries.length === 1 &&
-      normalizeBlankWord(section.blankCandidate.text) ===
+        keywordEntries.length === 1 &&
+        normalizeBlankWord(section.blankCandidate.text) ===
         normalizeBlankWord(keywordEntries[0].token.value)
         ? keywordEntries[0]
         : null;
@@ -1696,10 +1906,7 @@ export default function ScaffoldingScreen({
         <View style={styles.pageSheet}>
           {hasLayoutBlocks ? (
             <View
-              style={[
-                styles.pageCanvas,
-                { aspectRatio: pageCanvasAspectRatio },
-              ]}
+              style={styles.coordinatePage}
               onLayout={(event) => {
                 const nextWidth = event.nativeEvent.layout.width;
                 if (nextWidth > 0 && nextWidth !== pageCanvasWidth) {
@@ -1707,7 +1914,11 @@ export default function ScaffoldingScreen({
                 }
               }}
             >
-              {sections.map(renderStructuredBlock)}
+              <View style={styles.coordinateColumns}>
+                {buildCoordinateColumns(sections, {
+                  allowSplitColumns: (page.tables?.length ?? 0) > 0,
+                }).map(renderCoordinateColumn)}
+              </View>
             </View>
           ) : (
             <View style={styles.flow}>
@@ -1717,7 +1928,7 @@ export default function ScaffoldingScreen({
             </View>
           )}
 
-          {!hasLayoutBlocks && (page.tables ?? []).map(renderTable)}
+          {(page.tables ?? []).map(renderTable)}
         </View>
       </View>
     );
@@ -2064,7 +2275,7 @@ export default function ScaffoldingScreen({
                             styles.hintButtonText,
                             hintType === "first" && styles.hintButtonTextActive,
                             hintType !== "first" &&
-                              styles.hintButtonTextInactive,
+                            styles.hintButtonTextInactive,
                           ]}
                         >
                           H1
@@ -2086,7 +2297,7 @@ export default function ScaffoldingScreen({
                             styles.hintButtonText,
                             hintType === "last" && styles.hintButtonTextActive,
                             hintType !== "last" &&
-                              styles.hintButtonTextInactive,
+                            styles.hintButtonTextInactive,
                           ]}
                         >
                           H2
@@ -2107,9 +2318,9 @@ export default function ScaffoldingScreen({
                           style={[
                             styles.hintButtonText,
                             hintType === "chosung" &&
-                              styles.hintButtonTextActive,
+                            styles.hintButtonTextActive,
                             hintType !== "chosung" &&
-                              styles.hintButtonTextInactive,
+                            styles.hintButtonTextInactive,
                           ]}
                         >
                           H3
@@ -2164,6 +2375,15 @@ type RenderTokenEntry = {
   candidateId?: string;
   token: RenderToken;
 };
+type StructuredTextMetrics = {
+  bodyFontSize: number;
+  bodyLineHeight: number;
+  keywordFontSize: number;
+  keywordLineHeight: number;
+  horizontalPadding: number;
+  marginHorizontal: number;
+  borderRadius: number;
+};
 type PageRenderSection = {
   key: string;
   block?: LayoutBlock;
@@ -2176,6 +2396,19 @@ type PageRenderPage = {
   sections: PageRenderSection[];
   hasLayoutBlocks: boolean;
 };
+type CoordinateLine = {
+  key: string;
+  sections: Array<PageRenderSection & { block: LayoutBlock }>;
+  x: number;
+  width: number;
+  containerWidthRatio: number;
+  density: number;
+};
+type CoordinateColumn = {
+  key: string;
+  sections: Array<PageRenderSection & { block: LayoutBlock }>;
+  widthRatio: number;
+};
 
 /**
  * keyword가 text의 pos 위치에서 시작하는지 확인.
@@ -2184,6 +2417,10 @@ type PageRenderPage = {
  */
 function normalize(s: string) {
   return normalizeBlankWord(s);
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
 /** Styles */
@@ -2456,6 +2693,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "flex-start",
+  },
+  coordinatePage: {
+    width: "100%",
+    borderRadius: scale(12),
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E8ECF8",
+    paddingHorizontal: scale(16),
+    paddingVertical: scale(16),
+  },
+  coordinateColumns: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: scale(18),
+  },
+  coordinateColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  coordinateLine: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
+  coordinateWord: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
   },
   pageTableWrap: {
     gap: scale(6),
