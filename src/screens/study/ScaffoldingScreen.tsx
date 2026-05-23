@@ -1269,7 +1269,12 @@ export default function ScaffoldingScreen({
         return (
           <Pressable
             key={key}
-            style={[wordPillStyle, { backgroundColor: HIGHLIGHT_BG }]}
+            style={[
+              wordPillStyle,
+              blankSpacingStyle,
+              styles.blankBoxBase,
+              { backgroundColor: HIGHLIGHT_BG },
+            ]}
             onLayout={recordTokenLayout(globalIndex)}
           >
             <Text style={wordTextStyle}>{t.value}</Text>
@@ -1401,7 +1406,12 @@ export default function ScaffoldingScreen({
       return (
         <Pressable
           key={key}
-          style={[wordPillStyle, { backgroundColor: HIGHLIGHT_BG }]}
+          style={[
+            wordPillStyle,
+            blankSpacingStyle,
+            styles.blankBoxBase,
+            { backgroundColor: HIGHLIGHT_BG },
+          ]}
           onLayout={recordTokenLayout(globalIndex)}
         >
           <Text style={wordTextStyle}>{t.value}</Text>
@@ -1419,7 +1429,12 @@ export default function ScaffoldingScreen({
     return (
       <View
         key={key}
-        style={[wordPillStyle, blankSpacingStyle, { backgroundColor }]}
+        style={[
+          wordPillStyle,
+          blankSpacingStyle,
+          styles.blankBoxBase,
+          { backgroundColor },
+        ]}
         onLayout={recordTokenLayout(globalIndex)}
       >
         <Text style={wordTextStyle}>{t.value}</Text>
@@ -2686,6 +2701,8 @@ const styles = StyleSheet.create({
   structuredKeywordInlineBox: {
     alignSelf: "flex-start",
     justifyContent: "center",
+    position: "relative",
+    overflow: "hidden",
   },
   structuredKeywordBoxDefault: {
     backgroundColor: HIGHLIGHT_BG,
@@ -2695,11 +2712,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(199, 207, 255, 0.55)",
   },
   structuredKeywordInputBox: {
-    backgroundColor: "rgba(199, 207, 255, 0.28)",
+    backgroundColor: HIGHLIGHT_BG,
     borderRadius: scale(2),
   },
   structuredKeywordInputBoxActive: {
-    borderWidth: 1,
     borderColor: "#5E82FF",
   },
   layoutBlockFlow: {
@@ -2771,11 +2787,17 @@ const styles = StyleSheet.create({
     marginVertical: 0,
     justifyContent: "center",
   },
-  blankBoxBase: { borderWidth: 2, borderColor: "transparent" },
+  blankBoxBase: {
+    borderWidth: 2,
+    borderColor: "transparent",
+    position: "relative",
+    overflow: "hidden",
+  },
   blankBoxActive: { borderColor: "#5E82FF" },
   blankInputOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
+    overflow: "hidden",
   },
   blankAnswerScroll: {
     ...StyleSheet.absoluteFillObject,
