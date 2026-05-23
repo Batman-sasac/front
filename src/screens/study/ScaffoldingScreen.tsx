@@ -1302,6 +1302,20 @@ export default function ScaffoldingScreen({
           >
             <View style={{ position: "relative" }}>
               <Text style={[wordTextStyle, { opacity: 0 }]}>{t.value}</Text>
+              <Text
+                pointerEvents="none"
+                style={[
+                  wordTextStyle,
+                  styles.blankDisplayText,
+                  compact && {
+                    fontSize: metrics.keywordFontSize,
+                    lineHeight: metrics.keywordLineHeight,
+                  },
+                  { textAlign },
+                ]}
+              >
+                {userValue}
+              </Text>
               <View pointerEvents="none" style={styles.blankInputOverlay}>
                 <TextInput
                   ref={(ref) => {
@@ -1320,6 +1334,7 @@ export default function ScaffoldingScreen({
                   onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
                   style={[
                     styles.blankInput,
+                    styles.blankHiddenInput,
                     compact && {
                       fontSize: metrics.keywordFontSize,
                       lineHeight: metrics.keywordLineHeight,
@@ -1709,6 +1724,12 @@ export default function ScaffoldingScreen({
             <Text style={[keywordTextStyle, { opacity: 0 }]}>
               {token.value}
             </Text>
+            <Text
+              pointerEvents="none"
+              style={[keywordTextStyle, styles.blankDisplayText, { textAlign }]}
+            >
+              {userValue}
+            </Text>
             <View pointerEvents="none" style={styles.blankInputOverlay}>
               <TextInput
                 ref={(ref) => {
@@ -1727,6 +1748,7 @@ export default function ScaffoldingScreen({
                 onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
                 style={[
                   styles.blankInput,
+                  styles.blankHiddenInput,
                   {
                     textAlign,
                     fontSize: metrics.keywordFontSize,
@@ -2717,20 +2739,34 @@ const styles = StyleSheet.create({
   blankBoxActive: { borderColor: "#5E82FF" },
   blankInputOverlay: {
     ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+  },
+  blankDisplayText: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
   },
   blankInput: {
     ...StyleSheet.absoluteFillObject,
+    height: "100%",
+    minHeight: 0,
     padding: 0,
     paddingVertical: 0,
     margin: 0,
     fontSize: fontScale(13),
     fontWeight: "600",
     color: "#111827",
-    lineHeight: fontScale(16),
+    lineHeight: fontScale(20),
+    includeFontPadding: false,
+    textAlignVertical: "center",
     borderWidth: 0,
     ...(Platform.OS === "web"
       ? ({ outlineStyle: "none", outlineWidth: 0 } as any)
       : {}),
+  },
+  blankHiddenInput: {
+    opacity: 0,
   },
 
   modalOverlay: {
