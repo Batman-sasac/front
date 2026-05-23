@@ -19,7 +19,6 @@ import type {
   BlankCandidate,
   BlankItemSave,
   LayoutBlock,
-  OcrTableBlock,
   PageItem,
   ScaffoldingPayload,
 } from "../../api/ocr";
@@ -52,6 +51,7 @@ export type BlankItem = {
 type SavePayload = {
   answers: string[];
   selectedBlankIds: number[];
+  selectedBlankItems?: BlankItemSave[];
 };
 
 type SaveResult = {
@@ -150,6 +150,7 @@ export default function ScaffoldingScreen({
   } | null>(null);
 
   const inputRefs = useRef<Record<number, TextInput | null>>({});
+  const answerScrollRefs = useRef<Record<number, ScrollView | null>>({});
   const blankRefs = useRef<Record<number, View | null>>({}); // blankBox 위치 추적
   const selectionSeqRef = useRef(0);
   const reviewInitRef = useRef(false);
@@ -230,6 +231,13 @@ export default function ScaffoldingScreen({
     [isReviewMode, payload?.blankItems],
   );
 
+  useEffect(() => {
+    if (!isReviewMode) return;
+    reviewInitRef.current = false;
+    setSelectedBlanks([]);
+    setSelectionOrder({});
+  }, [isReviewMode, reviewQuizId, payload]);
+
   const hasStructuredPages = useMemo(
     () =>
       sourcePages.some(
@@ -259,6 +267,31 @@ export default function ScaffoldingScreen({
             [normalizeBlankWord(candidate.text), candidate] as const,
         ),
       );
+      const findBlockCandidate = (block: LayoutBlock, fallbackIndex: number) => {
+        const blockText = normalizeBlankWord(block.text ?? "");
+        const matchedCandidates = allPageCandidates.filter(
+          (candidate) => normalizeBlankWord(candidate.text) === blockText,
+        );
+
+        if (matchedCandidates.length === 0) {
+          return allPageCandidates[fallbackIndex];
+        }
+
+        const blockCenterX = block.x + block.width / 2;
+        const blockCenterY = block.y + block.height / 2;
+        return matchedCandidates
+          .map((candidate) => {
+            const candidateCenterX = candidate.x + candidate.width / 2;
+            const candidateCenterY = candidate.y + candidate.height / 2;
+            return {
+              candidate,
+              distance:
+                Math.abs(candidateCenterX - blockCenterX) +
+                Math.abs(candidateCenterY - blockCenterY),
+            };
+          })
+          .sort((a, b) => a.distance - b.distance)[0]?.candidate;
+      };
       const sectionsSource =
         page.layout_blocks && page.layout_blocks.length > 0
           ? page.layout_blocks.map((block, blockIndex) => ({
@@ -266,7 +299,7 @@ export default function ScaffoldingScreen({
             block,
             text: block.text ?? "",
             blankCandidate:
-              allPageCandidates[blockIndex] ??
+              findBlockCandidate(block, blockIndex) ??
               blankCandidateByText.get(normalizeBlankWord(block.text ?? "")),
           }))
           : [
@@ -1269,7 +1302,12 @@ export default function ScaffoldingScreen({
         return (
           <Pressable
             key={key}
-            style={[wordPillStyle, { backgroundColor: HIGHLIGHT_BG }]}
+            style={[
+              wordPillStyle,
+              blankSpacingStyle,
+              styles.blankBoxBase,
+              { backgroundColor: HIGHLIGHT_BG },
+            ]}
             onLayout={recordTokenLayout(globalIndex)}
           >
             <Text style={wordTextStyle}>{t.value}</Text>
@@ -1303,8 +1341,37 @@ export default function ScaffoldingScreen({
           >
             <View style={{ position: "relative" }}>
               <Text style={[wordTextStyle, { opacity: 0 }]}>{t.value}</Text>
-              <View pointerEvents="none" style={styles.blankInputOverlay}>
+              <View style={styles.blankInputOverlay}>
+                <ScrollView
+                  ref={(ref) => {
+                    if (ref) answerScrollRefs.current[instanceId] = ref;
+                  }}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  onContentSizeChange={() =>
+                    answerScrollRefs.current[instanceId]?.scrollToEnd({
+                      animated: false,
+                    })
+                  }
+                  contentContainerStyle={styles.blankAnswerScrollContent}
+                  style={styles.blankAnswerScroll}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      wordTextStyle,
+                      compact && {
+                        fontSize: metrics.keywordFontSize,
+                        lineHeight: metrics.keywordLineHeight,
+                      },
+                      { textAlign },
+                    ]}
+                  >
+                    {userValue}
+                  </Text>
+                </ScrollView>
                 <TextInput
+                  pointerEvents="none"
                   ref={(ref) => {
                     if (ref) inputRefs.current[instanceId] = ref;
                   }}
@@ -1321,6 +1388,7 @@ export default function ScaffoldingScreen({
                   onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
                   style={[
                     styles.blankInput,
+                    styles.blankHiddenInput,
                     compact && {
                       fontSize: metrics.keywordFontSize,
                       lineHeight: metrics.keywordLineHeight,
@@ -1331,6 +1399,8 @@ export default function ScaffoldingScreen({
                   autoCapitalize="none"
                   autoCorrect={false}
                   spellCheck={false}
+                  multiline={false}
+                  scrollEnabled
                   blurOnSubmit={false}
                   onBlur={() => {
                     requestAnimationFrame(() => {
@@ -1369,7 +1439,12 @@ export default function ScaffoldingScreen({
       return (
         <Pressable
           key={key}
-          style={[wordPillStyle, { backgroundColor: HIGHLIGHT_BG }]}
+          style={[
+            wordPillStyle,
+            blankSpacingStyle,
+            styles.blankBoxBase,
+            { backgroundColor: HIGHLIGHT_BG },
+          ]}
           onLayout={recordTokenLayout(globalIndex)}
         >
           <Text style={wordTextStyle}>{t.value}</Text>
@@ -1387,53 +1462,15 @@ export default function ScaffoldingScreen({
     return (
       <View
         key={key}
-        style={[wordPillStyle, blankSpacingStyle, { backgroundColor }]}
+        style={[
+          wordPillStyle,
+          blankSpacingStyle,
+          styles.blankBoxBase,
+          { backgroundColor },
+        ]}
         onLayout={recordTokenLayout(globalIndex)}
       >
         <Text style={wordTextStyle}>{t.value}</Text>
-      </View>
-    );
-  };
-
-  const renderTable = (table: OcrTableBlock, tableIndex: number) => {
-    const columnCount = Math.max(...table.rows.map((row) => row.length), 0);
-    if (columnCount === 0) return null;
-
-    return (
-      <View key={`table-${tableIndex}`} style={styles.pageTableWrap}>
-        <Text style={styles.pageTableTitle}>표 {tableIndex + 1}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.pageTable}>
-            {table.rows.map((row, rowIndex) => {
-              const normalizedRow = Array.from(
-                { length: columnCount },
-                (_, colIndex) => row[colIndex] ?? "",
-              );
-              return (
-                <View key={`row-${rowIndex}`} style={styles.pageTableRow}>
-                  {normalizedRow.map((cell, colIndex) => (
-                    <View
-                      key={`cell-${rowIndex}-${colIndex}`}
-                      style={[
-                        styles.pageTableCell,
-                        rowIndex === 0 && styles.pageTableHeaderCell,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.pageTableCellText,
-                          rowIndex === 0 && styles.pageTableHeaderText,
-                        ]}
-                      >
-                        {cell}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              );
-            })}
-          </View>
-        </ScrollView>
       </View>
     );
   };
@@ -1753,8 +1790,30 @@ export default function ScaffoldingScreen({
             <Text style={[keywordTextStyle, { opacity: 0 }]}>
               {token.value}
             </Text>
-            <View pointerEvents="none" style={styles.blankInputOverlay}>
+            <View style={styles.blankInputOverlay}>
+              <ScrollView
+                ref={(ref) => {
+                  if (ref) answerScrollRefs.current[instanceId] = ref;
+                }}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                onContentSizeChange={() =>
+                  answerScrollRefs.current[instanceId]?.scrollToEnd({
+                    animated: false,
+                  })
+                }
+                contentContainerStyle={styles.blankAnswerScrollContent}
+                style={styles.blankAnswerScroll}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[keywordTextStyle, { textAlign }]}
+                >
+                  {userValue}
+                </Text>
+              </ScrollView>
               <TextInput
+                pointerEvents="none"
                 ref={(ref) => {
                   if (ref) inputRefs.current[instanceId] = ref;
                 }}
@@ -1771,6 +1830,7 @@ export default function ScaffoldingScreen({
                 onSubmitEditing={() => focusAdjacentBlank(instanceId, 1)}
                 style={[
                   styles.blankInput,
+                  styles.blankHiddenInput,
                   {
                     textAlign,
                     fontSize: metrics.keywordFontSize,
@@ -1781,6 +1841,8 @@ export default function ScaffoldingScreen({
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
+                multiline={false}
+                scrollEnabled
                 blurOnSubmit={false}
                 onBlur={() => {
                   requestAnimationFrame(() => {
@@ -1928,7 +1990,6 @@ export default function ScaffoldingScreen({
             </View>
           )}
 
-          {(page.tables ?? []).map(renderTable)}
         </View>
       </View>
     );
@@ -2050,16 +2111,34 @@ export default function ScaffoldingScreen({
                       // 같은 단어(같은 blankId)가 여러 번 나오더라도 dedupe 하지 않아야
                       // 페이지별 문항 수/정답 수가 정확히 집계된다.
                       const answerPairs = orderedSelectedBlanks
-                        .map((instanceId) => {
+                        .map((instanceId, index) => {
                           const blankId = blankIdByInstance.get(instanceId);
+                          const occurrence = keywordOccurrenceOrder.find(
+                            (item) => item.instanceId === instanceId,
+                          );
+                          const instance = keywordInstanceById.get(instanceId);
                           if (typeof blankId !== "number") return null;
                           return {
                             blankId,
                             answer: answers[instanceId] ?? "",
+                            blankItem: {
+                              blank_index: index,
+                              word: instance?.word ?? occurrence?.normalizedWord ?? "",
+                              page_index: occurrence?.pageIndex ?? 0,
+                              ...(occurrence?.candidateId
+                                ? { candidate_id: occurrence.candidateId }
+                                : {}),
+                            },
                           };
                         })
                         .filter(
-                          (pair): pair is { blankId: number; answer: string } =>
+                          (
+                            pair,
+                          ): pair is {
+                            blankId: number;
+                            answer: string;
+                            blankItem: BlankItemSave;
+                          } =>
                             pair != null,
                         );
                       const orderedBlankIds = answerPairs.map(
@@ -2069,6 +2148,9 @@ export default function ScaffoldingScreen({
                       const saveResult = await onSave({
                         answers: answerList,
                         selectedBlankIds: orderedBlankIds,
+                        selectedBlankItems: answerPairs.map(
+                          (pair) => pair.blankItem,
+                        ),
                       });
                       if (isReviewMode && saveResult?.handledCompletion) {
                         return;
@@ -2673,6 +2755,8 @@ const styles = StyleSheet.create({
   structuredKeywordInlineBox: {
     alignSelf: "flex-start",
     justifyContent: "center",
+    position: "relative",
+    overflow: "hidden",
   },
   structuredKeywordBoxDefault: {
     backgroundColor: HIGHLIGHT_BG,
@@ -2682,11 +2766,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(199, 207, 255, 0.55)",
   },
   structuredKeywordInputBox: {
-    backgroundColor: "rgba(199, 207, 255, 0.28)",
+    backgroundColor: HIGHLIGHT_BG,
     borderRadius: scale(2),
   },
   structuredKeywordInputBoxActive: {
-    borderWidth: 1,
     borderColor: "#5E82FF",
   },
   layoutBlockFlow: {
@@ -2721,45 +2804,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flexShrink: 0,
-  },
-  pageTableWrap: {
-    gap: scale(6),
-  },
-  pageTableTitle: {
-    fontSize: fontScale(12),
-    lineHeight: fontScale(18),
-    fontWeight: "700",
-    color: "#6B7280",
-  },
-  pageTable: {
-    borderWidth: 1,
-    borderColor: "#D8DEEF",
-    borderRadius: scale(10),
-    overflow: "hidden",
-  },
-  pageTableRow: {
-    flexDirection: "row",
-  },
-  pageTableCell: {
-    minWidth: scale(88),
-    paddingHorizontal: scale(10),
-    paddingVertical: scale(8),
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: "#D8DEEF",
-    backgroundColor: "#FFFFFF",
-  },
-  pageTableHeaderCell: {
-    backgroundColor: "#EEF2FF",
-  },
-  pageTableCellText: {
-    fontSize: fontScale(11),
-    lineHeight: fontScale(16),
-    fontWeight: "500",
-    color: "#1F2937",
-  },
-  pageTableHeaderText: {
-    fontWeight: "700",
   },
   flow: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start" },
   newline: { width: "100%", height: fontScale(14) },
@@ -2797,24 +2841,44 @@ const styles = StyleSheet.create({
     marginVertical: 0,
     justifyContent: "center",
   },
-  blankBoxBase: { borderWidth: 2, borderColor: "transparent" },
+  blankBoxBase: {
+    borderWidth: 2,
+    borderColor: "transparent",
+    position: "relative",
+    overflow: "hidden",
+  },
   blankBoxActive: { borderColor: "#5E82FF" },
   blankInputOverlay: {
     ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  blankAnswerScroll: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  blankAnswerScrollContent: {
+    alignItems: "center",
   },
   blankInput: {
     ...StyleSheet.absoluteFillObject,
+    height: "100%",
+    minHeight: 0,
     padding: 0,
     paddingVertical: 0,
     margin: 0,
     fontSize: fontScale(13),
     fontWeight: "600",
     color: "#111827",
-    lineHeight: fontScale(16),
+    lineHeight: fontScale(20),
+    includeFontPadding: false,
+    textAlignVertical: "center",
     borderWidth: 0,
     ...(Platform.OS === "web"
       ? ({ outlineStyle: "none", outlineWidth: 0 } as any)
       : {}),
+  },
+  blankHiddenInput: {
+    opacity: 0,
   },
 
   modalOverlay: {

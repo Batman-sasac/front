@@ -1311,18 +1311,32 @@ export default function App() {
                   setScaffoldingLoading(false);
                 }
               }}
-              onSave={async ({ answers: userAnswers, selectedBlankIds }) => {
+              onSave={async ({ answers: userAnswers, selectedBlankIds, selectedBlankItems }) => {
                 if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
 
                 const blanks = scaffoldingPayload.blanks ?? [];
                 const rawBlankItems = scaffoldingPayload.blankItems && scaffoldingPayload.blankItems.length > 0
                   ? scaffoldingPayload.blankItems
                   : blanks.map((b, i) => ({ blank_index: i, word: b.word, page_index: 0 }));
-                const { keywords, blankItems } = buildOrderedStudySaveData({
-                  selectedBlankIds,
-                  blanks,
-                  rawBlankItems,
-                });
+                const selectedExactBlankItems = (selectedBlankItems ?? [])
+                  .map((item, index) => ({
+                    blank_index: index,
+                    word: item.word,
+                    page_index: item.page_index ?? 0,
+                    ...(item.candidate_id ? { candidate_id: item.candidate_id } : {}),
+                  }))
+                  .filter((item) => item.word.trim().length > 0);
+                const orderedSaveData = selectedExactBlankItems.length > 0
+                  ? {
+                    keywords: selectedExactBlankItems.map((item) => item.word),
+                    blankItems: selectedExactBlankItems,
+                  }
+                  : buildOrderedStudySaveData({
+                    selectedBlankIds,
+                    blanks,
+                    rawBlankItems,
+                  });
+                const { keywords, blankItems } = orderedSaveData;
                 if (keywords.length === 0 && !isReviewMode) {
                   throw new Error('선택된 빈칸 정보가 없습니다.');
                 }
