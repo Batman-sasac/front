@@ -149,6 +149,7 @@ export default function ScaffoldingScreen({
   } | null>(null);
 
   const inputRefs = useRef<Record<number, TextInput | null>>({});
+  const answerScrollRefs = useRef<Record<number, ScrollView | null>>({});
   const blankRefs = useRef<Record<number, View | null>>({}); // blankBox 위치 추적
   const selectionSeqRef = useRef(0);
   const reviewInitRef = useRef(false);
@@ -1302,22 +1303,37 @@ export default function ScaffoldingScreen({
           >
             <View style={{ position: "relative" }}>
               <Text style={[wordTextStyle, { opacity: 0 }]}>{t.value}</Text>
-              <Text
-                pointerEvents="none"
-                style={[
-                  wordTextStyle,
-                  styles.blankDisplayText,
-                  compact && {
-                    fontSize: metrics.keywordFontSize,
-                    lineHeight: metrics.keywordLineHeight,
-                  },
-                  { textAlign },
-                ]}
-              >
-                {userValue}
-              </Text>
-              <View pointerEvents="none" style={styles.blankInputOverlay}>
+              <View style={styles.blankInputOverlay}>
+                <ScrollView
+                  ref={(ref) => {
+                    if (ref) answerScrollRefs.current[instanceId] = ref;
+                  }}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  onContentSizeChange={() =>
+                    answerScrollRefs.current[instanceId]?.scrollToEnd({
+                      animated: false,
+                    })
+                  }
+                  contentContainerStyle={styles.blankAnswerScrollContent}
+                  style={styles.blankAnswerScroll}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      wordTextStyle,
+                      compact && {
+                        fontSize: metrics.keywordFontSize,
+                        lineHeight: metrics.keywordLineHeight,
+                      },
+                      { textAlign },
+                    ]}
+                  >
+                    {userValue}
+                  </Text>
+                </ScrollView>
                 <TextInput
+                  pointerEvents="none"
                   ref={(ref) => {
                     if (ref) inputRefs.current[instanceId] = ref;
                   }}
@@ -1345,6 +1361,8 @@ export default function ScaffoldingScreen({
                   autoCapitalize="none"
                   autoCorrect={false}
                   spellCheck={false}
+                  multiline={false}
+                  scrollEnabled
                   blurOnSubmit={false}
                   onBlur={() => {
                     requestAnimationFrame(() => {
@@ -1724,14 +1742,30 @@ export default function ScaffoldingScreen({
             <Text style={[keywordTextStyle, { opacity: 0 }]}>
               {token.value}
             </Text>
-            <Text
-              pointerEvents="none"
-              style={[keywordTextStyle, styles.blankDisplayText, { textAlign }]}
-            >
-              {userValue}
-            </Text>
-            <View pointerEvents="none" style={styles.blankInputOverlay}>
+            <View style={styles.blankInputOverlay}>
+              <ScrollView
+                ref={(ref) => {
+                  if (ref) answerScrollRefs.current[instanceId] = ref;
+                }}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                onContentSizeChange={() =>
+                  answerScrollRefs.current[instanceId]?.scrollToEnd({
+                    animated: false,
+                  })
+                }
+                contentContainerStyle={styles.blankAnswerScrollContent}
+                style={styles.blankAnswerScroll}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[keywordTextStyle, { textAlign }]}
+                >
+                  {userValue}
+                </Text>
+              </ScrollView>
               <TextInput
+                pointerEvents="none"
                 ref={(ref) => {
                   if (ref) inputRefs.current[instanceId] = ref;
                 }}
@@ -1759,6 +1793,8 @@ export default function ScaffoldingScreen({
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
+                multiline={false}
+                scrollEnabled
                 blurOnSubmit={false}
                 onBlur={() => {
                   requestAnimationFrame(() => {
@@ -2741,11 +2777,11 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
   },
-  blankDisplayText: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
+  blankAnswerScroll: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  blankAnswerScrollContent: {
+    alignItems: "center",
   },
   blankInput: {
     ...StyleSheet.absoluteFillObject,
