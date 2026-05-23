@@ -19,7 +19,6 @@ import type {
   BlankCandidate,
   BlankItemSave,
   LayoutBlock,
-  OcrTableBlock,
   PageItem,
   ScaffoldingPayload,
 } from "../../api/ocr";
@@ -1395,49 +1394,6 @@ export default function ScaffoldingScreen({
     );
   };
 
-  const renderTable = (table: OcrTableBlock, tableIndex: number) => {
-    const columnCount = Math.max(...table.rows.map((row) => row.length), 0);
-    if (columnCount === 0) return null;
-
-    return (
-      <View key={`table-${tableIndex}`} style={styles.pageTableWrap}>
-        <Text style={styles.pageTableTitle}>표 {tableIndex + 1}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.pageTable}>
-            {table.rows.map((row, rowIndex) => {
-              const normalizedRow = Array.from(
-                { length: columnCount },
-                (_, colIndex) => row[colIndex] ?? "",
-              );
-              return (
-                <View key={`row-${rowIndex}`} style={styles.pageTableRow}>
-                  {normalizedRow.map((cell, colIndex) => (
-                    <View
-                      key={`cell-${rowIndex}-${colIndex}`}
-                      style={[
-                        styles.pageTableCell,
-                        rowIndex === 0 && styles.pageTableHeaderCell,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.pageTableCellText,
-                          rowIndex === 0 && styles.pageTableHeaderText,
-                        ]}
-                      >
-                        {cell}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              );
-            })}
-          </View>
-        </ScrollView>
-      </View>
-    );
-  };
-
   const getCoordinateBlockSections = (sections: PageRenderSection[]) =>
     sections
       .filter((section): section is PageRenderSection & { block: LayoutBlock } => !!section.block)
@@ -1928,7 +1884,6 @@ export default function ScaffoldingScreen({
             </View>
           )}
 
-          {(page.tables ?? []).map(renderTable)}
         </View>
       </View>
     );
@@ -2721,45 +2676,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flexShrink: 0,
-  },
-  pageTableWrap: {
-    gap: scale(6),
-  },
-  pageTableTitle: {
-    fontSize: fontScale(12),
-    lineHeight: fontScale(18),
-    fontWeight: "700",
-    color: "#6B7280",
-  },
-  pageTable: {
-    borderWidth: 1,
-    borderColor: "#D8DEEF",
-    borderRadius: scale(10),
-    overflow: "hidden",
-  },
-  pageTableRow: {
-    flexDirection: "row",
-  },
-  pageTableCell: {
-    minWidth: scale(88),
-    paddingHorizontal: scale(10),
-    paddingVertical: scale(8),
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: "#D8DEEF",
-    backgroundColor: "#FFFFFF",
-  },
-  pageTableHeaderCell: {
-    backgroundColor: "#EEF2FF",
-  },
-  pageTableCellText: {
-    fontSize: fontScale(11),
-    lineHeight: fontScale(16),
-    fontWeight: "500",
-    color: "#1F2937",
-  },
-  pageTableHeaderText: {
-    fontWeight: "700",
   },
   flow: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start" },
   newline: { width: "100%", height: fontScale(14) },
