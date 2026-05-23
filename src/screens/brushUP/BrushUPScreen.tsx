@@ -302,7 +302,11 @@ export default function BrushUPScreen({
                     onPressIn={() => setSuppressCardPress(true)}
                     onPress={() => handleDeletePress(card)}
                   >
-                    <Text style={styles.closeText}>❌</Text>
+                    <Image
+                      source={require("../../../assets/delete.png")}
+                      style={styles.closeIcon}
+                      resizeMode="contain"
+                    />
                   </Pressable>
 
                   {/* 카드 클릭 영역 */}
@@ -401,7 +405,11 @@ export default function BrushUPScreen({
             <View style={styles.searchModalHeader}>
               <Text style={styles.searchModalTitle}>카드 검색</Text>
               <Pressable onPress={() => setSearchModalVisible(false)}>
-                <Text style={styles.searchModalClose}>❌</Text>
+                <Image
+                  source={require("../../../assets/delete.png")}
+                  style={styles.searchModalCloseIcon}
+                  resizeMode="contain"
+                />
               </Pressable>
             </View>
 
@@ -654,10 +662,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 10,
   },
-  closeText: {
-    fontSize: fontScale(22),
-    fontWeight: "700",
-    color: "#6B7280",
+  closeIcon: {
+    width: scale(14),
+    height: scale(14),
   },
   cardHeader: {
     flexDirection: "row",
@@ -783,10 +790,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#111827",
   },
-  searchModalClose: {
-    fontSize: fontScale(36),
-    fontWeight: "300",
-    color: "#9CA3AF",
+  searchModalCloseIcon: {
+    width: scale(24),
+    height: scale(24),
   },
   searchInputContainer: {
     flexDirection: "row",

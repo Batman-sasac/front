@@ -51,6 +51,7 @@ export type BlankItem = {
 type SavePayload = {
   answers: string[];
   selectedBlankIds: number[];
+  selectedBlankItems?: BlankItemSave[];
 };
 
 type SaveResult = {
@@ -230,6 +231,13 @@ export default function ScaffoldingScreen({
     [isReviewMode, payload?.blankItems],
   );
 
+  useEffect(() => {
+    if (!isReviewMode) return;
+    reviewInitRef.current = false;
+    setSelectedBlanks([]);
+    setSelectionOrder({});
+  }, [isReviewMode, reviewQuizId, payload]);
+
   const hasStructuredPages = useMemo(
     () =>
       sourcePages.some(
@@ -259,6 +267,31 @@ export default function ScaffoldingScreen({
             [normalizeBlankWord(candidate.text), candidate] as const,
         ),
       );
+      const findBlockCandidate = (block: LayoutBlock, fallbackIndex: number) => {
+        const blockText = normalizeBlankWord(block.text ?? "");
+        const matchedCandidates = allPageCandidates.filter(
+          (candidate) => normalizeBlankWord(candidate.text) === blockText,
+        );
+
+        if (matchedCandidates.length === 0) {
+          return allPageCandidates[fallbackIndex];
+        }
+
+        const blockCenterX = block.x + block.width / 2;
+        const blockCenterY = block.y + block.height / 2;
+        return matchedCandidates
+          .map((candidate) => {
+            const candidateCenterX = candidate.x + candidate.width / 2;
+            const candidateCenterY = candidate.y + candidate.height / 2;
+            return {
+              candidate,
+              distance:
+                Math.abs(candidateCenterX - blockCenterX) +
+                Math.abs(candidateCenterY - blockCenterY),
+            };
+          })
+          .sort((a, b) => a.distance - b.distance)[0]?.candidate;
+      };
       const sectionsSource =
         page.layout_blocks && page.layout_blocks.length > 0
           ? page.layout_blocks.map((block, blockIndex) => ({
@@ -266,7 +299,7 @@ export default function ScaffoldingScreen({
             block,
             text: block.text ?? "",
             blankCandidate:
-              allPageCandidates[blockIndex] ??
+              findBlockCandidate(block, blockIndex) ??
               blankCandidateByText.get(normalizeBlankWord(block.text ?? "")),
           }))
           : [
@@ -2078,16 +2111,34 @@ export default function ScaffoldingScreen({
                       // 같은 단어(같은 blankId)가 여러 번 나오더라도 dedupe 하지 않아야
                       // 페이지별 문항 수/정답 수가 정확히 집계된다.
                       const answerPairs = orderedSelectedBlanks
-                        .map((instanceId) => {
+                        .map((instanceId, index) => {
                           const blankId = blankIdByInstance.get(instanceId);
+                          const occurrence = keywordOccurrenceOrder.find(
+                            (item) => item.instanceId === instanceId,
+                          );
+                          const instance = keywordInstanceById.get(instanceId);
                           if (typeof blankId !== "number") return null;
                           return {
                             blankId,
                             answer: answers[instanceId] ?? "",
+                            blankItem: {
+                              blank_index: index,
+                              word: instance?.word ?? occurrence?.normalizedWord ?? "",
+                              page_index: occurrence?.pageIndex ?? 0,
+                              ...(occurrence?.candidateId
+                                ? { candidate_id: occurrence.candidateId }
+                                : {}),
+                            },
                           };
                         })
                         .filter(
-                          (pair): pair is { blankId: number; answer: string } =>
+                          (
+                            pair,
+                          ): pair is {
+                            blankId: number;
+                            answer: string;
+                            blankItem: BlankItemSave;
+                          } =>
                             pair != null,
                         );
                       const orderedBlankIds = answerPairs.map(
@@ -2097,6 +2148,9 @@ export default function ScaffoldingScreen({
                       const saveResult = await onSave({
                         answers: answerList,
                         selectedBlankIds: orderedBlankIds,
+                        selectedBlankItems: answerPairs.map(
+                          (pair) => pair.blankItem,
+                        ),
                       });
                       if (isReviewMode && saveResult?.handledCompletion) {
                         return;
