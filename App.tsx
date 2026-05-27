@@ -7,6 +7,7 @@ import { TYPE_LABEL_KEY } from './src/app/progress';
 import {
   buildReviewPayloadsByPage,
 } from './src/app/studyFlow';
+import useHomeDashboardData from './src/app/useHomeDashboardData';
 import useLearningProgress from './src/app/useLearningProgress';
 import useStudyCaptureFlow from './src/app/useStudyCaptureFlow';
 import Splash from './src/components/Splash';
@@ -19,7 +20,7 @@ import TypeTestScreen from './src/screens/diagnosis/TypeTestScreen';
 import TypeResultScreen from './src/screens/diagnosis/TypeResultScreen';
 import HomeScreen from './src/screens/home/HomeScreen';
 import { ResultStats, typeProfiles } from './src/data/learningTypeTest';
-import LeagueScreen, { LeagueTier, LeagueUser, } from './src/screens/league/LeagueScreen';
+import LeagueScreen from './src/screens/league/LeagueScreen';
 import AlarmScreen from './src/screens/alarm/AlarmScreen';
 import AlarmSettingScreen from './src/screens/alarm/AlarmSettingScreen';
 import MyPageScreen from './src/screens/mypage/MyPageScreen';
@@ -34,9 +35,8 @@ import RewardScreen, { RewardType } from './src/screens/reward/Reward';
 import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { PageItem, BlankItemSave, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy } from './src/api/ocr';
+import { PageItem, BlankItemSave, gradeStudy, getQuizForReview, getOcrUsage, OcrUsageResponse, submitReviewStudy } from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
-import { getMyRewardRank, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 import { getHomeStats, getUserStats } from './src/api/auth';
@@ -51,8 +51,6 @@ export default function App() {
   const [userEmail, setUserEmail] = useState('');
   const [userSocialId, setUserSocialId] = useState('');
   const [typeResult, setTypeResult] = useState<ResultStats | null>(null);
-  const [myRewardRank, setMyRewardRank] = useState<number | null>(null);
-  const [myRewardTotal, setMyRewardTotal] = useState<number | null>(null);
   const [isReviewMode, setIsReviewMode] = useState(false); // 복습 모드 여부
   const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습 퀴즈 ID
   const [batchEarnedXp, setBatchEarnedXp] = useState(0);
@@ -93,9 +91,6 @@ export default function App() {
     return batchEarnedXpRef.current;
   };
 
-  // 학습 통계 상태
-  const [totalStudyCount, setTotalStudyCount] = useState(0);
-  const [continuousDays, setContinuousDays] = useState(0);
   const isUsageLimitReached = (usage?: OcrUsageResponse | null) => {
     const target = usage ?? ocrUsage;
     if (!target) return false;
@@ -122,42 +117,6 @@ export default function App() {
     }
   };
 
-  const refreshLeagueLeaderboard = async () => {
-    try {
-      const response = await getRewardLeaderboard();
-      if (response.status !== 'success' || !response.leaderboard) {
-        return null;
-      }
-
-      const users: LeagueUser[] = response.leaderboard.map((item, idx) => ({
-        id: `user_${idx}`,
-        nickname: item.nickname,
-        xp: item.total_reward,
-      }));
-      setLeagueUsers(users);
-      return users;
-    } catch (error) {
-      console.error('리그 데이터 로드 실패:', error);
-      return null;
-    }
-  };
-
-  const refreshMyRewardRank = async () => {
-    try {
-      const response = await getMyRewardRank();
-      if (response.status !== 'success') {
-        return null;
-      }
-
-      setMyRewardRank(response.rank);
-      setMyRewardTotal(response.total_reward);
-      return response;
-    } catch (error) {
-      console.error('내 리그 순위 로드 실패:', error);
-      return null;
-    }
-  };
-
   const showRewardScreen = (type: RewardType, xp: number, onClose?: () => void) => {
     setRewardScreenState({ type, xp });
     rewardCloseActionRef.current = onClose ?? null;
@@ -174,6 +133,22 @@ export default function App() {
     }
     setStep('home');
   };
+
+  const {
+    myRewardRank,
+    myRewardTotal,
+    totalStudyCount,
+    continuousDays,
+    leagueUsers,
+    weeklyGrowth,
+    monthlyStats,
+    currentLeagueTier,
+    leagueRemainingText,
+    refreshLeagueLeaderboard,
+    refreshMyRewardRank,
+    loadMyPageStats,
+    loadHomeDashboard,
+  } = useHomeDashboardData();
 
   const {
     typeLabel,
@@ -262,20 +237,9 @@ export default function App() {
     setStep('subscribe');
   };
 
-  // 학습 통계 불러오기
   useEffect(() => {
-    const loadStats = async () => {
-      try {
-        const stats = await getMonthlyStats();
-        setTotalStudyCount(stats.compare?.this_month_count || 0);
-        setContinuousDays(stats.compare?.diff || 0);
-      } catch (error) {
-        console.error('학습 통계 불러오기 실패:', error);
-      }
-    };
-
     if (step === 'mypage') {
-      loadStats();
+      void loadMyPageStats();
     }
   }, [step]);
 
@@ -361,43 +325,7 @@ export default function App() {
     if (step === 'home' && progressLoaded) {
       handleDailyCheckIn();   // 홈 진입 시 자동 출석
 
-      // 통계 데이터 로드 (당월 학습 횟수는 /auth/home/stats에서 study_logs 기준으로 가져옴)
-      (async () => {
-        try {
-          const token = await getToken();
-          const [weekly, monthly, homeStats, rank, leaderboard] = await Promise.all([
-            getWeeklyGrowth(),
-            getMonthlyStats(),
-            token ? getHomeStats(token).catch(() => null) : Promise.resolve(null),
-            token ? getMyRewardRank().catch(() => null) : Promise.resolve(null),
-            token ? getRewardLeaderboard().catch(() => null) : Promise.resolve(null),
-          ]);
-          setWeeklyGrowth(weekly);
-          if (rank?.status === 'success') {
-            setMyRewardRank(rank.rank);
-            setMyRewardTotal(rank.total_reward);
-          }
-          if (leaderboard?.status === 'success' && leaderboard.leaderboard) {
-            setLeagueUsers(leaderboard.leaderboard.map((item, idx) => ({
-              id: `user_${idx}`,
-              nickname: item.nickname,
-              xp: item.total_reward,
-            })));
-          }
-          const compare = monthly.compare ?? {};
-          setMonthlyStats({
-            ...compare,
-            this_month_count: homeStats?.data?.this_month_count ?? compare.this_month_count ?? 0,
-          });
-          if (homeStats?.data?.monthly_goal != null && homeStats.data.monthly_goal > 0) {
-            setMonthlyGoal(homeStats.data.monthly_goal);
-          } else if (compare?.target_count > 0) {
-            setMonthlyGoal(compare.target_count);
-          }
-        } catch (e) {
-          console.error('통계 데이터 로드 실패:', e);
-        }
-      })();
+      void loadHomeDashboard(setMonthlyGoal);
     }
 
     // 리그 화면 진입 시 상위 5명 리더보드 로드
@@ -480,14 +408,6 @@ export default function App() {
     setNickname(userNickname);
     setStep('typeIntro');
   };
-
-
-  const [currentLeagueTier] = useState<LeagueTier>('iron');  // 우선 아이언으로 시작
-  const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
-  const [leagueRemainingText] = useState<string>('');
-  // 홈 화면 통계 데이터
-  const [weeklyGrowth, setWeeklyGrowth] = useState<{ labels: string[]; data: number[] } | undefined>();
-  const [monthlyStats, setMonthlyStats] = useState<any>(undefined);
 
   function buildBlankWordsFromText(text: string, limit = 8) {
     // 1) 공백/문장부호 기준으로 분리
