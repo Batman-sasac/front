@@ -6,12 +6,9 @@ import { getErrorMessage } from './src/app/errors';
 import { TYPE_LABEL_KEY } from './src/app/progress';
 import {
   buildReviewPayloadsByPage,
-  createOcrJobId,
-  getSourceDisplayName,
-  type OcrProgressState,
-  type SourceCropMap,
 } from './src/app/studyFlow';
 import useLearningProgress from './src/app/useLearningProgress';
+import useStudyCaptureFlow from './src/app/useStudyCaptureFlow';
 import Splash from './src/components/Splash';
 import UsageExhaustedModal from './src/components/subscription/UsageExhaustedModal';
 import LoginScreen from './src/screens/auth/LoginScreen';
@@ -28,7 +25,6 @@ import AlarmSettingScreen from './src/screens/alarm/AlarmSettingScreen';
 import MyPageScreen from './src/screens/mypage/MyPageScreen';
 import TakePicture from './src/screens/input_data/TakePicture';
 import SelectPicture from './src/screens/input_data/SelectPicture';
-import { StudySource } from './src/screens/input_data/studySource';
 import TalkingStudyScreen from './src/screens/study/TalkingStudyScreen';
 import ScaffoldingScreen from './src/screens/study/ScaffoldingScreen';
 import StudyFlowScreen from './src/screens/study/StudyFlowScreen';
@@ -38,14 +34,13 @@ import RewardScreen, { RewardType } from './src/screens/reward/Reward';
 import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { runOcr, ScaffoldingPayload, PageItem, BlankItemSave, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy, OcrProgressMessage } from './src/api/ocr';
+import { PageItem, BlankItemSave, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy } from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
 import { getMyRewardRank, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 import { getHomeStats, getUserStats } from './src/api/auth';
 import { getOcrUsageExhaustedMessage } from './src/lib/ocrUsage';
-import { manipulateAsync, SaveFormat, type Action } from 'expo-image-manipulator';
 import type { AppStep as Step } from './src/navigation/routes';
 
 type SocialProvider = 'kakao' | 'naver';
@@ -60,9 +55,6 @@ export default function App() {
   const [myRewardTotal, setMyRewardTotal] = useState<number | null>(null);
   const [isReviewMode, setIsReviewMode] = useState(false); // 복습 모드 여부
   const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습 퀴즈 ID
-  const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
-  const [subjectName, setSubjectName] = useState('');
-  const [cropBySourceIndex, setCropBySourceIndex] = useState<SourceCropMap>({});
   const [batchEarnedXp, setBatchEarnedXp] = useState(0);
   const batchEarnedXpRef = useRef(0);
   type PendingGradePart = {
@@ -86,14 +78,6 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [ocrUsage, setOcrUsage] = useState<OcrUsageResponse | null>(null);
   const [showUsageExhaustedModal, setShowUsageExhaustedModal] = useState(false);
-  const [ocrProgressState, setOcrProgressState] = useState<OcrProgressState>({
-    completedPages: 0,
-    totalPages: 0,
-    activeSourceIndex: 0,
-    activeSourceName: '',
-    activeSourceCompletedPages: 0,
-    activeSourceTotalPages: 0,
-  });
 
   const usageExhaustedMessage = getOcrUsageExhaustedMessage(ocrUsage);
 
@@ -214,6 +198,34 @@ export default function App() {
       void refreshMyRewardRank();
       void refreshLeagueLeaderboard();
     },
+  });
+
+  const {
+    selectedSourceIndex,
+    setSelectedSourceIndex,
+    subjectName,
+    cropBySourceIndex,
+    setCropBySourceIndex,
+    capturedSources,
+    scaffoldingPayload,
+    setScaffoldingPayload,
+    scaffoldingPayloads,
+    setScaffoldingPayloads,
+    scaffoldingLoading,
+    setScaffoldingLoading,
+    scaffoldingError,
+    setScaffoldingError,
+    ocrProgressState,
+    resetStudyInputState,
+    prepareCapturedSources,
+    clearCapturedSources,
+    prepareLearningStart,
+    runOcrForIndex,
+    preloadScaffoldingPayloads,
+  } = useStudyCaptureFlow({
+    setStep,
+    refreshOcrUsage,
+    ocrUsage,
   });
 
   const tryMoveToTakePicture = async () => {
@@ -473,184 +485,6 @@ export default function App() {
   const [currentLeagueTier] = useState<LeagueTier>('iron');  // 우선 아이언으로 시작
   const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
   const [leagueRemainingText] = useState<string>('');
-  // 촬영 결과 임시 소스 목록
-  const [capturedSources, setCapturedSources] = useState<StudySource[]>([]);
-
-  const [scaffoldingPayload, setScaffoldingPayload] = useState<ScaffoldingPayload | null>(null);
-  const [scaffoldingPayloads, setScaffoldingPayloads] = useState<ScaffoldingPayload[]>([]);
-  const [scaffoldingLoading, setScaffoldingLoading] = useState(false);
-  const [scaffoldingError, setScaffoldingError] = useState<string | null>(null);
-
-  const runOcrForIndex = async (
-    sources: StudySource[],
-    index: number,
-    cropMap: SourceCropMap,
-  ) => {
-    const target = sources[index];
-    const uri = target?.uri;
-
-    if (!uri) {
-      throw new Error(`${index + 1}번째 이미지 URI를 찾을 수 없습니다.`);
-    }
-
-    const mimeType = target?.mimeType ?? '';
-    const isImage = typeof mimeType === 'string' ? mimeType.startsWith('image/') : false;
-    const cropInfo = cropMap[index];
-
-    // 서버에서 crop하는 대신, 업로드 전에 "크롭된 파일"을 만들어 전송한다.
-    // - 네트워크 전송량 감소
-    // - OCR 처리 시간/실패율(타임아웃/연결 끊김) 감소
-    // - crop 값 누락/좌표 문제를 줄이기 쉬움
-    let uploadUri = uri;
-    let uploadMimeType = target?.mimeType ?? undefined;
-    let uploadFileName = target?.name ?? undefined;
-    let shouldSendCropInfo = true;
-
-    if (isImage) {
-      try {
-        const actions: Action[] = [];
-
-        if (cropInfo && cropInfo.pw > 0 && cropInfo.ph > 0) {
-          actions.push({
-            crop: {
-              originX: Math.max(0, Math.round(cropInfo.px)),
-              originY: Math.max(0, Math.round(cropInfo.py)),
-              width: Math.max(1, Math.round(cropInfo.pw)),
-              height: Math.max(1, Math.round(cropInfo.ph)),
-            },
-          });
-        }
-
-        // 너무 큰 이미지는 업로드 전에 축소 (가로 기준)
-        // OCR은 보통 1500~2200px 사이에서 품질/속도 균형이 좋다.
-        const MAX_WIDTH = 2000;
-        actions.push({ resize: { width: MAX_WIDTH } });
-
-        const result = await manipulateAsync(uploadUri, actions, {
-          compress: 0.82,
-          format: SaveFormat.JPEG,
-        });
-
-        if (result?.uri) {
-          uploadUri = result.uri;
-          uploadMimeType = 'image/jpeg';
-          uploadFileName = `ocr_${Date.now()}.jpg`;
-          shouldSendCropInfo = false; // 이미 크롭된 파일 자체를 보내므로 서버 crop 불필요
-        }
-      } catch (e) {
-        // 전처리가 실패해도 원본으로 계속 진행 (기존 동작 유지)
-        console.warn('OCR 업로드 전 이미지 전처리 실패, 원본으로 진행:', e);
-      }
-    }
-
-    const jobId = createOcrJobId();
-
-    return runOcr(uploadUri, shouldSendCropInfo ? cropInfo : undefined, {
-      fileName: uploadFileName,
-      mimeType: uploadMimeType,
-      jobId,
-      onProgress: (message: OcrProgressMessage) => {
-        if (message.status !== 'page_done') return;
-        setOcrProgressState((prev) => {
-          const completedBeforeActive = prev.activeSourceIndex === index
-            ? Math.max(prev.completedPages - prev.activeSourceCompletedPages, 0)
-            : Math.min(prev.completedPages, prev.totalPages);
-          const nextActiveCompletedPages = Math.max(0, message.page ?? 0);
-          const nextActiveTotalPages = Math.max(message.total_pages ?? 0, nextActiveCompletedPages, 1);
-          const nextCompletedPages = completedBeforeActive + nextActiveCompletedPages;
-          const nextTotalPages = completedBeforeActive + nextActiveTotalPages + Math.max(sources.length - index - 1, 0);
-
-          return {
-            completedPages: nextCompletedPages,
-            totalPages: nextTotalPages,
-            activeSourceIndex: index,
-            activeSourceName: message.filename || getSourceDisplayName(target, index),
-            activeSourceCompletedPages: nextActiveCompletedPages,
-            activeSourceTotalPages: nextActiveTotalPages,
-          };
-        });
-      },
-    });
-  };
-
-  const preloadScaffoldingPayloads = async (
-    sources: StudySource[],
-    cropMap: SourceCropMap,
-  ) => {
-    setScaffoldingLoading(true);
-    setScaffoldingError(null);
-    setScaffoldingPayload(null);
-    setScaffoldingPayloads([]);
-    setSelectedSourceIndex(0);
-    setOcrProgressState({
-      completedPages: 0,
-      totalPages: Math.max(sources.length, 1),
-      activeSourceIndex: 0,
-      activeSourceName: getSourceDisplayName(sources[0], 0),
-      activeSourceCompletedPages: 0,
-      activeSourceTotalPages: 1,
-    });
-
-    try {
-      const nextPayloads: ScaffoldingPayload[] = [];
-      for (let i = 0; i < sources.length; i += 1) {
-        setOcrProgressState((prev) => ({
-          ...prev,
-          activeSourceIndex: i,
-          activeSourceName: getSourceDisplayName(sources[i], i),
-          activeSourceCompletedPages: 0,
-          activeSourceTotalPages: prev.activeSourceIndex === i ? prev.activeSourceTotalPages : 1,
-        }));
-        const payload = await runOcrForIndex(sources, i, cropMap);
-        nextPayloads.push(payload);
-        const actualPages = Math.max(payload.pages?.length ?? 0, 1);
-        const completedBeforeCurrent = nextPayloads
-          .slice(0, -1)
-          .reduce((sum, item) => sum + Math.max(item.pages?.length ?? 0, 1), 0);
-        const remainingMinPages = Math.max(sources.length - i - 1, 0);
-
-        setOcrProgressState({
-          completedPages: completedBeforeCurrent + actualPages,
-          totalPages: completedBeforeCurrent + actualPages + remainingMinPages,
-          activeSourceIndex: i,
-          activeSourceName: getSourceDisplayName(sources[i], i),
-          activeSourceCompletedPages: actualPages,
-          activeSourceTotalPages: actualPages,
-        });
-      }
-
-      setScaffoldingPayloads(nextPayloads);
-      setSelectedSourceIndex(0);
-      setScaffoldingPayload(nextPayloads[0] ?? null);
-      setOcrProgressState((prev) => ({
-        ...prev,
-        completedPages: Math.max(prev.totalPages, prev.completedPages, 1),
-        totalPages: Math.max(prev.totalPages, prev.completedPages, 1),
-      }));
-      await new Promise((resolve) => setTimeout(resolve, 420));
-      setStep('studyIntro');
-    } catch (error: unknown) {
-      const message = getErrorMessage(error, '텍스트 추출에 실패했습니다.');
-      setScaffoldingPayload(null);
-      setScaffoldingError(message);
-
-      if (typeof message === 'string' && message.includes('무료 횟수')) {
-        // 화이트리스트 유저는 사용량 소진 모달/알림을 띄우지 않음 (기록은 계속 유지)
-        const latestUsage = (await refreshOcrUsage()) ?? ocrUsage;
-        if (!latestUsage?.is_unlimited) {
-          Alert.alert('텍스트 추출 사용 한도', message);
-          setStep('home');
-          return;
-        }
-      }
-
-      Alert.alert('텍스트 추출 오류', message);
-      setStep('home');
-    } finally {
-      setScaffoldingLoading(false);
-    }
-  };
-
   // 홈 화면 통계 데이터
   const [weeklyGrowth, setWeeklyGrowth] = useState<{ labels: string[]; data: number[] } | undefined>();
   const [monthlyStats, setMonthlyStats] = useState<any>(undefined);
@@ -820,10 +654,7 @@ export default function App() {
                 setMonthlyGoal(null);
                 setStreak(0);
                 setLastAttendanceDate(null);
-                setCapturedSources([]);
-                setSelectedSourceIndex(0);
-                setSubjectName('');
-                setCropBySourceIndex({});
+                resetStudyInputState();
                 resetBatchEarnedXp();
                 setIsReviewMode(false);
                 setReviewQuizId(null);
@@ -840,12 +671,7 @@ export default function App() {
             <TakePicture
               onBack={() => setStep('home')}
               onDone={(sources) => {
-                setCapturedSources(sources);
-                setSelectedSourceIndex(0);
-                setCropBySourceIndex({});
-                setScaffoldingPayloads([]);
-                setScaffoldingPayload(null);
-                setScaffoldingError(null);
+                prepareCapturedSources(sources);
                 setPendingGradeParts({});
                 pendingGradePartsRef.current = {};
                 setStep('selectPicture');
@@ -862,33 +688,17 @@ export default function App() {
               }).join('|')}
               sources={capturedSources}
               onBack={() => {
-                setCapturedSources([]);
-                setSelectedSourceIndex(0);
-                setCropBySourceIndex({});
-                setScaffoldingPayloads([]);
-                setScaffoldingPayload(null);
-                setScaffoldingError(null);
+                clearCapturedSources();
                 setPendingGradeParts({});
                 pendingGradePartsRef.current = {};
                 setStep('takePicture');
               }}
               onStartLearning={async (finalSources, isOcrNeeded, subject, cropMap) => {
                 void isOcrNeeded;
-                setCapturedSources(finalSources);
-                if (subject) setSubjectName(subject);
-                const nextCropMap = cropMap ?? {};
-                setCropBySourceIndex(nextCropMap);
+                const nextCropMap = prepareLearningStart(finalSources, subject, cropMap);
                 resetBatchEarnedXp();
                 setPendingGradeParts({});
                 pendingGradePartsRef.current = {};
-                setOcrProgressState({
-                  completedPages: 0,
-                  totalPages: Math.max(finalSources.length, 1),
-                  activeSourceIndex: 0,
-                  activeSourceName: getSourceDisplayName(finalSources[0], 0),
-                  activeSourceCompletedPages: 0,
-                  activeSourceTotalPages: 1,
-                });
 
                 if (!finalSources.length) {
                   setScaffoldingError('학습할 이미지가 없습니다.');
