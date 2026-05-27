@@ -35,55 +35,7 @@ front/
 └─ 지침/                 # 작업별 보조 지침
 ```
 
-## 실행
-
-```bash
-npm install
-npm run start
-```
-
-플랫폼별 실행:
-
-```bash
-npm run android
-npm run ios
-npm run web
-```
-
-## 테스트
-
-학습 플로우 관련 테스트:
-
-```bash
-npm run test:study
-```
-
-TypeScript 확인:
-
-```bash
-npx tsc --noEmit
-```
-
-Windows PowerShell 실행 정책으로 `npx`가 막히면 다음 명령을 사용합니다.
-
-```bash
-npx.cmd tsc --noEmit
-```
-
-## 환경변수
-
-API Base URL은 환경변수로 관리합니다.
-
-```txt
-EXPO_PUBLIC_API_BASE_URL=
-```
-
-서버 주소를 코드에 직접 하드코딩하지 않습니다.
-
-## 작업 지침
+## Codex 작업 지침
 
 - 기본 작업 지침은 [codex.md](./codex.md)를 따릅니다.
-- 리팩토링 작업은 [지침/refactor.md](./지침/refactor.md)를 함께 확인합니다.
-- 백엔드 Python 파일은 요청 없이 수정하지 않습니다.
-- UI 디자인, 문구, 색상, 레이아웃은 요청 없이 변경하지 않습니다.
-- 리팩토링은 기존 동작을 유지하면서 구조만 개선합니다.
+
