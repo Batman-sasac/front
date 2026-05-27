@@ -2,7 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppProviders from './src/app/AppProviders';
+import { getErrorMessage } from './src/app/errors';
 import { TYPE_LABEL_KEY } from './src/app/progress';
+import {
+  buildReviewPayloadsByPage,
+  createOcrJobId,
+  getSourceDisplayName,
+  type OcrProgressState,
+  type SourceCropMap,
+} from './src/app/studyFlow';
 import useLearningProgress from './src/app/useLearningProgress';
 import Splash from './src/components/Splash';
 import UsageExhaustedModal from './src/components/subscription/UsageExhaustedModal';
@@ -37,7 +45,7 @@ import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 import { getHomeStats, getUserStats } from './src/api/auth';
 import { getOcrUsageExhaustedMessage } from './src/lib/ocrUsage';
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { manipulateAsync, SaveFormat, type Action } from 'expo-image-manipulator';
 import type { AppStep as Step } from './src/navigation/routes';
 
 type SocialProvider = 'kakao' | 'naver';
@@ -54,7 +62,7 @@ export default function App() {
   const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습 퀴즈 ID
   const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
   const [subjectName, setSubjectName] = useState('');
-  const [cropBySourceIndex, setCropBySourceIndex] = useState<Record<number, { px: number; py: number; pw: number; ph: number }>>({});
+  const [cropBySourceIndex, setCropBySourceIndex] = useState<SourceCropMap>({});
   const [batchEarnedXp, setBatchEarnedXp] = useState(0);
   const batchEarnedXpRef = useRef(0);
   type PendingGradePart = {
@@ -78,14 +86,7 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [ocrUsage, setOcrUsage] = useState<OcrUsageResponse | null>(null);
   const [showUsageExhaustedModal, setShowUsageExhaustedModal] = useState(false);
-  const [ocrProgressState, setOcrProgressState] = useState<{
-    completedPages: number;
-    totalPages: number;
-    activeSourceIndex: number;
-    activeSourceName: string;
-    activeSourceCompletedPages: number;
-    activeSourceTotalPages: number;
-  }>({
+  const [ocrProgressState, setOcrProgressState] = useState<OcrProgressState>({
     completedPages: 0,
     totalPages: 0,
     activeSourceIndex: 0,
@@ -414,10 +415,10 @@ export default function App() {
           setScaffoldingPayload(reviewPayloads[0] ?? payload);
         }
       })
-      .catch((e: any) => {
+      .catch((error: unknown) => {
         if (!cancelled) {
           setScaffoldingPayload(null);
-          setScaffoldingError(e?.message ?? '복습 퀴즈 데이터를 불러오지 못했습니다.');
+          setScaffoldingError(getErrorMessage(error, '복습 퀴즈 데이터를 불러오지 못했습니다.'));
         }
       })
       .finally(() => {
@@ -475,73 +476,15 @@ export default function App() {
   // 촬영 결과 임시 소스 목록
   const [capturedSources, setCapturedSources] = useState<StudySource[]>([]);
 
-  const createOcrJobId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-
-  const getSourceDisplayName = (source: StudySource | undefined, fallbackIndex: number) => {
-    const trimmedName = source?.name?.trim();
-    if (trimmedName) return trimmedName;
-    const rawName = source?.uri?.split('/').pop()?.split('?')[0]?.trim();
-    if (rawName) return rawName;
-    return `${fallbackIndex + 1}번째 파일`;
-  };
-
   const [scaffoldingPayload, setScaffoldingPayload] = useState<ScaffoldingPayload | null>(null);
   const [scaffoldingPayloads, setScaffoldingPayloads] = useState<ScaffoldingPayload[]>([]);
   const [scaffoldingLoading, setScaffoldingLoading] = useState(false);
   const [scaffoldingError, setScaffoldingError] = useState<string | null>(null);
 
-  const buildReviewPayloadsByPage = (payload: ScaffoldingPayload): ScaffoldingPayload[] => {
-    const pages = payload.pages ?? [];
-    if (pages.length <= 1) return [payload];
-
-    return pages.map((page, pageIndex) => {
-      const pageBlankItems = (payload.blankItems ?? [])
-        .filter((item) => (Number.isFinite(item.page_index) ? item.page_index : 0) === pageIndex)
-        .map((item, blankIndex) => ({
-          blank_index: blankIndex,
-          word: item.word,
-          page_index: 0,
-          ...(item.candidate_id ? { candidate_id: item.candidate_id } : {}),
-        }));
-      const blanks = pageBlankItems.length > 0
-        ? pageBlankItems.map((item) => ({
-          id: item.blank_index,
-          word: item.word,
-          meaningLong: '',
-        }))
-        : (page.keywords ?? []).map((word, index) => ({
-          id: index,
-          word,
-          meaningLong: '',
-        }));
-
-      return {
-        ...payload,
-        title: pages.length > 1 ? `${payload.title} (${pageIndex + 1}/${pages.length})` : payload.title,
-        extractedText: page.original_text ?? '',
-        pages: [{
-          ...page,
-          blank_candidates: page.blank_candidates?.map((candidate) => ({
-            ...candidate,
-            page_index: 0,
-          })),
-        }],
-        blanks,
-        blankItems: pageBlankItems.length > 0
-          ? pageBlankItems
-          : blanks.map((blank) => ({
-            blank_index: blank.id,
-            word: blank.word,
-            page_index: 0,
-          })),
-      };
-    });
-  };
-
   const runOcrForIndex = async (
     sources: StudySource[],
     index: number,
-    cropMap: Record<number, { px: number; py: number; pw: number; ph: number }>,
+    cropMap: SourceCropMap,
   ) => {
     const target = sources[index];
     const uri = target?.uri;
@@ -565,7 +508,7 @@ export default function App() {
 
     if (isImage) {
       try {
-        const actions: any[] = [];
+        const actions: Action[] = [];
 
         if (cropInfo && cropInfo.pw > 0 && cropInfo.ph > 0) {
           actions.push({
@@ -632,7 +575,7 @@ export default function App() {
 
   const preloadScaffoldingPayloads = async (
     sources: StudySource[],
-    cropMap: Record<number, { px: number; py: number; pw: number; ph: number }>,
+    cropMap: SourceCropMap,
   ) => {
     setScaffoldingLoading(true);
     setScaffoldingError(null);
@@ -686,8 +629,8 @@ export default function App() {
       }));
       await new Promise((resolve) => setTimeout(resolve, 420));
       setStep('studyIntro');
-    } catch (e: any) {
-      const message = e?.message ?? '텍스트 추출에 실패했습니다.';
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, '텍스트 추출에 실패했습니다.');
       setScaffoldingPayload(null);
       setScaffoldingError(message);
 
@@ -761,8 +704,8 @@ export default function App() {
                   await setStudyGoal(goal);
                   setMonthlyGoal(goal);
                   setStep('typeIntro');
-                } catch (error: any) {
-                  Alert.alert('목표 설정 실패', error?.message ?? '목표 설정에 실패했습니다.');
+                } catch (error: unknown) {
+                  Alert.alert('목표 설정 실패', getErrorMessage(error, '목표 설정에 실패했습니다.'));
                 }
               }}
             />
@@ -857,8 +800,8 @@ export default function App() {
                 try {
                   await setStudyGoal(goal);
                   setMonthlyGoal(goal);
-                } catch (error: any) {
-                  Alert.alert('목표 설정 실패', error?.message ?? '목표 설정에 실패했습니다.');
+                } catch (error: unknown) {
+                  Alert.alert('목표 설정 실패', getErrorMessage(error, '목표 설정에 실패했습니다.'));
                 }
               }}
               onNicknameChange={(newNickname) => setNickname(newNickname)}
@@ -914,8 +857,7 @@ export default function App() {
           {/* 자료 입력: 선택/미리보기 화면 */}
           {step === 'selectPicture' && (
             <SelectPicture
-              key={capturedSources.map((source: any, index) => {
-                if (typeof source === 'number') return `asset-${source}-${index}`;
+              key={capturedSources.map((source, index) => {
                 return source?.uri ? `uri-${source.uri}-${index}` : `source-${index}`;
               }).join('|')}
               sources={capturedSources}
@@ -1037,8 +979,8 @@ export default function App() {
                       return next;
                     });
                     setStep('studyIntro');
-                  } catch (e: any) {
-                    const message = e?.message ?? '텍스트 추출에 실패했습니다.';
+                  } catch (error: unknown) {
+                    const message = getErrorMessage(error, '텍스트 추출에 실패했습니다.');
                     setScaffoldingPayload(null);
                     setScaffoldingError(message);
 
@@ -1090,9 +1032,9 @@ export default function App() {
                     next[selectedSourceIndex] = payload;
                     return next;
                   });
-                } catch (e: any) {
+                } catch (error: unknown) {
                   setScaffoldingPayload(null);
-                  setScaffoldingError(e?.message ?? '재시도에 실패했습니다.');
+                  setScaffoldingError(getErrorMessage(error, '재시도에 실패했습니다.'));
                 } finally {
                   setScaffoldingLoading(false);
                 }
