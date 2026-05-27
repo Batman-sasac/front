@@ -4,11 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppProviders from './src/app/AppProviders';
 import { getErrorMessage } from './src/app/errors';
 import { TYPE_LABEL_KEY } from './src/app/progress';
-import {
-  buildReviewPayloadsByPage,
-} from './src/app/studyFlow';
+import useAuthFlow from './src/app/useAuthFlow';
 import useHomeDashboardData from './src/app/useHomeDashboardData';
 import useLearningProgress from './src/app/useLearningProgress';
+import useReviewQuizLoader from './src/app/useReviewQuizLoader';
 import useStudyCaptureFlow from './src/app/useStudyCaptureFlow';
 import Splash from './src/components/Splash';
 import UsageExhaustedModal from './src/components/subscription/UsageExhaustedModal';
@@ -35,21 +34,14 @@ import RewardScreen, { RewardType } from './src/screens/reward/Reward';
 import ErrorScreen from './src/screens/error/error';
 import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
-import { PageItem, BlankItemSave, gradeStudy, getQuizForReview, getOcrUsage, OcrUsageResponse, submitReviewStudy } from './src/api/ocr';
-import { registerAndSyncPushToken } from './src/api/notification';
+import { PageItem, BlankItemSave, gradeStudy, getOcrUsage, OcrUsageResponse, submitReviewStudy } from './src/api/ocr';
 import { setStudyGoal } from './src/api/weekly';
-import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
-import { getHomeStats, getUserStats } from './src/api/auth';
+import { getToken } from './src/lib/storage';
 import { getOcrUsageExhaustedMessage } from './src/lib/ocrUsage';
 import type { AppStep as Step } from './src/navigation/routes';
 
-type SocialProvider = 'kakao' | 'naver';
-
 export default function App() {
   const [step, setStep] = useState<Step>('splash');
-  const [nickname, setNickname] = useState('');
-  const [userEmail, setUserEmail] = useState('');
-  const [userSocialId, setUserSocialId] = useState('');
   const [typeResult, setTypeResult] = useState<ResultStats | null>(null);
   const [isReviewMode, setIsReviewMode] = useState(false); // 복습 모드 여부
   const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습 퀴즈 ID
@@ -72,7 +64,6 @@ export default function App() {
   const pendingReviewPartsRef = useRef<Record<number, PendingReviewPart>>({});
   const [rewardScreenState, setRewardScreenState] = useState<{ type: RewardType; xp: number } | null>(null);
   const rewardCloseActionRef = useRef<(() => void) | null>(null);
-  const [pushTokenSynced, setPushTokenSynced] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [ocrUsage, setOcrUsage] = useState<OcrUsageResponse | null>(null);
   const [showUsageExhaustedModal, setShowUsageExhaustedModal] = useState(false);
@@ -203,6 +194,44 @@ export default function App() {
     ocrUsage,
   });
 
+  const {
+    nickname,
+    setNickname,
+    userEmail,
+    userSocialId,
+    resetAuthIdentity,
+    handleLoginSuccess,
+    handleNicknameRequired,
+    handleNicknameSet,
+    handleLogout,
+  } = useAuthFlow({
+    step,
+    setStep,
+    setExp,
+    setMonthlyGoal,
+    setTypeLabel,
+    setIsSubscribed,
+    setOcrUsage,
+    setShowUsageExhaustedModal,
+    refreshOcrUsage,
+    onLogoutReset: () => {
+      setTypeResult(null);
+    },
+  });
+
+  useReviewQuizLoader({
+    step,
+    reviewQuizId,
+    resetReviewParts: () => {
+      pendingReviewPartsRef.current = {};
+    },
+    setSelectedSourceIndex,
+    setScaffoldingPayload,
+    setScaffoldingPayloads,
+    setScaffoldingLoading,
+    setScaffoldingError,
+  });
+
   const tryMoveToTakePicture = async () => {
     const usage = await refreshOcrUsage();
     if (!isSubscribed && isUsageLimitReached(usage)) {
@@ -244,84 +273,6 @@ export default function App() {
   }, [step]);
 
   useEffect(() => {
-    // 앱 시작 시 자동 로그인 체크
-    checkAutoLogin();
-  }, []);
-
-  // 로그인 후 홈에 들어오면: iOS만 Expo 푸시 토큰 생성 후 백엔드에 전달
-  useEffect(() => {
-    if (step !== 'home' || pushTokenSynced) return;
-
-    const authToken = getToken();
-    authToken.then((token) => {
-      if (!token) return;
-      return registerAndSyncPushToken(token);
-    }).then((ok) => {
-      if (ok) setPushTokenSynced(true);
-    }).catch((error) => {
-      console.error('푸시 토큰 등록 실패:', error);
-    });
-  }, [step, pushTokenSynced]);
-
-  const checkAutoLogin = async () => {
-    try {
-      const token = await getToken();
-      if (token) {
-        const userInfo = await getUserInfo();
-        if (userInfo.email && userInfo.nickname) {
-          setUserEmail(userInfo.email);
-          setNickname(userInfo.nickname);
-          try {
-            const homeStats = await getHomeStats(token);
-            if (typeof homeStats.data.points === 'number' && Number.isFinite(homeStats.data.points)) {
-              setExp(homeStats.data.points);
-            }
-            if (typeof homeStats.data.monthly_goal === 'number' && homeStats.data.monthly_goal > 0) {
-              setMonthlyGoal(homeStats.data.monthly_goal);
-            }
-            const userState = await getUserStats(token);
-            setIsSubscribed(!!userState.data.is_subscribed);
-          } catch (e) {
-            console.error('유저 상태 조회 실패:', e);
-          }
-          await refreshOcrUsage();
-          const storedTypeLabel = (await AsyncStorage.getItem(TYPE_LABEL_KEY))?.trim() ?? '';
-          if (storedTypeLabel) {
-            setTypeLabel(storedTypeLabel);
-          }
-          setTimeout(() => setStep(storedTypeLabel ? 'home' : 'typeIntro'), 2000);
-          return;
-        }
-      }
-      // 토큰이 없으면 로그인 화면으로
-      setTimeout(() => setStep('login'), 2000);
-    } catch (error) {
-      console.error('자동 로그인 확인 오류:', error);
-      setTimeout(() => setStep('login'), 2000);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      console.log('로그아웃 시작...');
-      await clearAuthData();
-      console.log('로그아웃 완료');
-      // 상태 초기화
-      setUserEmail('');
-      setNickname('');
-      setUserSocialId('');
-      setTypeResult(null);
-      setIsSubscribed(false);
-      setOcrUsage(null);
-      setShowUsageExhaustedModal(false);
-      // 로그인 화면으로 이동
-      setStep('login');
-    } catch (error) {
-      console.error('로그아웃 오류:', error);
-    }
-  };
-
-  useEffect(() => {
     if (step === 'home' && progressLoaded) {
       handleDailyCheckIn();   // 홈 진입 시 자동 출석
 
@@ -338,96 +289,6 @@ export default function App() {
     if (step !== 'home') return;
     void refreshOcrUsage();
   }, [step, isSubscribed]);
-
-  // 복습 진입 시 DB에서 퀴즈 데이터 조회
-  useEffect(() => {
-    if (step !== 'scaffolding' || reviewQuizId == null) return;
-    let cancelled = false;
-    setScaffoldingLoading(true);
-    setScaffoldingError(null);
-    getQuizForReview(reviewQuizId)
-      .then((payload) => {
-        if (!cancelled) {
-          const reviewPayloads = buildReviewPayloadsByPage(payload);
-          pendingReviewPartsRef.current = {};
-          setScaffoldingPayloads(reviewPayloads);
-          setSelectedSourceIndex(0);
-          setScaffoldingPayload(reviewPayloads[0] ?? payload);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setScaffoldingPayload(null);
-          setScaffoldingError(getErrorMessage(error, '복습 퀴즈 데이터를 불러오지 못했습니다.'));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setScaffoldingLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [step, reviewQuizId]);
-
-  // 로그인 성공 핸들러
-  const handleLoginSuccess = async (email: string, userNickname: string) => {
-    setUserEmail(email);
-    setNickname(userNickname);
-    try {
-      const token = await getToken();
-      if (token) {
-        const homeStats = await getHomeStats(token);
-        if (typeof homeStats.data.points === 'number' && Number.isFinite(homeStats.data.points)) {
-          setExp(homeStats.data.points);
-        }
-        if (typeof homeStats.data.monthly_goal === 'number' && homeStats.data.monthly_goal > 0) {
-          setMonthlyGoal(homeStats.data.monthly_goal);
-        }
-        const userState = await getUserStats(token);
-        setIsSubscribed(!!userState.data.is_subscribed);
-      }
-    } catch (e) {
-      console.error('유저 상태 조회 실패:', e);
-    }
-    await refreshOcrUsage();
-    const storedTypeLabel = (await AsyncStorage.getItem(TYPE_LABEL_KEY))?.trim() ?? '';
-    if (storedTypeLabel) {
-      setTypeLabel(storedTypeLabel);
-    }
-    setStep(storedTypeLabel ? 'home' : 'typeIntro');
-  };
-
-  // 닉네임 설정 필요 핸들러
-  const handleNicknameRequired = (email: string, socialId: string) => {
-    setUserEmail(email);
-    setUserSocialId(socialId);
-    setStep('nickname');
-  };
-
-  // 닉네임 설정 완료 핸들러
-  const handleNicknameSet = (email: string, userNickname: string) => {
-    setUserEmail(email);
-    setNickname(userNickname);
-    setStep('typeIntro');
-  };
-
-  function buildBlankWordsFromText(text: string, limit = 8) {
-    // 1) 공백/문장부호 기준으로 분리
-    const raw = text
-      .replace(/[0-9]/g, ' ')
-      .replace(/[.,!?()\[\]{}"'`~]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .split(' ');
-
-    // 2) 너무 짧은 토큰 제거 + 중복 제거
-    const uniq: string[] = [];
-    for (const w of raw) {
-      const clean = w.trim();
-      if (clean.length < 2) continue;
-      if (!uniq.includes(clean)) uniq.push(clean);
-      if (uniq.length >= limit) break;
-    }
-    return uniq;
-  }
 
   return (
     <AppProviders step={step}>
@@ -564,9 +425,7 @@ export default function App() {
               onPlanManage={handlePlanManageOpen}
               onWithdraw={() => {
                 // 모든 상태 초기화
-                setNickname('');
-                setUserEmail('');
-                setUserSocialId('');
+                resetAuthIdentity();
                 setTypeResult(null);
                 setTypeLabel('');
                 setLevel(1);
