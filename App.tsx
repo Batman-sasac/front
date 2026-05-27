@@ -2,20 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppProviders from './src/app/AppProviders';
-import {
-  DEFAULT_WEEK_ATTENDANCE,
-  EXP_KEY,
-  LAST_ATTENDANCE_KEY,
-  LEVEL_KEY,
-  MONTHLY_GOAL_KEY,
-  STREAK_KEY,
-  TYPE_LABEL_KEY,
-  WEEK_ATTENDANCE_KEY,
-  WEEK_ATTENDANCE_WEEK_KEY,
-  getLevelForExp,
-  getWeekStartKey,
-  getWeekdayIndex,
-} from './src/app/progress';
+import { TYPE_LABEL_KEY } from './src/app/progress';
+import useLearningProgress from './src/app/useLearningProgress';
 import Splash from './src/components/Splash';
 import UsageExhaustedModal from './src/components/subscription/UsageExhaustedModal';
 import LoginScreen from './src/screens/auth/LoginScreen';
@@ -44,7 +32,7 @@ import SubscribeScreen from './src/screens/subscribe/subscribe';
 import Sidebar, { type Screen as SidebarScreen } from './src/components/Sidebar';
 import { runOcr, ScaffoldingPayload, PageItem, BlankItemSave, gradeStudy, getQuizForReview, getWeeklyGrowth, getMonthlyStats, getOcrUsage, OcrUsageResponse, submitReviewStudy, OcrProgressMessage } from './src/api/ocr';
 import { registerAndSyncPushToken } from './src/api/notification';
-import { checkAttendanceReward, claimRandomEventReward, getMyRewardRank, getRewardLeaderboard } from './src/api/reward';
+import { getMyRewardRank, getRewardLeaderboard } from './src/api/reward';
 import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 import { getHomeStats, getUserStats } from './src/api/auth';
@@ -60,14 +48,8 @@ export default function App() {
   const [userEmail, setUserEmail] = useState('');
   const [userSocialId, setUserSocialId] = useState('');
   const [typeResult, setTypeResult] = useState<ResultStats | null>(null);
-  const [typeLabel, setTypeLabel] = useState(''); // 학습 유형 라벨
-  const [level, setLevel] = useState(1);
-  const [exp, setExp] = useState(0);
   const [myRewardRank, setMyRewardRank] = useState<number | null>(null);
   const [myRewardTotal, setMyRewardTotal] = useState<number | null>(null);
-  const [monthlyGoal, setMonthlyGoal] = useState<number | null>(null);
-  const [streak, setStreak] = useState(0);                 // 연속 학습 일수
-  const [lastAttendanceDate, setLastAttendanceDate] = useState<string | null>(null);
   const [isReviewMode, setIsReviewMode] = useState(false); // 복습 모드 여부
   const [reviewQuizId, setReviewQuizId] = useState<number | null>(null); // 복습 퀴즈 ID
   const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
@@ -129,15 +111,6 @@ export default function App() {
   // 학습 통계 상태
   const [totalStudyCount, setTotalStudyCount] = useState(0);
   const [continuousDays, setContinuousDays] = useState(0);
-  const [weekAttendance, setWeekAttendance] = useState<boolean[]>( // 이번 주 요일별 출석
-    [...DEFAULT_WEEK_ATTENDANCE],
-  );
-  const [weekAttendanceWeekKey, setWeekAttendanceWeekKey] = useState('');
-
-  const [progressLoaded, setProgressLoaded] = useState(false);
-
-  const progressLoadedRef = useRef(false);
-
   const isUsageLimitReached = (usage?: OcrUsageResponse | null) => {
     const target = usage ?? ocrUsage;
     if (!target) return false;
@@ -217,6 +190,31 @@ export default function App() {
     setStep('home');
   };
 
+  const {
+    typeLabel,
+    setTypeLabel,
+    level,
+    setLevel,
+    exp,
+    setExp,
+    monthlyGoal,
+    setMonthlyGoal,
+    streak,
+    setStreak,
+    setLastAttendanceDate,
+    weekAttendance,
+    progressLoaded,
+    hasCheckedInToday,
+    handleDailyCheckIn,
+  } = useLearningProgress({
+    onReward: showRewardScreen,
+    onGoHome: () => setStep('home'),
+    onRefreshRewardData: () => {
+      void refreshMyRewardRank();
+      void refreshLeagueLeaderboard();
+    },
+  });
+
   const tryMoveToTakePicture = async () => {
     const usage = await refreshOcrUsage();
     if (!isSubscribed && isUsageLimitReached(usage)) {
@@ -250,73 +248,6 @@ export default function App() {
     }
     setStep('subscribe');
   };
-
-  useEffect(() => {
-    const loadProgress = async () => {
-      try {
-        const [expRaw, levelRaw, lastAttendRaw, streakRaw, weekRaw, weekKeyRaw, monthlyGoalRaw, typeLabelRaw] = await AsyncStorage.multiGet([
-          EXP_KEY,
-          LEVEL_KEY,
-          LAST_ATTENDANCE_KEY,
-          STREAK_KEY,
-          WEEK_ATTENDANCE_KEY,
-          WEEK_ATTENDANCE_WEEK_KEY,
-          MONTHLY_GOAL_KEY,
-          TYPE_LABEL_KEY,
-        ]);
-
-        const expValue = expRaw[1] ? Number(expRaw[1]) : 0;
-        const levelValue = levelRaw[1] ? Number(levelRaw[1]) : getLevelForExp(expValue);
-        const streakValue = streakRaw[1] ? Number(streakRaw[1]) : 0;
-        const storedWeekKey = weekKeyRaw[1] ?? '';
-        const currentWeekKey = getWeekStartKey(new Date());
-        const parsedWeekValue = weekRaw[1] ? (JSON.parse(weekRaw[1]) as boolean[]) : [...DEFAULT_WEEK_ATTENDANCE];
-        const weekValue = storedWeekKey === currentWeekKey
-          ? parsedWeekValue
-          : [...DEFAULT_WEEK_ATTENDANCE];
-        const monthlyGoalValue = monthlyGoalRaw[1] ? Number(monthlyGoalRaw[1]) : null;
-
-        setExp(Number.isFinite(expValue) ? expValue : 0);
-        setLevel(Number.isFinite(levelValue) ? levelValue : 1);
-        setLastAttendanceDate(lastAttendRaw[1]);
-        setStreak(Number.isFinite(streakValue) ? streakValue : 0);
-        setWeekAttendance(Array.isArray(weekValue) ? weekValue : [...DEFAULT_WEEK_ATTENDANCE]);
-        setWeekAttendanceWeekKey(currentWeekKey);
-        setTypeLabel(typeLabelRaw[1] ?? '');
-        if (monthlyGoalValue && Number.isFinite(monthlyGoalValue)) {
-          setMonthlyGoal(monthlyGoalValue);
-        }
-      } catch (error) {
-        console.error('출석/XP 로드 실패:', error);
-      } finally {
-        progressLoadedRef.current = true;
-        setProgressLoaded(true);
-      }
-    };
-
-    loadProgress();
-  }, []);
-
-  useEffect(() => {
-    if (!progressLoadedRef.current) return;
-
-    AsyncStorage.multiSet([
-      [EXP_KEY, String(exp)],
-      [LEVEL_KEY, String(level)],
-      [LAST_ATTENDANCE_KEY, lastAttendanceDate ?? ''],
-      [STREAK_KEY, String(streak)],
-      [WEEK_ATTENDANCE_KEY, JSON.stringify(weekAttendance)],
-      [WEEK_ATTENDANCE_WEEK_KEY, weekAttendanceWeekKey],
-      [MONTHLY_GOAL_KEY, monthlyGoal != null ? String(monthlyGoal) : ''],
-      [TYPE_LABEL_KEY, typeLabel],
-    ]).catch((error) => {
-      console.error('출석/XP 저장 실패:', error);
-    });
-  }, [exp, level, lastAttendanceDate, streak, weekAttendance, weekAttendanceWeekKey, monthlyGoal, typeLabel]);
-
-  useEffect(() => {
-    setLevel(getLevelForExp(exp));
-  }, [exp]);
 
   // 학습 통계 불러오기
   useEffect(() => {
@@ -537,103 +468,6 @@ export default function App() {
     setStep('typeIntro');
   };
 
-  const getTodayKey = () => new Date().toISOString().slice(0, 10);
-  const STREAK_REWARD_XP = 10;
-
-  const hasCheckedInToday = lastAttendanceDate === getTodayKey();
-
-  const handleDailyCheckIn = async () => {
-    const today = new Date();
-    const todayKey = today.toISOString().slice(0, 10);
-    const currentWeekKey = getWeekStartKey(today);
-
-    if (lastAttendanceDate === todayKey) return; // 이미 출석
-
-    const yesterday = new Date();
-    yesterday.setDate(today.getDate() - 1);
-    const yesterdayKey = yesterday.toISOString().slice(0, 10);
-    const nextStreak = lastAttendanceDate === yesterdayKey ? streak + 1 : 1;
-
-    let baseXP = 10;
-    let streakXP = nextStreak >= 2 ? STREAK_REWARD_XP : 0;
-    let bonusXP = 0;
-    let shouldReward = true;
-    let totalPoints: number | null = null;
-
-    try {
-      const result = await checkAttendanceReward();
-      if (result?.status === 'success') {
-        shouldReward = result.is_new_reward;
-        baseXP = result.baseXP ?? 0;
-        bonusXP = result.bonusXP ?? 0;
-        totalPoints = Number.isFinite(Number(result.total_points)) ? Number(result.total_points) : null;
-      }
-
-    } catch (error) {
-      console.error('출석 보상 API 실패, 로컬 처리로 대체', error);
-    }
-
-    // 연속 출석 계산
-    try {
-      const randomResult = await claimRandomEventReward();
-      if (randomResult.status === 'success' && randomResult.is_new_reward) {
-        bonusXP = Number.isFinite(Number(randomResult.reward_amount)) ? Number(randomResult.reward_amount) : 0;
-        totalPoints = Number.isFinite(Number(randomResult.total_points)) ? Number(randomResult.total_points) : totalPoints;
-      }
-    } catch (error) {
-      console.error('랜덤 리워드 API 실패:', error);
-    }
-
-    setStreak(nextStreak);
-    setLastAttendanceDate(todayKey);
-
-    // 주간 출석 배열 업데이트
-    const todayIdx = getWeekdayIndex(today);
-    setWeekAttendanceWeekKey(currentWeekKey);
-    setWeekAttendance((prev) => {
-      const base = weekAttendanceWeekKey === currentWeekKey
-        ? [...prev]
-        : [...DEFAULT_WEEK_ATTENDANCE];
-      const next = [...base];
-      next[todayIdx] = true;
-      return next;
-    });
-
-    if ((shouldReward && baseXP > 0) || bonusXP > 0) {
-      if (totalPoints != null) {
-        setExp(totalPoints + streakXP);
-      } else {
-        setExp((prev) => prev + baseXP + streakXP + bonusXP);
-      }
-      void refreshMyRewardRank();
-      void refreshLeagueLeaderboard();
-      if (shouldReward && baseXP > 0) {
-        showRewardScreen('attendance', baseXP, () => {
-          if (streakXP > 0) {
-            showRewardScreen('streak', streakXP, () => {
-              if (bonusXP > 0) {
-                showRewardScreen('randomBonus', bonusXP, () => setStep('home'));
-                return;
-              }
-              setStep('home');
-            });
-            return;
-          }
-          if (bonusXP > 0) {
-            showRewardScreen('randomBonus', bonusXP, () => setStep('home'));
-            return;
-          }
-          setStep('home');
-        });
-        return;
-      }
-
-      if (bonusXP > 0) {
-        showRewardScreen('randomBonus', bonusXP, () => setStep('home'));
-        return;
-      }
-    }
-  };
 
   const [currentLeagueTier] = useState<LeagueTier>('iron');  // 우선 아이언으로 시작
   const [leagueUsers, setLeagueUsers] = useState<LeagueUser[]>([]);
