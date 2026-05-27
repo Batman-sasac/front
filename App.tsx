@@ -1,7 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Alert, Platform, Modal, Pressable, Image, Text, StyleSheet } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import AppProviders from './src/app/AppProviders';
+import {
+  DEFAULT_WEEK_ATTENDANCE,
+  EXP_KEY,
+  LAST_ATTENDANCE_KEY,
+  LEVEL_KEY,
+  MONTHLY_GOAL_KEY,
+  STREAK_KEY,
+  TYPE_LABEL_KEY,
+  WEEK_ATTENDANCE_KEY,
+  WEEK_ATTENDANCE_WEEK_KEY,
+  getLevelForExp,
+  getWeekStartKey,
+  getWeekdayIndex,
+} from './src/app/progress';
 import Splash from './src/components/Splash';
+import UsageExhaustedModal from './src/components/subscription/UsageExhaustedModal';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import NicknameScreen from './src/screens/auth/NicknameScreen';
 import GoalSettingScreen from './src/screens/goal/GoalSettingScreen';
@@ -33,33 +49,10 @@ import { setStudyGoal } from './src/api/weekly';
 import { getToken, getUserInfo, saveAuthData, clearAuthData } from './src/lib/storage';
 import { getHomeStats, getUserStats } from './src/api/auth';
 import { getOcrUsageExhaustedMessage } from './src/lib/ocrUsage';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import type { AppStep as Step } from './src/navigation/routes';
 
 type SocialProvider = 'kakao' | 'naver';
-type Step =
-  | 'splash'
-  | 'login'
-  | 'nickname'
-  | 'goal'
-  | 'typeIntro'
-  | 'typeTest'
-  | 'result'
-  | 'home'
-  | 'league'
-  | 'alarm'
-  | 'alarmSetting'
-  | 'mypage'
-  | 'takePicture'
-  | 'selectPicture'
-  | 'ocrLoading'
-  | 'studyIntro'
-  | 'talkingStudy'
-  | 'scaffolding'
-  | 'brushup'
-  | 'reward'
-  | 'subscribe'
-  | 'error';
 
 export default function App() {
   const [step, setStep] = useState<Step>('splash');
@@ -137,48 +130,11 @@ export default function App() {
   const [totalStudyCount, setTotalStudyCount] = useState(0);
   const [continuousDays, setContinuousDays] = useState(0);
   const [weekAttendance, setWeekAttendance] = useState<boolean[]>( // 이번 주 요일별 출석
-    [false, false, false, false, false, false, false],
+    [...DEFAULT_WEEK_ATTENDANCE],
   );
   const [weekAttendanceWeekKey, setWeekAttendanceWeekKey] = useState('');
 
-  const getWeekdayIndex = (date: Date) => {
-    const jsDay = date.getDay(); // 0(일)~6(토)
-    return (jsDay + 6) % 7;      // 월, 화, ... 일
-  };
-  const getWeekStartKey = (date: Date) => {
-    const target = new Date(date);
-    target.setHours(0, 0, 0, 0);
-    target.setDate(target.getDate() - getWeekdayIndex(target));
-    const year = target.getFullYear();
-    const month = String(target.getMonth() + 1).padStart(2, '0');
-    const day = String(target.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
   const [progressLoaded, setProgressLoaded] = useState(false);
-
-  const EXP_KEY = '@bat_exp';
-  const LEVEL_KEY = '@bat_level';
-  const LAST_ATTENDANCE_KEY = '@bat_last_attendance_date';
-  const STREAK_KEY = '@bat_streak';
-  const WEEK_ATTENDANCE_KEY = '@bat_week_attendance';
-  const WEEK_ATTENDANCE_WEEK_KEY = '@bat_week_attendance_week';
-  const MONTHLY_GOAL_KEY = '@bat_monthly_goal';
-  const TYPE_LABEL_KEY = '@bat_type_label';
-
-  // 포인트 기준 레벨 구간
-  // 1레벨: 0 ~ 100
-  // 2레벨: 101 ~ 500
-  // 3레벨: 501 ~ 2000
-  // 4레벨: 2001 ~ 5000
-  // 5레벨: 5001 ~ 10000 (이후도 5레벨로 유지)
-  const LEVEL_THRESHOLDS = [0, 100, 500, 2000, 5000, 10000];
-  const getLevelForExp = (value: number) => {
-    if (value <= LEVEL_THRESHOLDS[1]) return 1;
-    if (value <= LEVEL_THRESHOLDS[2]) return 2;
-    if (value <= LEVEL_THRESHOLDS[3]) return 3;
-    if (value <= LEVEL_THRESHOLDS[4]) return 4;
-    return 5;
-  };
 
   const progressLoadedRef = useRef(false);
 
@@ -314,17 +270,17 @@ export default function App() {
         const streakValue = streakRaw[1] ? Number(streakRaw[1]) : 0;
         const storedWeekKey = weekKeyRaw[1] ?? '';
         const currentWeekKey = getWeekStartKey(new Date());
-        const parsedWeekValue = weekRaw[1] ? (JSON.parse(weekRaw[1]) as boolean[]) : [false, false, false, false, false, false, false];
+        const parsedWeekValue = weekRaw[1] ? (JSON.parse(weekRaw[1]) as boolean[]) : [...DEFAULT_WEEK_ATTENDANCE];
         const weekValue = storedWeekKey === currentWeekKey
           ? parsedWeekValue
-          : [false, false, false, false, false, false, false];
+          : [...DEFAULT_WEEK_ATTENDANCE];
         const monthlyGoalValue = monthlyGoalRaw[1] ? Number(monthlyGoalRaw[1]) : null;
 
         setExp(Number.isFinite(expValue) ? expValue : 0);
         setLevel(Number.isFinite(levelValue) ? levelValue : 1);
         setLastAttendanceDate(lastAttendRaw[1]);
         setStreak(Number.isFinite(streakValue) ? streakValue : 0);
-        setWeekAttendance(Array.isArray(weekValue) ? weekValue : [false, false, false, false, false, false, false]);
+        setWeekAttendance(Array.isArray(weekValue) ? weekValue : [...DEFAULT_WEEK_ATTENDANCE]);
         setWeekAttendanceWeekKey(currentWeekKey);
         setTypeLabel(typeLabelRaw[1] ?? '');
         if (monthlyGoalValue && Number.isFinite(monthlyGoalValue)) {
@@ -637,7 +593,7 @@ export default function App() {
     setWeekAttendance((prev) => {
       const base = weekAttendanceWeekKey === currentWeekKey
         ? [...prev]
-        : [false, false, false, false, false, false, false];
+        : [...DEFAULT_WEEK_ATTENDANCE];
       const next = [...base];
       next[todayIdx] = true;
       return next;
@@ -942,12 +898,8 @@ export default function App() {
     return uniq;
   }
 
-  const safeAreaEdges = step === 'takePicture' || step === 'selectPicture' ? ([] as const) : (['top'] as const);
-
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={{ flex: 1 }} edges={safeAreaEdges}>
-        <View style={{ flex: 1 }}>
+    <AppProviders step={step}>
           {step === 'splash' && (
             <Splash duration={1500} onDone={() => { }} />
           )}
@@ -1617,113 +1569,15 @@ export default function App() {
             />
           )}
 
-          <Modal visible={showUsageExhaustedModal} transparent animationType="fade" onRequestClose={() => setShowUsageExhaustedModal(false)}>
-            <View style={stylesSub.modalBackdrop}>
-              <View style={stylesSub.modalCard}>
-                <View style={stylesSub.modalHeader}>
-                  <Text style={stylesSub.modalTitle}>사용량 소진 안내</Text>
-                  <Pressable onPress={() => setShowUsageExhaustedModal(false)}>
-                    <Image source={require('./assets/subscribe/close.png')} style={stylesSub.closeIcon} resizeMode="contain" />
-                  </Pressable>
-                </View>
-
-                <View style={stylesSub.modalBody}>
-                  <Image source={require('./assets/character/bat-character.png')} style={stylesSub.modalBat} resizeMode="contain" />
-                  <Text style={stylesSub.modalDesc}>{usageExhaustedMessage}</Text>
-                  <Text style={stylesSub.modalDesc}>계속 학습하고 싶으시다면</Text>
-                  <Text style={stylesSub.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>
-                </View>
-
-                <View style={stylesSub.modalButtons}>
-                  <Pressable style={stylesSub.modalBtn} onPress={() => setShowUsageExhaustedModal(false)}>
-                    <Image source={require('./assets/subscribe/popup-cancel.png')} style={stylesSub.modalBtnImg} resizeMode="stretch" />
-                  </Pressable>
-                  <Pressable
-                    style={stylesSub.modalBtn}
-                    onPress={() => {
-                      setShowUsageExhaustedModal(false);
-                      setStep('subscribe');
-                    }}
-                  >
-                    <Image source={require('./assets/subscribe/popup-subscribe.png')} style={stylesSub.modalBtnImg} resizeMode="stretch" />
-                  </Pressable>
-                </View>
-              </View>
-            </View>
-          </Modal>
-
-
-
-
-        </View>
-      </SafeAreaView>
-    </SafeAreaProvider>
+          <UsageExhaustedModal
+            visible={showUsageExhaustedModal}
+            message={usageExhaustedMessage}
+            onClose={() => setShowUsageExhaustedModal(false)}
+            onSubscribe={() => {
+              setShowUsageExhaustedModal(false);
+              setStep('subscribe');
+            }}
+          />
+    </AppProviders>
   );
 }
-
-const stylesSub = StyleSheet.create({
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 540,
-    backgroundColor: '#F8F8FA',
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  modalHeader: {
-    height: 72,
-    borderBottomWidth: 1,
-    borderBottomColor: '#D7DAE3',
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexDirection: 'row',
-  },
-  modalTitle: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#111218',
-    marginLeft: 6,
-  },
-  closeIcon: {
-    width: 36,
-    height: 36,
-  },
-  modalBody: {
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingTop: 22,
-    paddingBottom: 10,
-  },
-  modalBat: {
-    width: 220,
-    height: 180,
-    marginBottom: 10,
-  },
-  modalDesc: {
-    fontSize: 16,
-    lineHeight: 26,
-    fontWeight: '700',
-    color: '#111218',
-    textAlign: 'center',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingBottom: 18,
-  },
-  modalBtn: {
-    flex: 1,
-  },
-  modalBtnImg: {
-    width: '100%',
-    height: 58,
-  },
-});
