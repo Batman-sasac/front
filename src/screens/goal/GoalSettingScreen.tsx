@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import {
-    View,
     Text,
     TextInput,
     Pressable,
-    Image,
     StyleSheet,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
+import CharacterFormLayout from '../../components/common/CharacterFormLayout';
 
 type Props = {
     onSubmit: (goal: number) => void;
@@ -31,17 +30,10 @@ export default function GoalSettingScreen({ onSubmit }: Props) {
     };
 
     return (
-        <View style={styles.root}>
-            <View style={styles.contentRow}>
+        <CharacterFormLayout>
                 {/* 왼쪽 캐릭터 */}
-                <Image
-                    source={require('../../../assets/character/bat-character.png')}
-                    style={styles.character}
-                    resizeMode="contain"
-                />
 
                 {/* 오른쪽 콘텐츠 */}
-                <View style={styles.rightBox}>
                     <Text style={styles.title}>이번 달 학습 목표를 세워봐요!</Text>
 
                     <TextInput
@@ -72,33 +64,11 @@ export default function GoalSettingScreen({ onSubmit }: Props) {
                     >
                         <Text style={styles.buttonText}>확인</Text>
                     </Pressable>
-                </View>
-            </View>
-        </View>
+        </CharacterFormLayout>
     );
 }
 
 const styles = StyleSheet.create({
-    root: {
-        flex: 1,
-        backgroundColor: '#F3F4F6',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    contentRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        width: '80%',
-        maxWidth: scale(900),
-    },
-    character: {
-        width: scale(260),
-        height: scale(260),
-        marginRight: scale(80),
-    },
-    rightBox: {
-        width: scale(520),
-    },
     title: {
         fontSize: fontScale(28),
         fontWeight: '800',

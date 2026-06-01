@@ -16,6 +16,7 @@ import {
 import { scale, fontScale } from '../../lib/layout';
 import { getOcrUsage } from '../../api/ocr';
 import { getStudySourceExtension, getStudySourceName, isImageStudySource, StudySource } from './studySource';
+import FloatingBackButton from '../../components/common/FloatingBackButton';
 
 type Props = {
     sources: StudySource[];
@@ -674,13 +675,7 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
 
     return (
         <View style={styles.root}>
-            <Pressable style={styles.backBtn} onPress={onBack} hitSlop={10}>
-                <Image
-                    source={require('../../../assets/shift.png')}
-                    style={styles.backIcon}
-                    resizeMode="contain"
-                />
-            </Pressable>
+            <FloatingBackButton onPress={onBack} hitSlop={10} />
 
             <View style={styles.centerWrap}>
                 <View style={styles.topContent}>
@@ -886,29 +881,6 @@ const styles = StyleSheet.create({
     root: {
         flex: 1,
         backgroundColor: BG,
-    },
-
-    backBtn: {
-        position: 'absolute',
-        left: scale(18),
-        top: scale(22),
-        width: scale(44),
-        height: scale(44),
-        borderRadius: scale(22),
-        backgroundColor: '#FFFFFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
-    },
-    backIcon: {
-        width: scale(20),
-        height: scale(20),
-        transform: [{ rotate: '180deg' }],
     },
 
     centerWrap: {
