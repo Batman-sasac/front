@@ -14,12 +14,12 @@ import {
     ResultStats,
 } from '../../data/learningTypeTest';
 import { scale, fontScale } from '../../lib/layout';
+import SegmentedProgressBar from '../../components/common/SegmentedProgressBar';
+import { appColors, appFontWeight } from '../../styles/theme';
 
 type Props = {
     onFinish: (result: ResultStats) => void;
 };
-
-const BG = '#F3F4F6';
 
 export default function TypeTestScreen({ onFinish }: Props) {
     const total = questions.length;
@@ -52,17 +52,7 @@ export default function TypeTestScreen({ onFinish }: Props) {
                 <Text style={styles.title}>학습 유형 검사</Text>
 
                 {/* 20칸 세그먼트 진행 바 */}
-                <View style={styles.progressRow}>
-                    {Array.from({ length: total }).map((_, i) => (
-                        <View
-                            key={i}
-                            style={[
-                                styles.progressSegment,
-                                i < answeredCount && styles.progressSegmentActive,
-                            ]}
-                        />
-                    ))}
-                </View>
+                <SegmentedProgressBar total={total} activeCount={answeredCount} />
 
                 <Text style={styles.counter}>
                     {answeredCount}/{total}
@@ -112,7 +102,7 @@ const styles = StyleSheet.create({
     // 전체 화면 배경 + 상단 여백
     container: {
         flex: 1,
-        backgroundColor: BG,
+        backgroundColor: appColors.screenBgMuted,
         paddingHorizontal: scale(40),
         paddingTop: scale(40),
     },
@@ -123,31 +113,16 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: fontScale(22),
-        fontWeight: '800',
+        fontWeight: appFontWeight.extraBold,
         marginBottom: scale(12),
     },
 
     // 20칸 세그먼트 진행 바 행
-    progressRow: {
-        flexDirection: 'row',
-        width: '100%',
-        gap: scale(4),
-    },
-    progressSegment: {
-        flex: 1,
-        height: scale(12),
-        borderRadius: scale(4),
-        backgroundColor: '#E5E7EB',
-    },
-    progressSegmentActive: {
-        backgroundColor: '#5E82FF',
-    },
-
     // 0/20 카운터
     counter: {
         marginTop: scale(4),
         fontSize: fontScale(12),
-        color: '#6B7280',
+        color: appColors.textSecondary,
         textAlign: 'right',
     },
 
@@ -168,7 +143,7 @@ const styles = StyleSheet.create({
     // 질문 카드
     card: {
         width: scale(320),
-        backgroundColor: '#ffffff',
+        backgroundColor: appColors.surface,
         borderRadius: scale(24),
         paddingVertical: scale(24),
         paddingHorizontal: scale(20),
@@ -178,14 +153,14 @@ const styles = StyleSheet.create({
 
     questionIndex: {
         fontSize: fontScale(14),
-        fontWeight: '700',
+        fontWeight: appFontWeight.bold,
         color: '#2563EB',
         marginBottom: scale(8),
     },
     questionText: {
         fontSize: fontScale(16),
         textAlign: 'center',
-        color: '#111827',
+        color: appColors.text,
         lineHeight: fontScale(22),
         marginBottom: scale(24),
     },
@@ -207,26 +182,26 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     yesButton: {
-        backgroundColor: '#BBF7D0',
+        backgroundColor: appColors.successSoft,
     },
     noButton: {
-        backgroundColor: '#FECACA',
+        backgroundColor: appColors.dangerSoft,
     },
 
     choiceLabel: {
         fontSize: fontScale(40),
-        fontWeight: '800',
+        fontWeight: appFontWeight.extraBold,
     },
     choiceLabelYes: {
-        color: '#10B981',
+        color: appColors.success,
     },
     choiceLabelNo: {
-        color: '#F97373',
+        color: appColors.dangerText,
     },
     choiceText: {
         marginTop: scale(8),
         fontSize: fontScale(12),
-        color: '#374151',
+        color: appColors.textSubtle,
         textAlign: 'center',
         lineHeight: fontScale(16),
     },

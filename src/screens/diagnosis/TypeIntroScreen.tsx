@@ -1,13 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
+import AppPrimaryButton from '../../components/common/AppPrimaryButton';
+import { appColors, appFontWeight, appRadius } from '../../styles/theme';
 
 type Props = {
     nickname: string;
     onStartTest: () => void;
 };
-
-const BG = '#F3F4F6';
 
 export default function TypeIntroScreen({ nickname, onStartTest }: Props) {
     const displayName = nickname && nickname.trim().length > 0 ? nickname.trim() : '학습자';
@@ -37,9 +37,9 @@ export default function TypeIntroScreen({ nickname, onStartTest }: Props) {
                         3분 만에 나의 학습 유형을 알아볼까요?
                     </Text>
 
-                    <Pressable style={styles.button} onPress={onStartTest}>
-                        <Text style={styles.buttonText}>학습유형검사 시작하기</Text>
-                    </Pressable>
+                    <AppPrimaryButton style={styles.button} textStyle={styles.buttonText} onPress={onStartTest}>
+                        학습유형검사 시작하기
+                    </AppPrimaryButton>
                 </View>
             </View>
         </View>
@@ -49,7 +49,7 @@ export default function TypeIntroScreen({ nickname, onStartTest }: Props) {
 const styles = StyleSheet.create({
     root: {
         flex: 1,
-        backgroundColor: BG,
+        backgroundColor: appColors.screenBgMuted,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -69,12 +69,12 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: fontScale(28),
-        fontWeight: '800',
+        fontWeight: appFontWeight.extraBold,
         marginBottom: scale(16),
     },
     body: {
         fontSize: fontScale(16),
-        color: '#4B5563',
+        color: appColors.textMuted,
         lineHeight: fontScale(24),
     },
     bodySpacing: {
@@ -85,15 +85,12 @@ const styles = StyleSheet.create({
         marginTop: scale(8),
         width: scale(280),
         height: scale(64),
-        borderRadius: scale(999),
-        backgroundColor: '#5E82FF',
-        alignItems: 'center',
-        justifyContent: 'center',
+        borderRadius: scale(appRadius.pill),
         elevation: 3,
     },
     buttonText: {
-        color: '#fff',
+        color: appColors.white,
         fontSize: fontScale(17),
-        fontWeight: '700',
+        fontWeight: appFontWeight.bold,
     },
 });

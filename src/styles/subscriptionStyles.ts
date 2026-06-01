@@ -1,4 +1,5 @@
 import { fontScale, scale } from '../lib/layout';
+import { appColors, appShadow } from './theme';
 
 const FIGMA_FRAME_WIDTH = 1194;
 const LAYOUT_BASE_WIDTH = 1024;
@@ -8,9 +9,9 @@ export const figmaScale = (size: number) => scale(size * FIGMA_TO_LAYOUT);
 export const figmaFontScale = (size: number) => fontScale(size);
 
 export const subscriptionColors = {
-    screenBg: '#F6F7FB',
-    surface: '#FFFFFF',
-    cardBg: '#FFFFFF',
+    screenBg: appColors.screenBg,
+    surface: appColors.surface,
+    cardBg: appColors.surface,
     progressTrack: '#D2D2D4',
     blue: '#92A6FF',
     primaryBlue: '#5789FC',
@@ -18,7 +19,7 @@ export const subscriptionColors = {
     grey500: '#606168',
     grey600: '#3F4045',
     grey700: '#212124',
-    black: '#000000',
+    black: appColors.black,
     red: '#D90054',
     modalBg: '#F8F8FA',
     modalBorder: '#D7DAE3',
@@ -26,7 +27,7 @@ export const subscriptionColors = {
 } as const;
 
 export const subscriptionShadow = {
-    shadowColor: '#000000',
+    shadowColor: appShadow.card.shadowColor,
     shadowOffset: { width: 0, height: figmaScale(16) },
     shadowOpacity: 0.06,
     shadowRadius: figmaScale(20),
