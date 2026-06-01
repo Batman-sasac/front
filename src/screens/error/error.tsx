@@ -1,14 +1,14 @@
 ﻿import React, { useState } from 'react';
 import {
     Image,
-    Modal,
-    Pressable,
     StyleSheet,
     Text,
     TextInput,
     View,
 } from 'react-native';
 import { fontScale, scale } from '../../lib/layout';
+import ErrorImageButton from '../../components/error/ErrorImageButton';
+import ErrorModalShell from '../../components/error/ErrorModalShell';
 
 type Props = {
     onGoHome: () => void;
@@ -55,124 +55,99 @@ export default function ErrorScreen({ onGoHome, onRetry, onSubmitReport }: Props
                     BAT는 갓 태어난 앱이라 아직 다듬어야 할 부분이 많아요. 불편을 드려 죄송해요.
                 </Text>
 
-                <Pressable onPress={() => setShowReportModal(true)} style={styles.fullButtonWrap}>
-                    <Image
-                        source={require('../../../assets/error/report.png')}
-                        style={styles.fullButton}
-                        resizeMode="stretch"
-                    />
-                </Pressable>
+                <ErrorImageButton
+                    source={require('../../../assets/error/report.png')}
+                    onPress={() => setShowReportModal(true)}
+                    wrapperStyle={styles.fullButtonWrap}
+                    imageStyle={styles.fullButton}
+                />
 
                 <View style={styles.rowButtons}>
-                    <Pressable onPress={onGoHome} style={styles.halfButtonWrap}>
-                        <Image
-                            source={require('../../../assets/error/go-home.png')}
-                            style={styles.halfButton}
-                            resizeMode="stretch"
-                        />
-                    </Pressable>
-                    <Pressable onPress={onRetry} style={styles.halfButtonWrap}>
-                        <Image
-                            source={require('../../../assets/error/re-start.png')}
-                            style={styles.halfButton}
-                            resizeMode="stretch"
-                        />
-                    </Pressable>
+                    <ErrorImageButton
+                        source={require('../../../assets/error/go-home.png')}
+                        onPress={onGoHome}
+                        wrapperStyle={styles.halfButtonWrap}
+                        imageStyle={styles.halfButton}
+                    />
+                    <ErrorImageButton
+                        source={require('../../../assets/error/re-start.png')}
+                        onPress={onRetry}
+                        wrapperStyle={styles.halfButtonWrap}
+                        imageStyle={styles.halfButton}
+                    />
                 </View>
             </View>
 
-            <Modal visible={showReportModal} transparent animationType="fade" onRequestClose={closeAllModals}>
-                <View style={styles.modalBackdrop}>
-                    <View style={styles.modalCard}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>오류 제보하기</Text>
-                            <Pressable onPress={() => setShowReportModal(false)}>
-                                <Text style={styles.closeText}>×</Text>
-                            </Pressable>
-                        </View>
-
-                        <TextInput
-                            style={styles.input}
-                            multiline
-                            value={reportText}
-                            onChangeText={setReportText}
-                            placeholder={'무슨 일이 있었는지 편하게 말해주세요 :)\n예) "친구 추가하려는데 안 돼요"'}
-                            placeholderTextColor="#8A8E99"
-                            textAlignVertical="top"
+            <ErrorModalShell
+                visible={showReportModal}
+                title="오류 제보하기"
+                onClose={() => setShowReportModal(false)}
+                footer={
+                    <View style={styles.modalButtons}>
+                        <ErrorImageButton
+                            source={require('../../../assets/error/popup-delete.png')}
+                            onPress={() => setShowReportModal(false)}
+                            wrapperStyle={styles.modalButtonWrap}
+                            imageStyle={styles.modalButtonImage}
                         />
-
-                        <View style={styles.modalButtons}>
-                            <Pressable onPress={() => setShowReportModal(false)} style={styles.modalButtonWrap}>
-                                <Image
-                                    source={require('../../../assets/error/popup-delete.png')}
-                                    style={styles.modalButtonImage}
-                                    resizeMode="stretch"
-                                />
-                            </Pressable>
-                            <Pressable onPress={handleSubmitReport} style={styles.modalButtonWrap}>
-                                <Image
-                                    source={require('../../../assets/error/popup-submit.png')}
-                                    style={styles.modalButtonImage}
-                                    resizeMode="stretch"
-                                />
-                            </Pressable>
-                        </View>
+                        <ErrorImageButton
+                            source={require('../../../assets/error/popup-submit.png')}
+                            onPress={handleSubmitReport}
+                            wrapperStyle={styles.modalButtonWrap}
+                            imageStyle={styles.modalButtonImage}
+                        />
                     </View>
-                </View>
-            </Modal>
+                }
+            >
+                <TextInput
+                    style={styles.input}
+                    multiline
+                    value={reportText}
+                    onChangeText={setReportText}
+                    placeholder={'무슨 일이 있었는지 편하게 말해주세요 :)\n예) "친구 추가하려는데 안 돼요"'}
+                    placeholderTextColor="#8A8E99"
+                    textAlignVertical="top"
+                />
+            </ErrorModalShell>
 
-            <Modal visible={showDoneModal} transparent animationType="fade" onRequestClose={closeAllModals}>
-                <View style={styles.modalBackdrop}>
-                    <View style={styles.modalCard}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>오류 제보하기</Text>
-                            <Pressable onPress={() => setShowDoneModal(false)}>
-                                <Text style={styles.closeText}>×</Text>
-                            </Pressable>
-                        </View>
-
-                        <View style={styles.doneBody}>
-                            <Image
-                                source={require('../../../assets/character/bat-character.png')}
-                                style={styles.doneBatImage}
-                                resizeMode="contain"
-                            />
-                            <Text style={styles.doneTitle}>제보 완료!✨</Text>
-                            <Text style={styles.doneDesc}>덕분에 BAT가 더 나아지고 있어요.</Text>
-                            <Text style={styles.doneDesc}>확인하는 대로 바로 고쳐드릴게요!</Text>
-                        </View>
-
-                        <View style={styles.modalButtons}>
-                            <Pressable
-                                onPress={() => {
-                                    setShowDoneModal(false);
-                                    onGoHome();
-                                }}
-                                style={styles.modalButtonWrap}
-                            >
-                                <Image
-                                    source={require('../../../assets/error/go-home.png')}
-                                    style={styles.modalButtonImage}
-                                    resizeMode="stretch"
-                                />
-                            </Pressable>
-                            <Pressable
-                                onPress={() => {
-                                    setShowDoneModal(false);
-                                    onRetry();
-                                }}
-                                style={styles.modalButtonWrap}
-                            >
-                                <Image
-                                    source={require('../../../assets/error/re-start.png')}
-                                    style={styles.modalButtonImage}
-                                    resizeMode="stretch"
-                                />
-                            </Pressable>
-                        </View>
+            <ErrorModalShell
+                visible={showDoneModal}
+                title="오류 제보하기"
+                onClose={() => setShowDoneModal(false)}
+                footer={
+                    <View style={styles.modalButtons}>
+                        <ErrorImageButton
+                            source={require('../../../assets/error/go-home.png')}
+                            onPress={() => {
+                                setShowDoneModal(false);
+                                onGoHome();
+                            }}
+                            wrapperStyle={styles.modalButtonWrap}
+                            imageStyle={styles.modalButtonImage}
+                        />
+                        <ErrorImageButton
+                            source={require('../../../assets/error/re-start.png')}
+                            onPress={() => {
+                                setShowDoneModal(false);
+                                onRetry();
+                            }}
+                            wrapperStyle={styles.modalButtonWrap}
+                            imageStyle={styles.modalButtonImage}
+                        />
                     </View>
+                }
+            >
+                <View style={styles.doneBody}>
+                    <Image
+                        source={require('../../../assets/character/bat-character.png')}
+                        style={styles.doneBatImage}
+                        resizeMode="contain"
+                    />
+                    <Text style={styles.doneTitle}>제보 완료!✨</Text>
+                    <Text style={styles.doneDesc}>덕분에 BAT가 더 나아지고 있어요.</Text>
+                    <Text style={styles.doneDesc}>확인하는 대로 바로 고쳐드릴게요!</Text>
                 </View>
-            </Modal>
+            </ErrorModalShell>
         </View>
     );
 }
@@ -227,41 +202,6 @@ const styles = StyleSheet.create({
     halfButton: {
         width: '100%',
         height: scale(52),
-    },
-    modalBackdrop: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.44)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: scale(16),
-    },
-    modalCard: {
-        width: '100%',
-        maxWidth: 560,
-        borderRadius: scale(18),
-        backgroundColor: '#F8F8FA',
-        overflow: 'hidden',
-    },
-    modalHeader: {
-        height: scale(74),
-        borderBottomWidth: 1,
-        borderBottomColor: '#D7DAE3',
-        paddingHorizontal: scale(20),
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    modalTitle: {
-        fontSize: fontScale(22),
-        fontWeight: '800',
-        color: '#111218',
-        marginLeft: scale(8),
-    },
-    closeText: {
-        fontSize: fontScale(44),
-        lineHeight: fontScale(44),
-        color: '#A9ABB4',
-        marginTop: scale(-4),
     },
     input: {
         margin: scale(22),
