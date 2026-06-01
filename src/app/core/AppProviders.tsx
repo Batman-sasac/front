@@ -1,8 +1,8 @@
-import React from 'react';
+﻿import React from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
-import { isFullscreenStep, type AppStep } from '../navigation/routes';
+import { isFullscreenStep, type AppStep } from '../../navigation/routes';
 
 type AppProvidersProps = {
   step: AppStep;

@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+﻿import { useRef, useState } from 'react';
 
-import type { AppStep } from '../navigation/routes';
-import type { RewardType } from '../screens/reward/Reward';
+import type { AppStep } from '../../navigation/routes';
+import type { RewardType } from '../../screens/reward/Reward';
 
 type RewardScreenState = {
   type: RewardType;

@@ -1,6 +1,6 @@
-import { Platform } from 'react-native';
+﻿import { Platform } from 'react-native';
 
-import type { AppStep } from '../navigation/routes';
+import type { AppStep } from '../../navigation/routes';
 
 type UseErrorActionsParams = {
   setStep: (step: AppStep) => void;

@@ -1,7 +1,7 @@
-import { useEffect, type Dispatch, type SetStateAction } from 'react';
+﻿import { useEffect, type Dispatch, type SetStateAction } from 'react';
 
-import type { OcrUsageResponse } from '../api/ocr';
-import type { AppStep } from '../navigation/routes';
+import type { OcrUsageResponse } from '../../api/ocr';
+import type { AppStep } from '../../navigation/routes';
 
 type UseAppRouteEffectsParams = {
   step: AppStep;
@@ -34,12 +34,11 @@ export default function useAppRouteEffects({
 
   useEffect(() => {
     if (step === 'home' && progressLoaded) {
-      handleDailyCheckIn();   // 홈 진입 시 자동 출석
+      handleDailyCheckIn();
 
       void loadHomeDashboard(setMonthlyGoal);
     }
 
-    // 리그 화면 진입 시 상위 5명 리더보드 로드
     if (step === 'league') {
       void refreshLeagueLeaderboard();
     }

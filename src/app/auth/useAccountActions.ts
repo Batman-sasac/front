@@ -1,7 +1,7 @@
-import type { Dispatch, SetStateAction } from 'react';
+﻿import type { Dispatch, SetStateAction } from 'react';
 
-import type { ResultStats } from '../data/learningTypeTest';
-import type { AppStep } from '../navigation/routes';
+import type { ResultStats } from '../../data/learningTypeTest';
+import type { AppStep } from '../../navigation/routes';
 
 type UseAccountActionsParams = {
   resetAuthIdentity: () => void;

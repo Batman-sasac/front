@@ -1,8 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 
-import { checkAttendanceReward, claimRandomEventReward } from '../api/reward';
-import type { RewardType } from '../screens/reward/Reward';
+import { checkAttendanceReward, claimRandomEventReward } from '../../api/reward';
+import type { RewardType } from '../../screens/reward/Reward';
 import {
   DEFAULT_WEEK_ATTENDANCE,
   EXP_KEY,

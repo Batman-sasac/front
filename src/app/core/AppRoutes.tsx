@@ -1,37 +1,37 @@
-import React from 'react';
+﻿import React from 'react';
 
-import type { ResultStats } from '../data/learningTypeTest';
-import type { OcrProgressState } from './studyFlow';
-import type { AppStep as Step } from '../navigation/routes';
-import Splash from '../components/Splash';
-import UsageExhaustedModal from '../components/subscription/UsageExhaustedModal';
-import LoginScreen from '../screens/auth/LoginScreen';
-import NicknameScreen from '../screens/auth/NicknameScreen';
-import GoalSettingScreen from '../screens/goal/GoalSettingScreen';
-import TypeIntroScreen from '../screens/diagnosis/TypeIntroScreen';
-import TypeTestScreen from '../screens/diagnosis/TypeTestScreen';
-import TypeResultScreen from '../screens/diagnosis/TypeResultScreen';
-import HomeScreen from '../screens/home/HomeScreen';
-import LeagueScreen from '../screens/league/LeagueScreen';
-import AlarmScreen from '../screens/alarm/AlarmScreen';
-import AlarmSettingScreen from '../screens/alarm/AlarmSettingScreen';
-import MyPageScreen from '../screens/mypage/MyPageScreen';
-import TakePicture from '../screens/input_data/TakePicture';
-import SelectPicture from '../screens/input_data/SelectPicture';
-import TalkingStudyScreen from '../screens/study/TalkingStudyScreen';
-import ScaffoldingScreen from '../screens/study/ScaffoldingScreen';
-import StudyFlowScreen from '../screens/study/StudyFlowScreen';
-import BrushUPScreen from '../screens/brushUP/BrushUPScreen';
-import RewardScreen from '../screens/reward/Reward';
-import ErrorScreen from '../screens/error/error';
-import SubscribeScreen from '../screens/subscribe/subscribe';
+import type { ResultStats } from '../../data/learningTypeTest';
+import type { OcrProgressState } from '../study/studyFlow';
+import type { AppStep as Step } from '../../navigation/routes';
+import Splash from '../../components/Splash';
+import UsageExhaustedModal from '../../components/subscription/UsageExhaustedModal';
+import LoginScreen from '../../screens/auth/LoginScreen';
+import NicknameScreen from '../../screens/auth/NicknameScreen';
+import GoalSettingScreen from '../../screens/goal/GoalSettingScreen';
+import TypeIntroScreen from '../../screens/diagnosis/TypeIntroScreen';
+import TypeTestScreen from '../../screens/diagnosis/TypeTestScreen';
+import TypeResultScreen from '../../screens/diagnosis/TypeResultScreen';
+import HomeScreen from '../../screens/home/HomeScreen';
+import LeagueScreen from '../../screens/league/LeagueScreen';
+import AlarmScreen from '../../screens/alarm/AlarmScreen';
+import AlarmSettingScreen from '../../screens/alarm/AlarmSettingScreen';
+import MyPageScreen from '../../screens/mypage/MyPageScreen';
+import TakePicture from '../../screens/input_data/TakePicture';
+import SelectPicture from '../../screens/input_data/SelectPicture';
+import TalkingStudyScreen from '../../screens/study/TalkingStudyScreen';
+import ScaffoldingScreen from '../../screens/study/ScaffoldingScreen';
+import StudyFlowScreen from '../../screens/study/StudyFlowScreen';
+import BrushUPScreen from '../../screens/brushUP/BrushUPScreen';
+import RewardScreen from '../../screens/reward/Reward';
+import ErrorScreen from '../../screens/error/error';
+import SubscribeScreen from '../../screens/subscribe/subscribe';
 
 type RewardScreenState = {
   type: React.ComponentProps<typeof RewardScreen>['type'];
   xp: number;
 };
 
-type AppRoutesProps = {
+export type AppRoutesProps = {
   step: Step;
   setStep: (step: Step) => void;
   nickname: string;
@@ -341,9 +341,9 @@ export default function AppRoutes({
           payload={scaffoldingPayload}
           loading={scaffoldingLoading}
           error={scaffoldingError}
-          initialRound={isReviewMode ? '3-1' : '1-1'} // 복습 모드면 3라운드로 시작
-          reviewQuizId={reviewQuizId} // 복습 퀴즈 ID 전달
-          subjectName={subjectName} // 과목명 전달
+          initialRound={isReviewMode ? '3-1' : '1-1'}
+          reviewQuizId={reviewQuizId}
+          subjectName={subjectName}
           currentStudyIndex={selectedSourceIndex}
           totalStudyCount={isReviewMode ? Math.max(scaffoldingPayloads.length, 1) : capturedSources.length}
           accumulatedEarnedXp={batchEarnedXp}
@@ -355,7 +355,6 @@ export default function AppRoutes({
       {step === 'brushup' && (
         <BrushUPScreen
           onBack={() => setStep('home')}
-          // 복습 보정
           onNavigate={handleSidebarNavigate}
           onLogout={handleLogout}
           onCardPress={handleBrushUpCardPress}

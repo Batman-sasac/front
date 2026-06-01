@@ -1,4 +1,4 @@
-export const DEFAULT_WEEK_ATTENDANCE = [
+﻿export const DEFAULT_WEEK_ATTENDANCE = [
   false,
   false,
   false,

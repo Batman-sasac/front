@@ -1,5 +1,5 @@
-import type { AppStep } from '../navigation/routes';
-import type { Screen as SidebarScreen } from '../components/Sidebar';
+﻿import type { AppStep } from '../../navigation/routes';
+import type { Screen as SidebarScreen } from '../../components/Sidebar';
 
 export type MainNavigationScreen = 'home' | 'league' | 'alarm' | 'mypage' | 'takePicture' | 'brushup';
 

@@ -1,7 +1,7 @@
-import type { Dispatch, SetStateAction } from 'react';
+﻿import type { Dispatch, SetStateAction } from 'react';
 import { Alert } from 'react-native';
 
-import type { AppStep } from '../navigation/routes';
+import type { AppStep } from '../../navigation/routes';
 
 type UseSubscriptionActionsParams = {
   setStep: (step: AppStep) => void;
@@ -17,7 +17,7 @@ export default function useSubscriptionActions({
   const handleSubscribe = () => {
     setStep('mypage');
     setTimeout(() => {
-      Alert.alert('안내', '추후 업데이트 후 제공됩니다');
+      Alert.alert('안내', '추후 업데이트에서 제공됩니다.');
     }, 0);
   };
 

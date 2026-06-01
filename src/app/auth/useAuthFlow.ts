@@ -1,12 +1,12 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 
-import { getHomeStats, getUserStats } from '../api/auth';
-import { registerAndSyncPushToken } from '../api/notification';
-import type { OcrUsageResponse } from '../api/ocr';
-import { clearAuthData, getToken, getUserInfo } from '../lib/storage';
-import type { AppStep } from '../navigation/routes';
-import { TYPE_LABEL_KEY } from './progress';
+import { getHomeStats, getUserStats } from '../../api/auth';
+import { registerAndSyncPushToken } from '../../api/notification';
+import type { OcrUsageResponse } from '../../api/ocr';
+import { clearAuthData, getToken, getUserInfo } from '../../lib/storage';
+import type { AppStep } from '../../navigation/routes';
+import { TYPE_LABEL_KEY } from '../dashboard/progress';
 
 type UseAuthFlowParams = {
   step: AppStep;

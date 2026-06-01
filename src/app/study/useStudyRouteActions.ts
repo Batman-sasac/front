@@ -1,9 +1,9 @@
-import type { Dispatch, SetStateAction } from 'react';
+﻿import type { Dispatch, SetStateAction } from 'react';
 
-import type { ScaffoldingPayload } from '../api/ocr';
-import type { AppStep } from '../navigation/routes';
-import type { Card as BrushUpCard } from '../screens/brushUP/BrushUPScreen';
-import type { StudySource } from '../screens/input_data/studySource';
+import type { ScaffoldingPayload } from '../../api/ocr';
+import type { AppStep } from '../../navigation/routes';
+import type { Card as BrushUpCard } from '../../screens/brushUP/BrushUPScreen';
+import type { StudySource } from '../../screens/input_data/studySource';
 import type { SourceCropMap } from './studyFlow';
 
 type UseStudyRouteActionsParams = {
@@ -86,7 +86,6 @@ export default function useStudyRouteActions({
   };
 
   const handleScaffoldingBack = () => {
-    // 복습 모드에서 복습 화면으로
     if (isReviewMode) {
       setIsReviewMode(false);
       setReviewQuizId(null);

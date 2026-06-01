@@ -1,12 +1,12 @@
-import type { Dispatch, SetStateAction } from 'react';
+﻿import type { Dispatch, SetStateAction } from 'react';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { setStudyGoal } from '../api/weekly';
-import { ResultStats, typeProfiles } from '../data/learningTypeTest';
-import type { AppStep } from '../navigation/routes';
-import { TYPE_LABEL_KEY } from './progress';
-import { getErrorMessage } from './errors';
+import { setStudyGoal } from '../../api/weekly';
+import { ResultStats, typeProfiles } from '../../data/learningTypeTest';
+import type { AppStep } from '../../navigation/routes';
+import { TYPE_LABEL_KEY } from '../dashboard/progress';
+import { getErrorMessage } from '../error/errors';
 
 type UseOnboardingActionsParams = {
   setStep: (step: AppStep) => void;

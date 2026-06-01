@@ -1,5 +1,5 @@
-import type { ScaffoldingPayload } from '../api/ocr';
-import type { StudySource } from '../screens/input_data/studySource';
+﻿import type { ScaffoldingPayload } from '../../api/ocr';
+import type { StudySource } from '../../screens/input_data/studySource';
 
 export type SourceCropMap = Record<number, { px: number; py: number; pw: number; ph: number }>;
 

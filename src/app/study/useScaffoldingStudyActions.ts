@@ -1,4 +1,4 @@
-import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
+﻿import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Alert } from 'react-native';
 
 import {
@@ -8,13 +8,13 @@ import {
   type PageItem,
   type OcrUsageResponse,
   type ScaffoldingPayload,
-} from '../api/ocr';
-import type { RewardType } from '../screens/reward/Reward';
-import { buildOrderedStudySaveData } from '../screens/study/scaffoldingLogic';
-import type { StudySource } from '../screens/input_data/studySource';
-import type { AppStep } from '../navigation/routes';
+} from '../../api/ocr';
+import type { RewardType } from '../../screens/reward/Reward';
+import { buildOrderedStudySaveData } from '../../screens/study/scaffoldingLogic';
+import type { StudySource } from '../../screens/input_data/studySource';
+import type { AppStep } from '../../navigation/routes';
 import type { SourceCropMap } from './studyFlow';
-import { getErrorMessage } from './errors';
+import { getErrorMessage } from '../error/errors';
 
 type PendingGradePart = {
   pages: PageItem[];
@@ -134,7 +134,7 @@ export default function useScaffoldingStudyActions({
       });
     } catch (error: unknown) {
       setScaffoldingPayload(null);
-      setScaffoldingError(getErrorMessage(error, '재시도에 실패했습니다.'));
+      setScaffoldingError(getErrorMessage(error, '다시 시도에 실패했습니다.'));
     } finally {
       setScaffoldingLoading(false);
     }
@@ -238,7 +238,7 @@ export default function useScaffoldingStudyActions({
       });
     const { keywords, blankItems } = orderedSaveData;
     if (keywords.length === 0 && !isReviewMode) {
-      throw new Error('선택된 빈칸 정보가 없습니다.');
+      throw new Error('선택한 빈칸 정보가 없습니다.');
     }
 
     const reviewCorrectCount = userAnswers.reduce((acc, ua, idx) => {

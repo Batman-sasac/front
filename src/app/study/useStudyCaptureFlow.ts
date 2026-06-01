@@ -1,11 +1,11 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Alert } from 'react-native';
 import { manipulateAsync, SaveFormat, type Action } from 'expo-image-manipulator';
 
-import { runOcr, type OcrProgressMessage, type OcrUsageResponse, type ScaffoldingPayload } from '../api/ocr';
-import type { AppStep } from '../navigation/routes';
-import type { StudySource } from '../screens/input_data/studySource';
-import { getErrorMessage } from './errors';
+import { runOcr, type OcrProgressMessage, type OcrUsageResponse, type ScaffoldingPayload } from '../../api/ocr';
+import type { AppStep } from '../../navigation/routes';
+import type { StudySource } from '../../screens/input_data/studySource';
+import { getErrorMessage } from '../error/errors';
 import {
   createOcrJobId,
   getSourceDisplayName,
@@ -141,7 +141,7 @@ export default function useStudyCaptureFlow({
           shouldSendCropInfo = false;
         }
       } catch (error) {
-        console.warn('OCR 업로드 전 이미지 전처리 실패, 원본으로 진행:', error);
+        console.warn('OCR 업로드용 이미지 전처리 실패, 원본으로 진행:', error);
       }
     }
 

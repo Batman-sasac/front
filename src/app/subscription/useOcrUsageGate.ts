@@ -1,8 +1,8 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 
-import { getOcrUsage, type OcrUsageResponse } from '../api/ocr';
-import { getToken } from '../lib/storage';
-import { getOcrUsageExhaustedMessage } from '../lib/ocrUsage';
+import { getOcrUsage, type OcrUsageResponse } from '../../api/ocr';
+import { getToken } from '../../lib/storage';
+import { getOcrUsageExhaustedMessage } from '../../lib/ocrUsage';
 
 export default function useOcrUsageGate() {
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -15,7 +15,7 @@ export default function useOcrUsageGate() {
     const target = usage ?? ocrUsage;
     if (!target) return false;
 
-    // 백엔드에서 무제한(화이트리스트) 유저로 내려온 경우에는 항상 사용 가능 처리
+    // 백엔드에서 무제한 플래그가 내려오면 항상 사용 가능으로 처리한다.
     if (target.is_unlimited) return false;
 
     return target.status === 'limit_reached' || target.remaining <= 0;
