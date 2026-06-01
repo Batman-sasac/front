@@ -2303,7 +2303,7 @@ export default function ScaffoldingScreen({
         (() => {
           const hintInstance = keywordInstances.find(
             (ki) => ki.instanceId === hintWord,
-          ); // instanceId濡?李얠쓬
+          ); // instanceId로 찾음
           return (
             <Modal
               visible={true}
