@@ -11,6 +11,8 @@ import { scale, fontScale } from '../../lib/layout';
 import Sidebar from '../../components/Sidebar';
 import { confirmLogout } from '../../lib/auth';
 import Svg, { Polyline, Circle, Defs, LinearGradient, Stop, G, Text as SvgText } from 'react-native-svg';
+import HomeLevelProgress from '../../components/home/HomeLevelProgress';
+import HomeSurfaceCard from '../../components/home/HomeSurfaceCard';
 
 // 학습자 유형별 색상 → 레벨업 캐릭터 이미지 (레벨 1~5)
 const LEVEL_UP_IMAGES: Record<string, Record<number, ReturnType<typeof require>>> = {
@@ -188,7 +190,7 @@ export default function HomeScreen({
           {/* 왼쪽 컬럼: bigCard + 성장 카드 */}
           <View style={styles.leftColumn}>
             {/* 상단 큰 카드 */}
-            <View style={styles.bigCard}>
+            <HomeSurfaceCard variant="big">
               {/* Level + 유형 */}
               <Text style={styles.levelText}>
                 <Text style={styles.levelLabel}>Level </Text>
@@ -197,17 +199,10 @@ export default function HomeScreen({
               </Text>
 
               {/* 레벨 바 + 경험치(바 오른쪽 위) */}
-              <View style={styles.progressWrapper}>
-                <View style={styles.progressBarBackground}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      { width: `${Math.round(expProgress * 100)}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.expText}>{expClamped}/{levelMax}</Text>
-              </View>
+              <HomeLevelProgress
+                progress={expProgress}
+                label={`${expClamped}/${levelMax}`}
+              />
 
               {/* 캐릭터 */}
               <View style={styles.characterWrapper}>
@@ -245,10 +240,10 @@ export default function HomeScreen({
                 </View>
               </Pressable>
 
-            </View>
+            </HomeSurfaceCard>
 
             {/* 아래 성장 카드 */}
-            <View style={styles.bottomCard}>
+            <HomeSurfaceCard variant="bottom">
               {/* 요약 메시지 */}
               {weeklyGrowth && weeklyGrowth.data && weeklyGrowth.data.length >= 2 && (
                 <Text style={styles.smallTitle}>
@@ -345,13 +340,13 @@ export default function HomeScreen({
                   </Text>
                 )}
               </View>
-            </View>
+            </HomeSurfaceCard>
           </View>
 
           {/* 오른쪽 컬럼: 연속 학습 / 리그 / 목표 카드 */}
           <View style={styles.rightColumn}>
             {/* 연속 학습 카드 */}
-            <View style={styles.smallCard}>
+            <HomeSurfaceCard variant="small">
               <View style={styles.streakRow}>
                 {/* 왼쪽 큰 불 아이콘 */}
                 <Image
@@ -397,7 +392,7 @@ export default function HomeScreen({
                   </View>
                 </View>
               </View>
-            </View>
+            </HomeSurfaceCard>
 
             {/* 이하 리그 카드 / 목표 카드 그대로 */}
             {/* 리그 카드 (디자인 개선 버전) */}
@@ -439,7 +434,7 @@ export default function HomeScreen({
             </Pressable>
 
 
-            <View style={[styles.bottomCard, styles.rightBottomCard, styles.goalCard]}>
+            <HomeSurfaceCard variant="bottom" style={[styles.rightBottomCard, styles.goalCard]}>
               <Text style={styles.goalCardTitle}>이번 달 목표까지 얼마 안 남았어요!</Text>
 
               {/* 이번 달 목표 */}
@@ -480,7 +475,7 @@ export default function HomeScreen({
               <Text style={styles.goalHighlight}>
                 {Math.max((monthlyGoal ?? 20) - (monthlyStats?.this_month_count ?? 0), 0)}회만 더 하면 목표달성!
               </Text>
-            </View>
+            </HomeSurfaceCard>
           </View>
 
         </View>
@@ -530,30 +525,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   /* 카드들 */
-  bigCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: scale(24),
-    padding: scale(18),
-    ...CARD_SHADOW,
-    marginBottom: scale(14),
-  },
-  smallCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    paddingVertical: 20,
-    paddingHorizontal: 14,
-    ...CARD_SHADOW,
-    marginBottom: scale(12),
-  },
-  bottomCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    paddingTop: scale(20),
-    paddingBottom: scale(6),
-    paddingHorizontal: 14,
-    ...CARD_SHADOW,
-  },
-
   rightBottomCard: {
     marginTop: 4,
   },
@@ -569,30 +540,6 @@ const styles = StyleSheet.create({
   },
   levelLabel: { color: '#000000' },
   levelValue: { fontSize: fontScale(20), color: '#000000', fontWeight: '800' },
-
-  progressWrapper: {
-    marginBottom: scale(16),
-    position: 'relative',
-  },
-  progressBarBackground: {
-    width: '100%',
-    height: scale(6),
-    borderRadius: 999,
-    backgroundColor: '#E5E7EB',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#5E82FF',
-  },
-  expText: {
-    position: 'absolute',
-    right: 0,
-    top: -18,
-    fontSize: fontScale(12),
-    fontWeight: '600',
-    color: '#6B7280',
-  },
 
   /* 캐릭터 + 버튼 */
   characterWrapper: {
