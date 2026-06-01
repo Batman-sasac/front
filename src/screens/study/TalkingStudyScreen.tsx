@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import FloatingBackButton from '../../components/common/FloatingBackButton';
+import CenteredActionButton from '../../components/common/CenteredActionButton';
 
 type Props = {
     onBack: () => void;
@@ -27,13 +28,9 @@ export default function TalkingStudyScreen({ onBack, onDone, onSkip }: Props) {
                     <Text style={styles.micText}>{isRecording ? 'REC' : 'MIC'}</Text>
                 </Pressable>
 
-                <Pressable style={styles.primaryBtn} onPress={onDone}>
-                    <Text style={styles.primaryText}>설명 완료</Text>
-                </Pressable>
+                <CenteredActionButton label="설명 완료" onPress={onDone} />
 
-                <Pressable style={styles.ghostBtn} onPress={onSkip}>
-                    <Text style={styles.ghostText}>스킵</Text>
-                </Pressable>
+                <CenteredActionButton label="스킵" onPress={onSkip} variant="ghost" />
             </View>
         </View>
     );
@@ -64,28 +61,4 @@ const styles = StyleSheet.create({
     },
     micText: { fontSize: fontScale(14), fontWeight: '900', color: '#111827' },
 
-    primaryBtn: {
-        width: '100%',
-        maxWidth: scale(360),
-        height: scale(48),
-        borderRadius: scale(12),
-        backgroundColor: '#5E82FF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: scale(10),
-    },
-    primaryText: { color: '#FFFFFF', fontSize: fontScale(14), fontWeight: '900' },
-
-    ghostBtn: {
-        width: '100%',
-        maxWidth: scale(360),
-        height: scale(48),
-        borderRadius: scale(12),
-        backgroundColor: '#FFFFFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    ghostText: { color: '#111827', fontSize: fontScale(14), fontWeight: '900' },
 });

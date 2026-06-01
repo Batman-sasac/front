@@ -19,6 +19,9 @@ import AppConfirmDialog from "../../components/common/AppConfirmDialog";
 import AppSearchBar from "../../components/common/AppSearchBar";
 import ReviewCard from "../../components/brushup/ReviewCard";
 import SubjectFilterChip from "../../components/brushup/SubjectFilterChip";
+import BrushupLoadingState from "../../components/brushup/BrushupLoadingState";
+import BrushupEmptyState from "../../components/brushup/BrushupEmptyState";
+import BrushupLoadMoreButton from "../../components/brushup/BrushupLoadMoreButton";
 import type { Card, Subject } from "../../components/brushup/types";
 
 export type { Card } from "../../components/brushup/types";
@@ -241,18 +244,9 @@ export default function BrushUPScreen({
         {/* 카드 목록 */}
         <ScrollView contentContainerStyle={styles.cardList}>
           {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#5E82FF" />
-              <Text style={styles.loadingText}>복습 카드를 불러오는 중.</Text>
-            </View>
+            <BrushupLoadingState />
           ) : filteredCards.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>📚</Text>
-              <Text style={styles.emptyTitle}>복습할 카드가 없어요</Text>
-              <Text style={styles.emptyDesc}>
-                학습을 완료하면 여기에 표시돼요!
-              </Text>
-            </View>
+            <BrushupEmptyState />
           ) : (
             <>
               {filteredCards.map((card) => (
@@ -275,12 +269,7 @@ export default function BrushUPScreen({
                     </View>
                   )}
                   {!loadingMore && hasMore && (
-                    <Pressable
-                      style={styles.loadMoreBtn}
-                      onPress={() => void loadReviewCards(page + 1, false)}
-                    >
-                      <Text style={styles.loadMoreText}>더보기</Text>
-                    </Pressable>
+                    <BrushupLoadMoreButton onPress={() => void loadReviewCards(page + 1, false)} />
                   )}
                 </>
               )}
@@ -349,20 +338,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: scale(20),
   },
-  loadMoreBtn: {
-    alignSelf: "center",
-    marginTop: scale(10),
-    marginBottom: scale(24),
-    paddingHorizontal: scale(18),
-    paddingVertical: scale(12),
-    borderRadius: scale(12),
-    backgroundColor: "#EEF2FF",
-  },
-  loadMoreText: {
-    color: "#3B5BFF",
-    fontWeight: "800",
-    fontSize: fontScale(16),
-  },
   loadMoreLoading: {
     alignSelf: "center",
     marginTop: scale(10),
@@ -390,40 +365,6 @@ const styles = StyleSheet.create({
   // 검색 바
   searchBar: {
     marginTop: scale(16),
-  },
-  // 로딩 상태
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: scale(60),
-    gap: scale(16),
-  },
-  loadingText: {
-    fontSize: fontScale(15),
-    color: "#6B7280",
-    fontWeight: "600",
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: scale(60),
-    gap: scale(12),
-  },
-  emptyIcon: {
-    fontSize: fontScale(48),
-    marginBottom: scale(8),
-  },
-  emptyTitle: {
-    fontSize: fontScale(18),
-    fontWeight: "800",
-    color: "#111827",
-  },
-  emptyDesc: {
-    fontSize: fontScale(14),
-    color: "#9CA3AF",
-    textAlign: "center",
   },
   // 과목 필터 스크롤
   subjectScroll: {

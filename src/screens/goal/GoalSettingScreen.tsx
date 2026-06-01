@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import {
     Text,
     TextInput,
-    Pressable,
     StyleSheet,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import CharacterFormLayout from '../../components/common/CharacterFormLayout';
+import FormHelperText from '../../components/common/FormHelperText';
+import FormSubmitButton from '../../components/common/FormSubmitButton';
 
 type Props = {
     onSubmit: (goal: number) => void;
@@ -44,26 +45,16 @@ export default function GoalSettingScreen({ onSubmit }: Props) {
                         keyboardType="numeric"
                         style={styles.input}
                     />
-                    <Text
-                        style={[
-                            styles.helperText,
-                            !errorText && { opacity: 0 }, // ➕ 에러 없을 때는 안 보이게(공간은 유지)
-                        ]}
-                    >
-                        {errorText || ' '}
-                    </Text>
+                    <FormHelperText visible={Boolean(errorText)}>
+                        {errorText}
+                    </FormHelperText>
 
-
-                    <Pressable
-                        style={[
-                            styles.button,
-                            goal.trim() === '' && { backgroundColor: '#D1D5DB' },
-                        ]}
-                        disabled={goal.trim() === ''}
+                    <FormSubmitButton
+                        label="확인"
                         onPress={() => onSubmit(Number(goal))}
-                    >
-                        <Text style={styles.buttonText}>확인</Text>
-                    </Pressable>
+                        disabled={goal.trim() === ''}
+                        style={styles.button}
+                    />
         </CharacterFormLayout>
     );
 }
@@ -86,24 +77,5 @@ const styles = StyleSheet.create({
     },
     button: {
         width: '100%',
-        marginTop: scale(8),
-        height: scale(64),
-        borderRadius: scale(999),
-        backgroundColor: '#5E82FF',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    buttonText: {
-        fontSize: fontScale(35),
-        fontWeight: '700',
-        color: '#ffffff',
-    },
-    helperText: {
-        marginTop: scale(2),
-        height: fontScale(14),
-        fontSize: fontScale(14),
-        color: '#EF4444',
-        marginBottom: scale(4),
-        paddingHorizontal: scale(8),
     },
 });

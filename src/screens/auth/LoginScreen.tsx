@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, Image, Alert, ActivityIndicator, Platform } from 'react-native';
 import { getOAuthUrl, loginWithOAuth, loginWithApple } from '../../api/auth';
 import { saveAuthData } from '../../lib/storage';
 import OAuthWebView from '../../components/OAuthWebView';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import SocialLoginButton from '../../components/auth/SocialLoginButton';
 
 type Props = {
   onLoginSuccess: (email: string, nickname: string) => void;
@@ -136,18 +137,7 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
       />
 
       <View style={styles.buttonGroup}>
-        {/* 카카오 로그인 */}
-        <Pressable
-          style={[styles.button, styles.kakao]}
-          onPress={() => handleSocialLogin('kakao')}
-        >
-          <Image
-            source={require('../../../assets/kakao.png')}
-            style={styles.kakaoIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.buttonText}>카카오로 간편 로그인</Text>
-        </Pressable>
+        <SocialLoginButton provider="kakao" onPress={() => handleSocialLogin('kakao')} />
 
         {/* Apple 로그인 (iOS만) */}
         {appleAuthAvailable && (
@@ -160,16 +150,11 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
           />
         )}
 
-        {/* 네이버 로그인 */}
-        <Pressable
-          style={[styles.button, styles.naver, { display: 'none' }]}
+        <SocialLoginButton
+          provider="naver"
           onPress={() => handleSocialLogin('naver')}
-        >
-          <Text style={styles.naverIcon}>N</Text>
-          <Text style={[styles.buttonText, styles.naverText]}>
-            네이버로 간편 로그인
-          </Text>
-        </Pressable>
+          style={{ display: 'none' }}
+        />
       </View>
 
       {/* OAuth WebView */}
@@ -209,44 +194,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', // 가운데 정렬
     gap: 16,
   },
-  button: {
-    width: 309,
-    height: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 16,
-    elevation: 2,
-  },
-
-  kakao: {
-    backgroundColor: '#FEE500',
-  },
-  naver: {
-    backgroundColor: '#03C75A',
-  },
   appleAuthButton: {
     width: 309,
     height: 64,
-  },
-  kakaoIcon: {
-    width: 18,
-    height: 18,
-    marginRight: 8,
-  },
-
-  naverIcon: {
-    marginRight: 8,
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#fff',
-  },
-  buttonText: {
-    fontSize: 22,
-    fontWeight: '600',
-  },
-  naverText: {
-    color: '#fff',
   },
   logoImage: {
     width: 160,     // 필요하면 조정 가능

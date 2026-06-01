@@ -12,6 +12,7 @@ import {
 } from '../../data/learningTypeTest';
 import { scale, fontScale } from '../../lib/layout';
 import AppPrimaryButton from '../../components/common/AppPrimaryButton';
+import LearningMetricBar from '../../components/diagnosis/LearningMetricBar';
 import { appColors, appFontWeight, appRadius } from '../../styles/theme';
 
 type Props = {
@@ -77,68 +78,14 @@ export default function TypeResultScreen({
             {/* 퍼센트 바 2줄 */}
             <View style={styles.barGroup}>
               <Text style={styles.barTitle}>장독립 / 장의존</Text>
-              <View style={styles.barRow}>
-                <Text style={styles.barLabel}>장독립</Text>
-                <View style={styles.barBackground}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      { width: `${result.fieldIndependent}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.barValue}>
-                  {result.fieldIndependent}%
-                </Text>
-              </View>
-
-              <View style={styles.barRow}>
-                <Text style={styles.barLabel}>장의존</Text>
-                <View style={styles.barBackground}>
-                  <View
-                    style={[
-                      styles.barFillSecondary,
-                      { width: `${result.fieldDependent}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.barValue}>
-                  {result.fieldDependent}%
-                </Text>
-              </View>
+              <LearningMetricBar label="장독립" value={result.fieldIndependent} />
+              <LearningMetricBar label="장의존" value={result.fieldDependent} variant="secondary" />
 
               <Text style={[styles.barTitle, { marginTop: scale(12) }]}>
                 숙고 / 충동
               </Text>
-              <View style={styles.barRow}>
-                <Text style={styles.barLabel}>숙고</Text>
-                <View style={styles.barBackground}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      { width: `${result.reflective}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.barValue}>
-                  {result.reflective}%
-                </Text>
-              </View>
-
-              <View style={styles.barRow}>
-                <Text style={styles.barLabel}>충동</Text>
-                <View style={styles.barBackground}>
-                  <View
-                    style={[
-                      styles.barFillSecondary,
-                      { width: `${result.impulsive}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.barValue}>
-                  {result.impulsive}%
-                </Text>
-              </View>
+              <LearningMetricBar label="숙고" value={result.reflective} />
+              <LearningMetricBar label="충동" value={result.impulsive} variant="secondary" />
             </View>
           </View>
 
@@ -252,41 +199,6 @@ const styles = StyleSheet.create({
     fontWeight: appFontWeight.bold,
     marginBottom: scale(4),
   },
-  barRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: scale(4),
-  },
-  barLabel: {
-    width: scale(52),
-    fontSize: fontScale(12),
-    color: appColors.textMuted,
-  },
-  barBackground: {
-    flex: 1,
-    height: scale(8),
-    borderRadius: scale(999),
-    backgroundColor: appColors.border,
-    overflow: 'hidden',
-    marginHorizontal: scale(8),
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: scale(999),
-    backgroundColor: appColors.primary,
-  },
-  barFillSecondary: {
-    height: '100%',
-    borderRadius: scale(999),
-    backgroundColor: appColors.textTertiary,
-  },
-  barValue: {
-    width: scale(40),
-    textAlign: 'right',
-    fontSize: fontScale(11),
-    color: appColors.textMuted,
-  },
-
   /* 결과 캐릭터 */
   character: {
     width: scale(140),

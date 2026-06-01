@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Image, Animated, Easing } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import StudyFlowProgressCard from '../../components/study/StudyFlowProgressCard';
+import CenteredActionButton from '../../components/common/CenteredActionButton';
 
 type Props = {
   mode: 'loading' | 'intro';
@@ -101,9 +102,12 @@ export default function StudyFlowScreen({
         ) : (
           <>
             <Text style={styles.caption}>3라운드까지 학습을 완료한 후 다음 페이지의 학습이 진행돼요.</Text>
-            <Pressable style={styles.primaryButton} onPress={onStart}>
-              <Text style={styles.primaryButtonText}>{currentPage}페이지 학습 시작</Text>
-            </Pressable>
+            <CenteredActionButton
+              label={`${currentPage}페이지 학습 시작`}
+              onPress={onStart ?? (() => {})}
+              style={styles.primaryButton}
+              textStyle={styles.primaryButtonText}
+            />
           </>
         )}
       </View>
@@ -172,17 +176,11 @@ const styles = StyleSheet.create({
     marginBottom: scale(16),
   },
   primaryButton: {
-    width: '100%',
-    maxWidth: scale(360),
     height: scale(56),
     borderRadius: scale(16),
-    backgroundColor: '#5E82FF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 0,
   },
   primaryButtonText: {
     fontSize: fontScale(18),
-    fontWeight: '900',
-    color: '#FFFFFF',
   },
 });

@@ -3,7 +3,6 @@ import {
     View,
     Text,
     StyleSheet,
-    Pressable,
     Image,
 } from 'react-native';
 import {
@@ -15,6 +14,7 @@ import {
 } from '../../data/learningTypeTest';
 import { scale, fontScale } from '../../lib/layout';
 import SegmentedProgressBar from '../../components/common/SegmentedProgressBar';
+import LearningChoiceOption from '../../components/diagnosis/LearningChoiceOption';
 import { appColors, appFontWeight } from '../../styles/theme';
 
 type Props = {
@@ -72,25 +72,18 @@ export default function TypeTestScreen({ onFinish }: Props) {
                     <Text style={styles.questionText}>{current.text}</Text>
 
                     <View style={styles.buttonRow}>
-                        <View style={styles.choiceCol}>
-                            <Pressable
-                                style={[styles.choiceButton, styles.yesButton]}
-                                onPress={() => handleAnswer('a')}
-                            >
-                                <Text style={[styles.choiceLabel, styles.choiceLabelYes]}>A</Text>
-                            </Pressable>
-                            <Text style={styles.choiceText}>{current.aText}</Text>
-                        </View>
-
-                        <View style={styles.choiceCol}>
-                            <Pressable
-                                style={[styles.choiceButton, styles.noButton]}
-                                onPress={() => handleAnswer('b')}
-                            >
-                                <Text style={[styles.choiceLabel, styles.choiceLabelNo]}>B</Text>
-                            </Pressable>
-                            <Text style={styles.choiceText}>{current.bText}</Text>
-                        </View>
+                        <LearningChoiceOption
+                            label="A"
+                            text={current.aText}
+                            variant="yes"
+                            onPress={() => handleAnswer('a')}
+                        />
+                        <LearningChoiceOption
+                            label="B"
+                            text={current.bText}
+                            variant="no"
+                            onPress={() => handleAnswer('b')}
+                        />
                     </View>
                 </View>
             </View>
@@ -168,41 +161,5 @@ const styles = StyleSheet.create({
     buttonRow: {
         flexDirection: 'row',
         gap: scale(16),
-    },
-    choiceCol: {
-        alignItems: 'center',
-        width: scale(130),
-    },
-
-    choiceButton: {
-        width: scale(96),
-        height: scale(96),
-        borderRadius: scale(24),
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    yesButton: {
-        backgroundColor: appColors.successSoft,
-    },
-    noButton: {
-        backgroundColor: appColors.dangerSoft,
-    },
-
-    choiceLabel: {
-        fontSize: fontScale(40),
-        fontWeight: appFontWeight.extraBold,
-    },
-    choiceLabelYes: {
-        color: appColors.success,
-    },
-    choiceLabelNo: {
-        color: appColors.dangerText,
-    },
-    choiceText: {
-        marginTop: scale(8),
-        fontSize: fontScale(12),
-        color: appColors.textSubtle,
-        textAlign: 'center',
-        lineHeight: fontScale(16),
     },
 });
