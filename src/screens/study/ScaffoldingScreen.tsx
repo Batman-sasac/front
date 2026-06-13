@@ -10,9 +10,9 @@ import {
   Platform,
   Alert,
   Modal,
-  ActivityIndicator,
   PanResponder,
   Keyboard,
+  LayoutChangeEvent,
 } from "react-native";
 import { scale, fontScale } from "../../lib/layout";
 import type {
@@ -28,6 +28,8 @@ import { tokenizeWithKeywords } from "./tokenizeKeywords";
 import SpeechBubbleShell from "../../components/SpeechBubbleShell";
 import StudyImageActionButton from "../../components/study/StudyImageActionButton";
 import StudyProgressHeader from "../../components/study/StudyProgressHeader";
+import { getErrorMessage } from "../../app/error/errors";
+import AppLoadingState from "../../components/common/AppLoadingState";
 
 const HINT_BUBBLE_WIDTH = scale(168);
 const DEFAULT_PAGE_CANVAS_ASPECT_RATIO = 0.72;
@@ -684,7 +686,7 @@ export default function ScaffoldingScreen({
     else if (step === "3-1") setStep("3-2");
   };
 
-  const recordTokenLayout = (idx: number) => (event: any) => {
+  const recordTokenLayout = (idx: number) => (event: LayoutChangeEvent) => {
     const { x, y, width, height } = event.nativeEvent.layout;
     tokenLayoutsRef.current[idx] = { x, y, width, height };
   };
@@ -826,10 +828,11 @@ export default function ScaffoldingScreen({
   /** 로딩/에러 UI (모든 Hook 선언 이후) */
   if (loading) {
     return (
-      <View style={[styles.root, styles.center]}>
-        <ActivityIndicator size="large" color="#5E82FF" />
-        <Text style={styles.loadingText}>학습화면 불러오는 중입니다...</Text>
-      </View>
+      <AppLoadingState
+        message="학습화면 불러오는 중입니다..."
+        style={[styles.root, styles.center]}
+        textStyle={styles.loadingText}
+      />
     );
   }
   if (error || !payload) {
@@ -2144,10 +2147,10 @@ export default function ScaffoldingScreen({
                       });
                       setPopupVisible(true);
                       return;
-                    } catch (e: any) {
+                    } catch (error) {
                       Alert.alert(
                         "저장 실패",
-                        e?.message ?? "알 수 없는 오류가 발생했습니다.",
+                        getErrorMessage(error, "알 수 없는 오류가 발생했습니다."),
                       );
                       return;
                     }
@@ -2762,7 +2765,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
     borderWidth: 0,
     ...(Platform.OS === "web"
-      ? ({ outlineStyle: "none", outlineWidth: 0 } as any)
+      ? { outlineStyle: "solid", outlineWidth: 0 }
       : {}),
   },
   blankHiddenInput: {

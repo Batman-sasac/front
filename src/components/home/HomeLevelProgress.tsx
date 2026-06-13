@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { fontScale, scale } from "../../styles/theme";
+import { appColors, fontScale, scale } from "../../styles/theme";
 
 type Props = {
   progress: number;
@@ -32,12 +32,12 @@ const styles = StyleSheet.create({
     width: "100%",
     height: scale(6),
     borderRadius: 999,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: appColors.border,
   },
   progressBarFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#5E82FF",
+    backgroundColor: appColors.primary,
   },
   expText: {
     position: "absolute",
@@ -45,6 +45,6 @@ const styles = StyleSheet.create({
     top: -18,
     fontSize: fontScale(12),
     fontWeight: "600",
-    color: "#6B7280",
+    color: appColors.textSecondary,
   },
 });

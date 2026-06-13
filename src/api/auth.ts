@@ -31,6 +31,10 @@ function stringifyErrorValue(value: unknown): string {
     }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
 function providerLabel(provider: 'kakao' | 'naver' | 'apple'): string {
     if (provider === 'kakao') return 'KAKAO';
     if (provider === 'naver') return 'NAVER';
@@ -526,14 +530,16 @@ export async function getUserStats(token: string): Promise<{
         'Content-Type': 'application/json',
     };
 
-    const parseResponse = (json: any) => {
-        const raw = json?.data ?? json ?? {};
+    const parseResponse = (json: unknown) => {
+        const response = isRecord(json) ? json : {};
+        const raw = isRecord(response.data) ? response.data : response;
+        const monthlyGoal = raw.monthly_goal ?? raw.target_count;
         return {
-            status: json?.status ?? 'success',
+            status: typeof response.status === 'string' ? response.status : 'success',
             data: {
                 total_learning_count: Number(raw.total_learning_count ?? raw.total_count ?? 0),
                 consecutive_days: Number(raw.consecutive_days ?? raw.continuous_days ?? 0),
-                monthly_goal: raw.monthly_goal ?? raw.target_count ?? null,
+                monthly_goal: monthlyGoal == null ? null : Number(monthlyGoal),
                 total_points: Number(raw.total_points ?? raw.exp ?? 0),
                 is_subscribed: Boolean(
                     raw.is_subscribed ??

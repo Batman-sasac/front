@@ -1,14 +1,12 @@
 import React from 'react';
 import {
-    ActivityIndicator,
-    Pressable,
     StyleProp,
     StyleSheet,
-    Text,
     TextStyle,
     ViewStyle,
 } from 'react-native';
-import { fontScale, scale } from '../../styles/theme';
+import { appColors, fontScale, scale } from '../../styles/theme';
+import AppButton from './AppButton';
 
 type Props = {
     label: string;
@@ -29,20 +27,17 @@ export default function FormSubmitButton({
     disabledStyle,
     textStyle,
 }: Props) {
-    const isDisabled = disabled || loading;
-
     return (
-        <Pressable
-            style={[styles.button, style, isDisabled && (disabledStyle ?? styles.buttonDisabled)]}
+        <AppButton
+            style={[styles.button, style]}
+            disabledStyle={disabledStyle ?? styles.buttonDisabled}
+            textStyle={[styles.buttonText, textStyle]}
             onPress={onPress}
-            disabled={isDisabled}
+            disabled={disabled}
+            loading={loading}
         >
-            {loading ? (
-                <ActivityIndicator color="#fff" />
-            ) : (
-                <Text style={[styles.buttonText, textStyle]}>{label}</Text>
-            )}
-        </Pressable>
+            {label}
+        </AppButton>
     );
 }
 
@@ -51,15 +46,15 @@ const styles = StyleSheet.create({
         marginTop: scale(8),
         height: scale(64),
         borderRadius: scale(999),
-        backgroundColor: '#5E82FF',
+        backgroundColor: appColors.primary,
         alignItems: 'center',
         justifyContent: 'center',
     },
     buttonDisabled: {
-        backgroundColor: '#D1D5DB',
+        backgroundColor: appColors.borderStrong,
     },
     buttonText: {
-        color: '#ffffff',
+        color: appColors.white,
         fontSize: fontScale(35),
         fontWeight: '700',
     },

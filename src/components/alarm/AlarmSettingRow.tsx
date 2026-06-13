@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { fontScale, scale } from '../../lib/layout';
+import { appColors, fontScale, scale } from '../../styles/theme';
 
 type Props = {
     label: string;
@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
     },
     subLabel: {
         fontSize: fontScale(12),
-        color: '#6B7280',
+        color: appColors.textSecondary,
         marginTop: scale(4),
     },
 });

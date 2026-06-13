@@ -1,6 +1,7 @@
 import React from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { fontScale, scale } from "../../styles/theme";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { appColors, fontScale, scale } from "../../styles/theme";
+import AppModalShell from "./AppModalShell";
 
 type Props = {
   visible: boolean;
@@ -22,46 +23,39 @@ export default function AppConfirmDialog({
   onConfirm,
 }: Props) {
   return (
-    <Modal
+    <AppModalShell
       visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onCancel}
+      onClose={onCancel}
+      showCloseButton={false}
+      backdropStyle={styles.modalOverlay}
+      cardStyle={styles.modalContent}
     >
-      <Pressable style={styles.modalOverlay} onPress={onCancel}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{title}</Text>
-          <Text style={styles.modalMessage}>{message}</Text>
+      <Text style={styles.modalTitle}>{title}</Text>
+      <Text style={styles.modalMessage}>{message}</Text>
 
-          <View style={styles.modalButtons}>
-            <Pressable
-              style={[styles.modalButton, styles.modalButtonCancel]}
-              onPress={onCancel}
-            >
-              <Text style={styles.modalButtonTextCancel}>{cancelLabel}</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.modalButton, styles.modalButtonConfirm]}
-              onPress={onConfirm}
-            >
-              <Text style={styles.modalButtonTextConfirm}>{confirmLabel}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Pressable>
-    </Modal>
+      <View style={styles.modalButtons}>
+        <Pressable
+          style={[styles.modalButton, styles.modalButtonCancel]}
+          onPress={onCancel}
+        >
+          <Text style={styles.modalButtonTextCancel}>{cancelLabel}</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.modalButton, styles.modalButtonConfirm]}
+          onPress={onConfirm}
+        >
+          <Text style={styles.modalButtonTextConfirm}>{confirmLabel}</Text>
+        </Pressable>
+      </View>
+    </AppModalShell>
   );
 }
 
 const styles = StyleSheet.create({
   modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: appColors.overlayStrong,
   },
   modalContent: {
-    backgroundColor: "#FFFFFF",
     borderRadius: scale(20),
     padding: scale(28),
     width: scale(300),
@@ -70,13 +64,13 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: fontScale(20),
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
     marginBottom: scale(12),
   },
   modalMessage: {
     fontSize: fontScale(15),
     fontWeight: "500",
-    color: "#6B7280",
+    color: appColors.textSecondary,
     textAlign: "center",
     lineHeight: fontScale(22),
     marginBottom: scale(24),
@@ -94,19 +88,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modalButtonCancel: {
-    backgroundColor: "#F3F4F6",
+    backgroundColor: appColors.screenBgMuted,
   },
   modalButtonConfirm: {
-    backgroundColor: "#EF4444",
+    backgroundColor: appColors.danger,
   },
   modalButtonTextCancel: {
     fontSize: fontScale(15),
     fontWeight: "700",
-    color: "#6B7280",
+    color: appColors.textSecondary,
   },
   modalButtonTextConfirm: {
     fontSize: fontScale(15),
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: appColors.white,
   },
 });

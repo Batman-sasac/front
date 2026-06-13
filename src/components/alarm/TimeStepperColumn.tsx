@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { fontScale, scale } from '../../lib/layout';
+import { appColors, fontScale, scale } from '../../styles/theme';
 
 type Props = {
     value: string | number;
@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: scale(12),
         paddingVertical: scale(8),
         borderRadius: scale(16),
-        backgroundColor: '#F3F4FF',
+        backgroundColor: appColors.stepperBg,
         minWidth: scale(64),
         textAlign: 'center',
     },

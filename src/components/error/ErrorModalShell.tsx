@@ -1,6 +1,7 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { fontScale, scale } from '../../styles/theme';
+import AppModalShell from '../common/AppModalShell';
 
 type Props = {
     visible: boolean;
@@ -18,20 +19,19 @@ export default function ErrorModalShell({
     footer,
 }: Props) {
     return (
-        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-            <View style={styles.modalBackdrop}>
-                <View style={styles.modalCard}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>{title}</Text>
-                        <Pressable onPress={onClose}>
-                            <Text style={styles.closeText}>×</Text>
-                        </Pressable>
-                    </View>
-                    {children}
-                    {footer}
-                </View>
-            </View>
-        </Modal>
+        <AppModalShell
+            visible={visible}
+            title={title}
+            onClose={onClose}
+            footer={footer}
+            backdropStyle={styles.modalBackdrop}
+            cardStyle={styles.modalCard}
+            headerStyle={styles.modalHeader}
+            titleStyle={styles.modalTitle}
+            closeIconStyle={styles.closeText}
+        >
+            {children}
+        </AppModalShell>
     );
 }
 

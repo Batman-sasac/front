@@ -1,6 +1,7 @@
 import React from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { fontScale, scale } from "../../styles/theme";
+import { StyleSheet, Text, View } from "react-native";
+import AppBackButton from "../common/AppBackButton";
+import { appColors, fontScale, scale } from "../../styles/theme";
 
 type BarState = "idle" | "correct" | "wrong";
 
@@ -27,13 +28,11 @@ export default function StudyProgressHeader({
 }: Props) {
   return (
     <View style={styles.header}>
-      <Pressable style={styles.backBtn} onPress={onBack} hitSlop={10}>
-        <Image
-          source={require("../../../assets/shift.png")}
-          style={styles.backIcon}
-          resizeMode="contain"
-        />
-      </Pressable>
+      <AppBackButton
+        style={styles.backBtn}
+        iconStyle={styles.backIcon}
+        onPress={onBack}
+      />
 
       <View style={styles.headerTopRow}>
         <View style={styles.titleRow}>
@@ -53,7 +52,7 @@ export default function StudyProgressHeader({
               ? correctColor
               : state === "wrong"
                 ? wrongColor
-                : "#E5E7EB";
+                : appColors.border;
           return (
             <View key={index} style={[styles.bar, { backgroundColor }]} />
           );
@@ -72,7 +71,7 @@ const styles = StyleSheet.create({
     width: scale(36),
     height: scale(36),
     borderRadius: scale(18),
-    backgroundColor: "#F3F4F6",
+    backgroundColor: appColors.screenBgMuted,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 10,
@@ -80,7 +79,6 @@ const styles = StyleSheet.create({
   backIcon: {
     width: scale(16),
     height: scale(16),
-    transform: [{ rotate: "180deg" }],
   },
   headerTopRow: {
     flexDirection: "row",
@@ -97,18 +95,18 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: fontScale(16),
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
   },
   headerSubtitle: {
     fontSize: fontScale(12),
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
     opacity: 0.75,
   },
   scoreText: {
     fontSize: fontScale(16),
     fontWeight: "900",
-    color: "#9CA3AF",
+    color: appColors.textTertiary,
     paddingTop: scale(2),
   },
   barsRow: { marginTop: scale(8), flexDirection: "row", gap: scale(4) },

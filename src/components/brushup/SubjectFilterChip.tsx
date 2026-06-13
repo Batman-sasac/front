@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
-import { fontScale, scale } from "../../styles/theme";
+import { appColors, fontScale, scale } from "../../styles/theme";
 import type { Subject } from "./types";
 
 type Props = {
@@ -34,14 +34,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(18),
     paddingVertical: scale(10),
     borderRadius: scale(20),
-    backgroundColor: "#F3F4F6",
+    backgroundColor: appColors.screenBgMuted,
     borderWidth: 2,
-    borderColor: "#F3F4F6",
+    borderColor: appColors.screenBgMuted,
     gap: scale(6),
   },
   subjectChipActive: {
-    backgroundColor: "#EEF3FF",
-    borderColor: "#5E82FF",
+    backgroundColor: appColors.primarySoftAlt,
+    borderColor: appColors.primary,
   },
   subjectEmoji: {
     fontSize: fontScale(16),
@@ -49,10 +49,10 @@ const styles = StyleSheet.create({
   subjectText: {
     fontSize: fontScale(14),
     fontWeight: "600",
-    color: "#6B7280",
+    color: appColors.textSecondary,
   },
   subjectTextActive: {
-    color: "#5E82FF",
+    color: appColors.primary,
     fontWeight: "700",
   },
 });

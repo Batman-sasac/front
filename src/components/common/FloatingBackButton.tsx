@@ -1,6 +1,7 @@
 import React from 'react';
-import { Image, Pressable, StyleSheet } from 'react-native';
-import { scale } from '../../styles/theme';
+import { StyleSheet } from 'react-native';
+import { appColors, scale } from '../../styles/theme';
+import AppBackButton from './AppBackButton';
 
 type Props = {
     onPress: () => void;
@@ -9,13 +10,12 @@ type Props = {
 
 export default function FloatingBackButton({ onPress, hitSlop = 10 }: Props) {
     return (
-        <Pressable style={styles.backBtn} onPress={onPress} hitSlop={hitSlop}>
-            <Image
-                source={require('../../../assets/shift.png')}
-                style={styles.backIcon}
-                resizeMode="contain"
-            />
-        </Pressable>
+        <AppBackButton
+            style={styles.backBtn}
+            iconStyle={styles.backIcon}
+            onPress={onPress}
+            hitSlop={hitSlop}
+        />
     );
 }
 
@@ -27,11 +27,11 @@ const styles = StyleSheet.create({
         width: scale(44),
         height: scale(44),
         borderRadius: scale(22),
-        backgroundColor: '#FFFFFF',
+        backgroundColor: appColors.white,
         alignItems: 'center',
         justifyContent: 'center',
         elevation: 2,
-        shadowColor: '#000',
+        shadowColor: appColors.black,
         shadowOpacity: 0.08,
         shadowRadius: 6,
         shadowOffset: { width: 0, height: 2 },
@@ -40,6 +40,5 @@ const styles = StyleSheet.create({
     backIcon: {
         width: scale(20),
         height: scale(20),
-        transform: [{ rotate: '180deg' }],
     },
 });

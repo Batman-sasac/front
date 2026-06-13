@@ -1,6 +1,6 @@
 import React from 'react';
 import { Animated, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
-import { fontScale, scale } from '../../styles/theme';
+import { appColors, fontScale, scale } from '../../styles/theme';
 
 type Props = {
   progressLabel: string;
@@ -27,14 +27,14 @@ const styles = StyleSheet.create({
   progressCard: {
     width: '100%',
     maxWidth: scale(560),
-    backgroundColor: '#FFFFFF',
+    backgroundColor: appColors.white,
     borderRadius: scale(18),
     paddingHorizontal: scale(18),
     paddingVertical: scale(14),
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(14),
-    shadowColor: '#4B5563',
+    shadowColor: appColors.textMuted,
     shadowOpacity: 0.1,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     minWidth: scale(62),
     fontSize: fontScale(22),
     fontWeight: '900',
-    color: '#111827',
+    color: appColors.text,
     textAlign: 'center',
   },
   progressTrack: {
@@ -52,12 +52,12 @@ const styles = StyleSheet.create({
     minWidth: scale(220),
     height: scale(18),
     borderRadius: scale(999),
-    backgroundColor: '#D1D5DB',
+    backgroundColor: appColors.borderStrong,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     borderRadius: scale(999),
-    backgroundColor: '#7C93FF',
+    backgroundColor: appColors.primaryAccent,
   },
 });

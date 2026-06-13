@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { fontScale, scale } from '../../lib/layout';
+import { appColors, fontScale, scale } from '../../styles/theme';
 
 export default function BrushupEmptyState() {
   return (
@@ -27,11 +27,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: fontScale(18),
     fontWeight: '800',
-    color: '#111827',
+    color: appColors.text,
   },
   emptyDesc: {
     fontSize: fontScale(14),
-    color: '#9CA3AF',
+    color: appColors.textTertiary,
     textAlign: 'center',
   },
 });

@@ -6,7 +6,6 @@ import {
     Pressable,
     Image,
     ScrollView,
-    Modal,
     PanResponder,
     PanResponderInstance,
     TextInput,
@@ -15,8 +14,11 @@ import {
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { getOcrUsage } from '../../api/ocr';
+import { getErrorMessage } from '../../app/error/errors';
 import { getStudySourceExtension, getStudySourceName, isImageStudySource, StudySource } from './studySource';
 import FloatingBackButton from '../../components/common/FloatingBackButton';
+import AppModalShell from '../../components/common/AppModalShell';
+import AppPrimaryButton from '../../components/common/AppPrimaryButton';
 
 type Props = {
     sources: StudySource[];
@@ -107,25 +109,6 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const containerRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
     const imageRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
 
-    // 웹 마우스 이벤트 처리
-    const dragStateRef = useRef<{ type: 'move' | 'tl' | 'tr' | 'bl' | 'br' | null; startX: number; startY: number; startCrop: CropRect }>({
-        type: null,
-        startX: 0,
-        startY: 0,
-        startCrop: { x: 0, y: 0, w: 0, h: 0 },
-    });
-
-    // 핸들 마우스 다운 이벤트 (웹)
-    const handleHandleMouseDown = (corner: 'tl' | 'tr' | 'bl' | 'br') => (e: any) => {
-        if (e.preventDefault) e.preventDefault();
-        dragStateRef.current = {
-            type: corner,
-            startX: e.clientX || e.pageX || 0,
-            startY: e.clientY || e.pageY || 0,
-            startCrop: { ...cropRef.current },
-        };
-    };
-
     useEffect(() => {
         cropRef.current = crop;
     }, [crop]);
@@ -152,12 +135,6 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
         setImageW(0);
         setImageH(0);
         setIsCropReady(false);
-        dragStateRef.current = {
-            type: null,
-            startX: 0,
-            startY: 0,
-            startCrop: { ...EMPTY_CROP },
-        };
     }, [sourcesSessionKey]);
 
     useEffect(() => {
@@ -213,10 +190,10 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                     });
                     setOcrUsageError(null);
                 }
-            } catch (e: any) {
+            } catch (error) {
                 if (!cancelled) {
                     setOcrUsage(null);
-                    setOcrUsageError(e?.message ?? 'OCR 사용량을 불러오지 못했습니다.');
+                    setOcrUsageError(getErrorMessage(error, 'OCR 사용량을 불러오지 못했습니다.'));
                 }
             }
         };
@@ -497,105 +474,6 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
     const blResponder = useRef<PanResponderInstance>(createResizeResponder('bl')).current;
     const brResponder = useRef<PanResponderInstance>(createResizeResponder('br')).current;
 
-    // 웹 마우스 이벤트 핸들러
-    const handleMouseDown = (type: 'move' | 'tl' | 'tr' | 'bl' | 'br') => (e: any) => {
-        dragStateRef.current = {
-            type,
-            startX: e.clientX || e.pageX || 0,
-            startY: e.clientY || e.pageY || 0,
-            startCrop: { ...cropRef.current },
-        };
-    };
-
-    const handleMouseMove = (e: any) => {
-        if (dragStateRef.current.type === null) return;
-
-        const moveX = (e.clientX || e.pageX || 0) - dragStateRef.current.startX;
-        const moveY = (e.clientY || e.pageY || 0) - dragStateRef.current.startY;
-        const start = dragStateRef.current.startCrop;
-        const d = displayRef.current;
-        const minW = MIN_BOX;
-        const minH = MIN_BOX;
-
-        let next: CropRect;
-
-        if (dragStateRef.current.type === 'move') {
-            const minX = d.dx;
-            const minY = d.dy;
-            const maxX = d.dx + d.dw - start.w;
-            const maxY = d.dy + d.dh - start.h;
-
-            next = {
-                x: clamp(start.x + moveX, minX, maxX),
-                y: clamp(start.y + moveY, minY, maxY),
-                w: start.w,
-                h: start.h,
-            };
-        } else if (dragStateRef.current.type === 'br') {
-            const maxW = d.dx + d.dw - start.x;
-            const maxH = d.dy + d.dh - start.y;
-            next = {
-                x: start.x,
-                y: start.y,
-                w: clamp(start.w + moveX, minW, maxW),
-                h: clamp(start.h + moveY, minH, maxH),
-            };
-        } else if (dragStateRef.current.type === 'tr') {
-            const maxW = d.dx + d.dw - start.x;
-            const minY = d.dy;
-            const maxH = start.y + start.h - minY;
-
-            next = {
-                x: start.x,
-                y: clamp(start.y + moveY, minY, start.y + start.h - minH),
-                w: clamp(start.w + moveX, minW, maxW),
-                h: clamp(start.h - moveY, minH, maxH),
-            };
-        } else if (dragStateRef.current.type === 'bl') {
-            const minX = d.dx;
-            const maxW = start.x + start.w - minX;
-            const maxH = d.dy + d.dh - start.y;
-
-            next = {
-                x: clamp(start.x + moveX, minX, start.x + start.w - minW),
-                y: start.y,
-                w: clamp(start.w - moveX, minW, maxW),
-                h: clamp(start.h + moveY, minH, maxH),
-            };
-        } else {
-            // tl
-            const minX = d.dx;
-            const minY = d.dy;
-            const maxW = start.x + start.w - minX;
-            const maxH = start.y + start.h - minY;
-
-            next = {
-                x: clamp(start.x + moveX, minX, start.x + start.w - minW),
-                y: clamp(start.y + moveY, minY, start.y + start.h - minH),
-                w: clamp(start.w - moveX, minW, maxW),
-                h: clamp(start.h - moveY, minH, maxH),
-            };
-        }
-
-        setCrop(next);
-    };
-
-    const handleMouseUp = () => {
-        dragStateRef.current.type = null;
-    };
-
-    useEffect(() => {
-        if (Platform.OS !== 'web') return;
-        if (typeof window === 'undefined') return;
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     const overlayStyles = useMemo(() => {
         const cw = containerRef.current.w;
         const ch = containerRef.current.h;
@@ -847,31 +725,29 @@ export default function SelectPicture({ sources, onBack, onStartLearning }: Prop
                     />
                 </Pressable>
 
-                <Modal
+                <AppModalShell
                     visible={showOcrLimitModal}
-                    transparent
-                    animationType="fade"
-                    onRequestClose={() => setShowOcrLimitModal(false)}
+                    onClose={() => setShowOcrLimitModal(false)}
+                    showCloseButton={false}
+                    backdropStyle={styles.modalOverlay}
+                    cardStyle={styles.modalBox}
                 >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalBox}>
-                            <Text style={styles.modalTitle}>텍스트 추출 횟수 부족</Text>
-                            <Text style={styles.modalMessage}>선택한 자료가 {sources.length}개예요.</Text>
-                            <Text style={styles.modalMessage}>
-                                현재 남은 텍스트 추출 {remainingOcr}회 이하로 줄여주세요.
-                            </Text>
-                            <Pressable
-                                style={styles.modalPrimaryButton}
-                                onPress={() => {
-                                    setShowOcrLimitModal(false);
-                                    onBack();
-                                }}
-                            >
-                                <Text style={styles.modalPrimaryText}>확인</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </Modal>
+                    <Text style={styles.modalTitle}>텍스트 추출 횟수 부족</Text>
+                    <Text style={styles.modalMessage}>선택한 자료가 {sources.length}개예요.</Text>
+                    <Text style={styles.modalMessage}>
+                        현재 남은 텍스트 추출 {remainingOcr}회 이하로 줄여주세요.
+                    </Text>
+                    <AppPrimaryButton
+                        style={styles.modalPrimaryButton}
+                        textStyle={styles.modalPrimaryText}
+                        onPress={() => {
+                            setShowOcrLimitModal(false);
+                            onBack();
+                        }}
+                    >
+                        확인
+                    </AppPrimaryButton>
+                </AppModalShell>
             </View>
         </View>
     );
@@ -937,16 +813,11 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     modalOverlay: {
-        flex: 1,
         backgroundColor: 'rgba(15, 23, 42, 0.32)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: scale(20),
     },
     modalBox: {
         width: '100%',
         maxWidth: scale(340),
-        backgroundColor: '#FFFFFF',
         borderRadius: scale(20),
         paddingHorizontal: scale(22),
         paddingVertical: scale(22),
@@ -1154,14 +1025,14 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
         cursor: 'pointer',
         zIndex: 10,
-    } as any,
+    },
     handleDot: {
         width: 12,
         height: 12,
         backgroundColor: '#FFFFFF',
         borderWidth: 1,
         borderColor: '#FFFFFF',
-    } as any,
+    },
 
     rotateRow: {
         width: '100%',

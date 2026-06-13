@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { fontScale, scale } from '../../lib/layout';
+import { appColors, fontScale, scale } from '../../styles/theme';
 
 type Props = {
   onPress: () => void;
@@ -22,10 +22,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(18),
     paddingVertical: scale(12),
     borderRadius: scale(12),
-    backgroundColor: '#EEF2FF',
+    backgroundColor: appColors.primarySoft,
   },
   loadMoreText: {
-    color: '#3B5BFF',
+    color: appColors.primaryStrong,
     fontWeight: '800',
     fontSize: fontScale(16),
   },

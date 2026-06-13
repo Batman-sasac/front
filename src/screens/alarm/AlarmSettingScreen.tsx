@@ -4,12 +4,10 @@ import {
     View,
     Text,
     StyleSheet,
-    Pressable,
     Switch,
     Alert,
-    Image,
 } from 'react-native';
-import { scale, fontScale } from '../../lib/layout';
+import { appColors, scale, fontScale } from '../../styles/theme';
 import { getToken, getCachedNotificationStatus, setCachedNotificationStatus } from '../../lib/storage';
 import {
     getMyNotificationStatus,
@@ -19,8 +17,9 @@ import {
 import AlarmSettingSection from '../../components/alarm/AlarmSettingSection';
 import AlarmSettingRow from '../../components/alarm/AlarmSettingRow';
 import AlarmTimeChip from '../../components/alarm/AlarmTimeChip';
-import TimeStepperColumn from '../../components/alarm/TimeStepperColumn';
-import AppPrimaryButton from '../../components/common/AppPrimaryButton';
+import { getErrorMessage } from '../../app/error/errors';
+import AppBackButton from '../../components/common/AppBackButton';
+import AlarmTimePickerOverlay from '../../components/alarm/AlarmTimePickerOverlay';
 
 /** DB에 저장된 24시간 "HH:MM" / "HH:MM:SS" → 화면용 Time (오전/오후, 1~12시, 5분 단위) */
 function parseRemindTimeToTime(remindTime: string | null | undefined): Time {
@@ -51,7 +50,11 @@ type Props = {
     onNavigate: (screen: 'alarm') => void;
 };
 
-const BG = '#FFFFFF';
+const BG = appColors.white;
+const SWITCH_TRACK_COLORS = {
+    false: appColors.borderStrong,
+    true: appColors.primary,
+};
 
 export default function AlarmSettingScreen({ onNavigate }: Props) {
     // 토글 상태
@@ -134,8 +137,8 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                 is_notify: enabled,
                 remind_time: to24HourString(time),
             });
-        } catch (error: any) {
-            Alert.alert('알림 설정 저장 실패', error?.message ?? '알림 설정 저장에 실패했습니다.');
+        } catch (error) {
+            Alert.alert('알림 설정 저장 실패', getErrorMessage(error, '알림 설정 저장에 실패했습니다.'));
         }
     };
 
@@ -185,16 +188,11 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
         <View style={styles.root}>
             {/* 상단바 */}
             <View style={styles.header}>
-                <Pressable
+                <AppBackButton
                     style={styles.backButton}
                     onPress={() => onNavigate('alarm')}
-                >
-                    <Image
-                        source={require('../../../assets/shift.png')}
-                        style={styles.backIcon}
-                        resizeMode="contain"
-                    />
-                </Pressable>
+                    iconStyle={styles.backIcon}
+                />
                 <Text style={styles.headerTitle}>알림설정</Text>
                 {/* 오른쪽 비우기(중앙 정렬 맞추기용) */}
                 <View style={{ width: scale(24) }} />
@@ -213,8 +211,8 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                                     setReviewEnabled(value);
                                     saveReviewSettings(value, reviewTime);
                                 }}
-                                trackColor={{ false: '#D1D5DB', true: '#5E82FF' }}
-                                thumbColor="#FFFFFF"
+                                trackColor={SWITCH_TRACK_COLORS}
+                                thumbColor={appColors.white}
                             />
                         }
                     />
@@ -239,8 +237,8 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                             <Switch
                                 value={leagueEnabled}
                                 onValueChange={setLeagueEnabled}
-                                trackColor={{ false: '#D1D5DB', true: '#5E82FF' }}
-                                thumbColor="#FFFFFF"
+                                trackColor={SWITCH_TRACK_COLORS}
+                                thumbColor={appColors.white}
                             />
                         }
                     />
@@ -254,8 +252,8 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                             <Switch
                                 value={dndEnabled}
                                 onValueChange={setDndEnabled}
-                                trackColor={{ false: '#D1D5DB', true: '#5E82FF' }}
-                                thumbColor="#FFFFFF"
+                                trackColor={SWITCH_TRACK_COLORS}
+                                thumbColor={appColors.white}
                             />
                         }
                     />
@@ -273,49 +271,22 @@ export default function AlarmSettingScreen({ onNavigate }: Props) {
                 </AlarmSettingSection>
             </View>
 
-            {/* 시간 선택 모달 */}
-            {picker && (
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalBox}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>
-                                {picker === 'review' && '복습 알림 시간'}
-                                {picker === 'dndStart' && '방해 금지 시작 시간'}
-                                {picker === 'dndEnd' && '방해 금지 종료 시간'}
-                            </Text>
-                            <Pressable onPress={() => setPicker(null)}>
-                                <Text style={styles.modalClose}>✕</Text>
-                            </Pressable>
-                        </View>
-
-                        <View style={styles.timePickerRow}>
-                            <TimeStepperColumn
-                                value={tempTime.ampm}
-                                onIncrement={() => change('ampm', 1)}
-                                onDecrement={() => change('ampm', -1)}
-                            />
-                            <TimeStepperColumn
-                                value={tempTime.hour}
-                                onIncrement={() => change('hour', 1)}
-                                onDecrement={() => change('hour', -1)}
-                            />
-                            <TimeStepperColumn
-                                value={tempTime.minute.toString().padStart(2, '0')}
-                                onIncrement={() => change('minute', 5)}
-                                onDecrement={() => change('minute', -5)}
-                            />
-                        </View>
-
-                        <AppPrimaryButton
-                            style={styles.modalConfirm}
-                            textStyle={styles.modalConfirmText}
-                            onPress={confirmPicker}
-                        >
-                            확인
-                        </AppPrimaryButton>
-                    </View>
-                </View>
-            )}
+            <AlarmTimePickerOverlay
+                visible={picker !== null}
+                title={
+                    picker === 'review'
+                        ? '복습 알림 시간'
+                        : picker === 'dndStart'
+                          ? '방해 금지 시작 시간'
+                          : '방해 금지 종료 시간'
+                }
+                ampm={tempTime.ampm}
+                hour={tempTime.hour}
+                minute={tempTime.minute}
+                onChange={change}
+                onClose={() => setPicker(null)}
+                onConfirm={confirmPicker}
+            />
         </View>
     );
 }
@@ -340,7 +311,6 @@ const styles = StyleSheet.create({
     backIcon: {
         width: scale(18),
         height: scale(18),
-        transform: [{ rotate: '180deg' }],
     },
     headerTitle: {
         flex: 1,
@@ -351,48 +321,5 @@ const styles = StyleSheet.create({
     content: {
         paddingHorizontal: scale(32),
         paddingTop: scale(16),
-    },
-    modalOverlay: {
-        position: 'absolute',
-        inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modalBox: {
-        width: '70%',
-        backgroundColor: '#FFFFFF',
-        borderRadius: scale(24),
-        paddingVertical: scale(24),
-        paddingHorizontal: scale(24),
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: scale(16),
-    },
-    modalTitle: {
-        fontSize: fontScale(16),
-        fontWeight: '700',
-    },
-    modalClose: {
-        fontSize: fontScale(18),
-    },
-    timePickerRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-evenly',
-        marginBottom: scale(24),
-    },
-    modalConfirm: {
-        backgroundColor: '#5E82FF',
-        borderRadius: 999,
-        paddingVertical: scale(14),
-        alignItems: 'center',
-    },
-    modalConfirmText: {
-        fontSize: fontScale(15),
-        fontWeight: '700',
-        color: '#FFFFFF',
     },
 });

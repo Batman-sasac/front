@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, StyleSheet, Image, Alert, Platform } from 'react-native';
 import { getOAuthUrl, loginWithOAuth, loginWithApple } from '../../api/auth';
 import { saveAuthData } from '../../lib/storage';
 import OAuthWebView from '../../components/OAuthWebView';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import SocialLoginButton from '../../components/auth/SocialLoginButton';
+import AppLoadingState from '../../components/common/AppLoadingState';
+import { appColors } from '../../styles/theme';
 
 type Props = {
   onLoginSuccess: (email: string, nickname: string) => void;
@@ -121,10 +123,7 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#5E82FF" />
-        <Text style={styles.loadingText}>로그인 중...</Text>
-      </View>
+      <AppLoadingState message="로그인 중..." style={styles.container} textStyle={styles.loadingText} />
     );
   }
 
@@ -174,7 +173,7 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
   );
 }
 
-const BG = '#F3F4F6';
+const BG = appColors.screenBgMuted;
 
 const styles = StyleSheet.create({
   container: {
@@ -188,7 +187,7 @@ const styles = StyleSheet.create({
     fontSize: 56,
     fontWeight: '900',
     letterSpacing: 4,
-    color: '#5E82FF',
+    color: appColors.primary,
   },
   buttonGroup: {
     alignItems: 'center', // 가운데 정렬
@@ -206,7 +205,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#5E82FF',
+    color: appColors.primary,
   },
 
 });

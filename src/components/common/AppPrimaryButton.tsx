@@ -1,6 +1,7 @@
 import React from 'react';
-import { Pressable, StyleProp, StyleSheet, Text, TextStyle, ViewStyle } from 'react-native';
+import { StyleProp, StyleSheet, TextStyle, ViewStyle } from 'react-native';
 import { appColors, appFontWeight, appRadius, scale, fontScale } from '../../styles/theme';
+import AppButton from './AppButton';
 
 type Props = {
   children: React.ReactNode;
@@ -18,13 +19,15 @@ export default function AppPrimaryButton({
   disabled = false,
 }: Props) {
   return (
-    <Pressable
-      style={[styles.button, disabled && styles.buttonDisabled, style]}
-      onPress={disabled ? undefined : onPress}
+    <AppButton
+      style={[styles.button, style]}
+      disabledStyle={styles.buttonDisabled}
+      textStyle={[styles.text, textStyle]}
+      onPress={onPress}
       disabled={disabled}
     >
-      <Text style={[styles.text, textStyle]}>{children}</Text>
-    </Pressable>
+      {children}
+    </AppButton>
   );
 }
 

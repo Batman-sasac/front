@@ -1,8 +1,6 @@
 import React from 'react';
 import {
-    Image,
     ImageStyle,
-    Pressable,
     StyleProp,
     StyleSheet,
     Text,
@@ -11,6 +9,7 @@ import {
     ViewStyle,
 } from 'react-native';
 import { figmaFontScale, figmaScale, subscriptionColors } from '../../styles/subscriptionStyles';
+import AppBackButton from './AppBackButton';
 
 type Props = {
     title: string;
@@ -35,9 +34,12 @@ export default function AppScreenHeader({
 }: Props) {
     return (
         <View style={[styles.header, style]}>
-            <Pressable style={[styles.backBtn, backButtonStyle]} onPress={onBack} hitSlop={hitSlop}>
-                <Image source={require('../../../assets/shift.png')} style={[styles.backIcon, backIconStyle]} resizeMode="contain" />
-            </Pressable>
+            <AppBackButton
+                style={[styles.backBtn, backButtonStyle]}
+                iconStyle={[styles.backIcon, backIconStyle]}
+                onPress={onBack}
+                hitSlop={hitSlop}
+            />
             <Text style={[styles.headerTitle, titleStyle]}>{title}</Text>
             {right}
         </View>
@@ -62,7 +64,6 @@ const styles = StyleSheet.create({
     backIcon: {
         width: figmaScale(44),
         height: figmaScale(44),
-        transform: [{ rotate: '180deg' }],
     },
     headerTitle: {
         fontSize: figmaFontScale(28),

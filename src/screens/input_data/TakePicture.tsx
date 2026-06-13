@@ -185,8 +185,9 @@ export default function TakePicture({ onBack, onDone }: Props) {
                 input.type = 'file';
                 input.multiple = true;
 
-                input.onchange = async (e: any) => {
-                    const files = e.target.files;
+                input.onchange = async (event) => {
+                    const files = (event.target as HTMLInputElement).files;
+                    if (!files) return;
                     console.log('📁 선택된 파일 개수:', files.length);
 
                     for (let i = 0; i < files.length; i++) {
@@ -261,8 +262,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
         try {
             if (!cameraRef.current) return;
 
-            const cam: any = cameraRef.current;
-            const photo = await cam.takePictureAsync({
+            const photo = await cameraRef.current.takePictureAsync({
                 quality: 0.8,
                 skipProcessing: Platform.OS === 'android' ? false : false,
             });

@@ -1,6 +1,6 @@
 import React from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { fontScale, scale } from "../../styles/theme";
+import { appColors, appShadow, fontScale, scale } from "../../styles/theme";
 import type { Card } from "./types";
 
 type Props = {
@@ -62,16 +62,12 @@ export default function ReviewCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: appColors.white,
     borderRadius: scale(16),
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: appColors.border,
     position: "relative",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    ...appShadow.subtle,
     width: "48%",
   },
   cardPressable: {
@@ -86,7 +82,7 @@ const styles = StyleSheet.create({
     borderRadius: scale(15),
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: appColors.screenBgMuted,
     zIndex: 10,
     elevation: 10,
   },
@@ -103,7 +99,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: fontScale(15),
     fontWeight: "800",
-    color: "#111827",
+    color: appColors.text,
     flex: 1,
   },
   cardSubjectIcon: {
@@ -112,7 +108,7 @@ const styles = StyleSheet.create({
   cardDesc: {
     fontSize: fontScale(12),
     fontWeight: "500",
-    color: "#374151",
+    color: appColors.textSubtle,
     lineHeight: fontScale(18),
     marginBottom: scale(10),
   },
@@ -122,11 +118,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: scale(8),
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: appColors.screenBgMuted,
   },
   cardDays: {
     fontSize: fontScale(10),
     fontWeight: "600",
-    color: "#9CA3AF",
+    color: appColors.textTertiary,
   },
 });

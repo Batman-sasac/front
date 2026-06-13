@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, View, StyleSheet, Pressable, Text, ActivityIndicator, Platform } from 'react-native';
 import { scale, fontScale } from '../lib/layout';
+import type { WebViewNavigation } from 'react-native-webview';
+import { appColors } from '../styles/theme';
 
 type Props = {
     visible: boolean;
@@ -81,7 +83,7 @@ export default function OAuthWebView({ visible, provider, oauthUrl, onCode, onCl
             <Modal visible={visible} transparent animationType="fade">
                 <View style={styles.webOverlay}>
                     <View style={styles.webModal}>
-                        <ActivityIndicator size="large" color="#5E82FF" />
+                        <ActivityIndicator size="large" color={appColors.primary} />
                         <Text style={styles.webText}>
                             {provider === 'kakao' ? '카카오' : '네이버'} 로그인 진행 중...
                         </Text>
@@ -98,7 +100,7 @@ export default function OAuthWebView({ visible, provider, oauthUrl, onCode, onCl
     // 모바일 환경: WebView 사용
     const WebView = require('react-native-webview').WebView;
 
-    const handleNavigationStateChange = (navState: any) => {
+    const handleNavigationStateChange = (navState: WebViewNavigation) => {
         const { url } = navState;
 
         // custom scheme으로 돌아왔을 때 code 추출
@@ -139,7 +141,7 @@ export default function OAuthWebView({ visible, provider, oauthUrl, onCode, onCl
 
                 {loading && (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color="#5E82FF" />
+                        <ActivityIndicator size="large" color={appColors.primary} />
                         <Text style={styles.loadingText}>로딩 중...</Text>
                     </View>
                 )}

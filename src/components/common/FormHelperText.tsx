@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { fontScale, scale } from '../../styles/theme';
+import { appColors, fontScale, scale } from '../../styles/theme';
 
 type Props = {
     children: string;
@@ -20,7 +20,7 @@ const styles = StyleSheet.create({
         marginTop: scale(2),
         height: fontScale(14),
         fontSize: fontScale(14),
-        color: '#EF4444',
+        color: appColors.danger,
         marginBottom: scale(4),
         paddingHorizontal: scale(8),
     },

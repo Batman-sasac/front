@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { scale } from '../../styles/theme';
+import { appColors, scale } from '../../styles/theme';
 
 type Props = {
     children: React.ReactNode;
@@ -24,7 +24,7 @@ export default function CharacterFormLayout({ children }: Props) {
 const styles = StyleSheet.create({
     root: {
         flex: 1,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: appColors.screenBgMuted,
         justifyContent: 'center',
         alignItems: 'center',
     },

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { fontScale, scale } from '../../styles/theme';
+import { appColors, fontScale, scale } from '../../styles/theme';
 
 export type AlarmNotificationItem = {
     id: string;
@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
     card: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: appColors.white,
         borderRadius: scale(20),
         paddingVertical: scale(18),
         paddingHorizontal: scale(20),
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     cardRead: {
-        backgroundColor: '#EEF0F4',
+        backgroundColor: appColors.readSurface,
     },
     cardLeft: {
         flex: 1,
@@ -71,14 +71,14 @@ const styles = StyleSheet.create({
         marginBottom: scale(4),
     },
     cardTitleRead: {
-        color: '#9CA3AF',
+        color: appColors.textTertiary,
     },
     cardDesc: {
         fontSize: fontScale(13),
-        color: '#6B7280',
+        color: appColors.textSecondary,
     },
     cardDescRead: {
-        color: '#9CA3AF',
+        color: appColors.textTertiary,
     },
     cardRight: {
         marginLeft: scale(12),
@@ -86,12 +86,12 @@ const styles = StyleSheet.create({
     },
     cardTime: {
         fontSize: fontScale(12),
-        color: '#6B7280',
+        color: appColors.textSecondary,
         marginBottom: scale(8),
     },
     cardArrowImage: {
         width: scale(18),
         height: scale(18),
-        tintColor: '#9CA3AF',
+        tintColor: appColors.textTertiary,
     },
 });

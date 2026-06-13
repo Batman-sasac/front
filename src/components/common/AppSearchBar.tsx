@@ -8,7 +8,7 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import { fontScale, scale } from "../../styles/theme";
+import { appColors, fontScale, scale } from "../../styles/theme";
 
 type Props = {
   placeholder: string;
@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: appColors.screenBgMuted,
     borderRadius: scale(12),
     paddingLeft: scale(16),
     paddingRight: scale(6),
@@ -48,20 +48,20 @@ const styles = StyleSheet.create({
   },
   searchBarPlaceholder: {
     fontSize: fontScale(15),
-    color: "#9CA3AF",
+    color: appColors.textTertiary,
     flex: 1,
   },
   searchButton: {
     width: scale(40),
     height: scale(40),
     borderRadius: scale(10),
-    backgroundColor: "#5E82FF",
+    backgroundColor: appColors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   searchButtonIcon: {
     width: scale(24),
     height: scale(24),
-    tintColor: "#FFFFFF",
+    tintColor: appColors.white,
   },
 });

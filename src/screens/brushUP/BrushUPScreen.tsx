@@ -4,29 +4,24 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
-  Image,
-  Modal,
-  ActivityIndicator,
 } from "react-native";
-import { scale, fontScale } from "../../lib/layout";
+import { appColors, appShadow, scale, fontScale } from "../../styles/theme";
 import Sidebar from "../../components/Sidebar";
-import config from "../../lib/config";
-import { getToken } from "../../lib/storage";
 import type { Screen } from "../../components/Sidebar";
 import { confirmLogout } from "../../lib/auth";
+import { deleteReviewCard, getReviewCards } from "../../api/ocr";
 import AppConfirmDialog from "../../components/common/AppConfirmDialog";
 import AppSearchBar from "../../components/common/AppSearchBar";
+import BrushupSearchModal from "../../components/brushup/BrushupSearchModal";
 import ReviewCard from "../../components/brushup/ReviewCard";
 import SubjectFilterChip from "../../components/brushup/SubjectFilterChip";
 import BrushupLoadingState from "../../components/brushup/BrushupLoadingState";
 import BrushupEmptyState from "../../components/brushup/BrushupEmptyState";
 import BrushupLoadMoreButton from "../../components/brushup/BrushupLoadMoreButton";
 import type { Card, Subject } from "../../components/brushup/types";
+import AppLoadingState from "../../components/common/AppLoadingState";
 
 export type { Card } from "../../components/brushup/types";
-
-const API_BASE_URL = config.apiBaseUrl;
 
 type Props = {
   onBack: () => void;
@@ -73,23 +68,11 @@ export default function BrushUPScreen({
     try {
       if (reset) setLoading(true);
       else setLoadingMore(true);
-      const token = await getToken();
-
-      // /ocr/list에서 복습 카드 데이터 조회
-      const response = await fetch(
-        `${API_BASE_URL}/ocr/list?page=${nextPage}&size=${PAGE_SIZE}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      const data = await response.json();
+      const data = await getReviewCards(nextPage, PAGE_SIZE);
 
       if (data.data && Array.isArray(data.data)) {
         // OCR 데이터를 카드 형식으로 변환
-        const cardList: Card[] = data.data.map((item: any) => {
+        const cardList: Card[] = data.data.map((item) => {
           // 경과 일수 계산
           const created = new Date(item.created_at);
           const now = new Date();
@@ -157,28 +140,12 @@ export default function BrushUPScreen({
     }
 
     try {
-      const token = await getToken();
-      const response = await fetch(
-        `${API_BASE_URL}/ocr/ocr-data/delete/${cardToDelete.quiz_id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
+      await deleteReviewCard(cardToDelete.quiz_id);
+      setCards((prevCards) =>
+        prevCards.filter((c) => c.id !== cardToDelete.id),
       );
-
-      if (response.ok) {
-        // 카드 목록에서 제거
-        setCards((prevCards) =>
-          prevCards.filter((c) => c.id !== cardToDelete.id),
-        );
-        setDeleteModalVisible(false);
-        setCardToDelete(null);
-      } else {
-        console.error("삭제 실패:", await response.text());
-        alert("삭제에 실패했습니다.");
-      }
+      setDeleteModalVisible(false);
+      setCardToDelete(null);
     } catch (error) {
       console.error("삭제 오류:", error);
       alert("삭제 중 오류가 발생했습니다.");
@@ -264,9 +231,7 @@ export default function BrushUPScreen({
               {selectedSubject === "all" && (
                 <>
                   {loadingMore && (
-                    <View style={styles.loadMoreLoading}>
-                      <ActivityIndicator size="small" color="#5E82FF" />
-                    </View>
+                    <AppLoadingState size="small" style={styles.loadMoreLoading} />
                   )}
                   {!loadingMore && hasMore && (
                     <BrushupLoadMoreButton onPress={() => void loadReviewCards(page + 1, false)} />
@@ -293,37 +258,10 @@ export default function BrushUPScreen({
         onConfirm={handleConfirmDelete}
       />
 
-      {/* 검색 모달 */}
-      <Modal
+      <BrushupSearchModal
         visible={searchModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSearchModalVisible(false)}
-      >
-        <View style={styles.searchModalContainer}>
-          <View style={styles.searchModalContent}>
-            <View style={styles.searchModalHeader}>
-              <Text style={styles.searchModalTitle}>카드 검색</Text>
-              <Pressable onPress={() => setSearchModalVisible(false)}>
-                <Image
-                  source={require("../../../assets/delete.png")}
-                  style={styles.searchModalCloseIcon}
-                  resizeMode="contain"
-                />
-              </Pressable>
-            </View>
-
-            <View style={styles.searchInputContainer}>
-              <Text style={styles.searchIcon}>🔎</Text>
-              <Text style={styles.searchPlaceholder}>검색어를 입력하세요.</Text>
-            </View>
-
-            <Text style={styles.searchHint}>
-              제목, 과목명, 설명에서 검색할 수 있어요.
-            </Text>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setSearchModalVisible(false)}
+      />
     </View>
   );
 }
@@ -332,7 +270,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#F6F7FB",
+    backgroundColor: appColors.screenBg,
   },
   mainContent: {
     flex: 1,
@@ -345,21 +283,17 @@ const styles = StyleSheet.create({
   },
   // 상단 카드 컨테이너
   headerCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: appColors.white,
     marginHorizontal: scale(20),
     marginBottom: scale(20),
     borderRadius: scale(20),
     padding: scale(24),
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    ...appShadow.card,
   },
   pageTitle: {
     fontSize: fontScale(28),
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
     marginBottom: scale(20),
   },
   // 검색 바
@@ -380,54 +314,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-  },
-  searchModalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  searchModalContent: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: scale(24),
-    borderTopRightRadius: scale(24),
-    padding: scale(24),
-    minHeight: scale(300),
-  },
-  searchModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: scale(20),
-  },
-  searchModalTitle: {
-    fontSize: fontScale(22),
-    fontWeight: "800",
-    color: "#111827",
-  },
-  searchModalCloseIcon: {
-    width: scale(24),
-    height: scale(24),
-  },
-  searchInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    borderRadius: scale(12),
-    padding: scale(16),
-    gap: scale(12),
-    marginBottom: scale(12),
-  },
-  searchIcon: {
-    fontSize: fontScale(20),
-  },
-  searchPlaceholder: {
-    fontSize: fontScale(16),
-    color: "#9CA3AF",
-    flex: 1,
-  },
-  searchHint: {
-    fontSize: fontScale(13),
-    color: "#9CA3AF",
-    textAlign: "center",
   },
 });

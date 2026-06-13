@@ -2,13 +2,11 @@ import React, { useEffect, useState } from 'react';
 import {
     Alert,
     Image,
-    KeyboardAvoidingView,
     Platform,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     View,
 } from 'react-native';
 import { fontScale, scale } from '../../lib/layout';
@@ -27,6 +25,8 @@ import {
     withdrawAccount,
 } from '../../api/auth';
 import { getMonthlyStats } from '../../api/ocr';
+import { getErrorCode, getErrorMessage } from '../../app/error/errors';
+import MyPageModals from '../../components/mypage/MyPageModals';
 
 type Screen = 'home' | 'league' | 'alarm' | 'mypage' | 'takePicture' | 'brushup';
 
@@ -211,8 +211,8 @@ export default function MyPageScreen({
             setOauthProvider('kakao');
             setOauthUrl(url);
             setShowOAuthWebView(true);
-        } catch (error: any) {
-            Alert.alert('오류', error?.message || '카카오 로그인 URL 생성 실패');
+        } catch (error) {
+            Alert.alert('오류', getErrorMessage(error, '카카오 로그인 URL 생성 실패'));
         }
     };
 
@@ -222,8 +222,8 @@ export default function MyPageScreen({
             setOauthProvider('naver');
             setOauthUrl(url);
             setShowOAuthWebView(true);
-        } catch (error: any) {
-            Alert.alert('오류', error?.message || '네이버 로그인 URL 생성 실패');
+        } catch (error) {
+            Alert.alert('오류', getErrorMessage(error, '네이버 로그인 URL 생성 실패'));
         }
     };
 
@@ -265,9 +265,9 @@ export default function MyPageScreen({
             }
 
             Alert.alert('오류', result.message || 'Apple 계정 연동에 실패했습니다.');
-        } catch (error: any) {
-            if (error?.code === 'ERR_REQUEST_CANCELED') return;
-            Alert.alert('오류', error?.message || 'Apple 계정 연동 실패');
+        } catch (error) {
+            if (getErrorCode(error) === 'ERR_REQUEST_CANCELED') return;
+            Alert.alert('오류', getErrorMessage(error, 'Apple 계정 연동 실패'));
         }
     };
 
@@ -288,8 +288,8 @@ export default function MyPageScreen({
             }
 
             Alert.alert('성공', result.message);
-        } catch (error: any) {
-            Alert.alert('오류', error?.message || '계정 연동 실패');
+        } catch (error) {
+            Alert.alert('오류', getErrorMessage(error, '계정 연동 실패'));
         }
     };
 
@@ -320,8 +320,8 @@ export default function MyPageScreen({
 
             const providerLabel = provider === 'kakao' ? '카카오' : provider === 'naver' ? '네이버' : 'Apple';
             Alert.alert('성공', `${providerLabel} 계정 연동을 해제했습니다.`);
-        } catch (error: any) {
-            Alert.alert('오류', error?.message || '연동 해제 실패');
+        } catch (error) {
+            Alert.alert('오류', getErrorMessage(error, '연동 해제 실패'));
         }
     };
 
@@ -345,8 +345,8 @@ export default function MyPageScreen({
                     },
                 },
             ]);
-        } catch (error: any) {
-            Alert.alert('오류', error?.message || '회원 탈퇴 실패');
+        } catch (error) {
+            Alert.alert('오류', getErrorMessage(error, '회원 탈퇴 실패'));
         }
     };
 
@@ -369,8 +369,8 @@ export default function MyPageScreen({
             onNicknameChange?.(newNickname);
             Alert.alert('성공', '닉네임이 변경되었습니다.');
             return true;
-        } catch (error: any) {
-            Alert.alert('오류', error?.message || '닉네임 변경 실패');
+        } catch (error) {
+            Alert.alert('오류', getErrorMessage(error, '닉네임 변경 실패'));
             return false;
         }
     };
@@ -602,121 +602,33 @@ export default function MyPageScreen({
                 </View>
             </ScrollView>
 
-            {showSingleDisconnectModal && (
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalBox}>
-                        <Text style={styles.modalMessage}>연결된 계정이 1개일 때는 해제할 수 없습니다.</Text>
-                        <Text style={styles.modalMessage}>다른 계정을 먼저 연동한 뒤 해제해주세요.</Text>
-
-                        <Pressable style={styles.modalPrimaryButton} onPress={() => setShowSingleDisconnectModal(false)}>
-                            <Text style={styles.modalPrimaryText}>확인</Text>
-                        </Pressable>
-                    </View>
-                </View>
-            )}
-
-            {showNicknameModal && (
-                <View style={styles.modalOverlay}>
-                    <KeyboardAvoidingView
-                        style={styles.modalKeyboardAvoiding}
-                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                        keyboardVerticalOffset={scale(12)}
-                    >
-                        <View style={styles.modalBox}>
-                            <Text style={styles.modalTitle}>닉네임 변경</Text>
-
-                            <View style={styles.nicknameInputWrapper}>
-                                <TextInput
-                                    style={styles.nicknameInput}
-                                    value={tempNickname}
-                                    onChangeText={setTempNickname}
-                                    placeholder="닉네임을 입력하세요"
-                                    maxLength={10}
-                                    autoFocus
-                                />
-                            </View>
-
-                            <View style={styles.modalButtonRow}>
-                                <Pressable style={[styles.modalButton, styles.modalCancel]} onPress={() => setShowNicknameModal(false)}>
-                                    <Text style={styles.modalCancelText}>취소</Text>
-                                </Pressable>
-                                <Pressable
-                                    style={[styles.modalButton, styles.modalPrimaryButton]}
-                                    onPress={async () => {
-                                        const success = await handleNicknameChange(tempNickname);
-                                        if (success) setShowNicknameModal(false);
-                                    }}
-                                >
-                                    <Text style={styles.modalPrimaryText}>확인</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    </KeyboardAvoidingView>
-                </View>
-            )}
-
-            {showMonthlyGoalModal && (
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalBox}>
-                        <Text style={styles.modalTitle}>월간 목표 설정</Text>
-
-                        <View style={styles.goalPicker}>
-                            <Pressable onPress={() => setTempGoal(tempGoal + 1)}>
-                                <Image
-                                    source={require('../../../assets/shift.png')}
-                                    style={styles.goalArrowUp}
-                                    resizeMode="contain"
-                                />
-                            </Pressable>
-                            <Text style={styles.goalValue}>{tempGoal} 회</Text>
-                            <Pressable onPress={() => setTempGoal(Math.max(1, tempGoal - 1))}>
-                                <Image
-                                    source={require('../../../assets/shift.png')}
-                                    style={styles.goalArrowDown}
-                                    resizeMode="contain"
-                                />
-                            </Pressable>
-                        </View>
-
-                        <Pressable
-                            style={styles.modalPrimaryButton}
-                            onPress={() => {
-                                onMonthlyGoalChange?.(tempGoal);
-                                setMonthlyGoalState(tempGoal);
-                                setShowMonthlyGoalModal(false);
-                            }}
-                        >
-                            <Text style={styles.modalPrimaryText}>확인</Text>
-                        </Pressable>
-                    </View>
-                </View>
-            )}
-
-            {showWithdrawModal && (
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalWithdrawBox}>
-                        <Text style={styles.modalWithdrawMessage}>
-                            지금까지의 학습 기록과 활동 데이터가 모두 삭제됩니다.
-                        </Text>
-                        <Text style={styles.modalWithdrawStrong}>정말 탈퇴하시겠어요?</Text>
-
-                        <View style={styles.modalButtonRow}>
-                            <Pressable style={[styles.modalButton, styles.modalCancel]} onPress={() => setShowWithdrawModal(false)}>
-                                <Text style={styles.modalCancelText}>취소</Text>
-                            </Pressable>
-                            <Pressable
-                                style={[styles.modalButton, styles.modalDanger]}
-                                onPress={async () => {
-                                    setShowWithdrawModal(false);
-                                    await handleWithdraw();
-                                }}
-                            >
-                                <Text style={styles.modalDangerText}>탈퇴</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-            )}
+            <MyPageModals
+                showSingleDisconnect={showSingleDisconnectModal}
+                showNickname={showNicknameModal}
+                showMonthlyGoal={showMonthlyGoalModal}
+                showWithdraw={showWithdrawModal}
+                tempNickname={tempNickname}
+                tempGoal={tempGoal}
+                onTempNicknameChange={setTempNickname}
+                onTempGoalChange={setTempGoal}
+                onCloseSingleDisconnect={() => setShowSingleDisconnectModal(false)}
+                onCloseNickname={() => setShowNicknameModal(false)}
+                onCloseMonthlyGoal={() => setShowMonthlyGoalModal(false)}
+                onCloseWithdraw={() => setShowWithdrawModal(false)}
+                onConfirmNickname={async () => {
+                    const success = await handleNicknameChange(tempNickname);
+                    if (success) setShowNicknameModal(false);
+                }}
+                onConfirmMonthlyGoal={() => {
+                    onMonthlyGoalChange?.(tempGoal);
+                    setMonthlyGoalState(tempGoal);
+                    setShowMonthlyGoalModal(false);
+                }}
+                onConfirmWithdraw={async () => {
+                    setShowWithdrawModal(false);
+                    await handleWithdraw();
+                }}
+            />
 
             <OAuthWebView
                 visible={showOAuthWebView}
@@ -923,135 +835,5 @@ const styles = StyleSheet.create({
     withdrawText: {
         fontSize: fontScale(13),
         color: '#000000',
-    },
-    modalOverlay: {
-        position: 'absolute',
-        inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.35)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modalKeyboardAvoiding: {
-        width: '100%',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    modalBox: {
-        width: '40%',
-        maxWidth: 400,
-        backgroundColor: '#FFFFFF',
-        borderRadius: scale(16),
-        paddingVertical: scale(32),
-        paddingHorizontal: scale(32),
-        alignItems: 'center',
-        gap: scale(16),
-    },
-    modalTitle: {
-        fontSize: fontScale(18),
-        fontWeight: '800',
-        marginBottom: scale(8),
-    },
-    modalMessage: {
-        fontSize: fontScale(14),
-        textAlign: 'center',
-        color: '#111827',
-        lineHeight: fontScale(20),
-    },
-    modalPrimaryButton: {
-        width: '100%',
-        borderRadius: scale(8),
-        backgroundColor: '#5E82FF',
-        paddingVertical: scale(12),
-        alignItems: 'center',
-    },
-    modalPrimaryText: {
-        fontSize: fontScale(15),
-        fontWeight: '700',
-        color: '#FFFFFF',
-    },
-    nicknameInputWrapper: {
-        width: '100%',
-        marginVertical: scale(16),
-    },
-    nicknameInput: {
-        width: '100%',
-        borderWidth: 1,
-        borderColor: '#D1D5DB',
-        borderRadius: scale(8),
-        paddingVertical: scale(12),
-        paddingHorizontal: scale(16),
-        fontSize: fontScale(16),
-        color: '#111827',
-        backgroundColor: '#F9FAFB',
-    },
-    goalPicker: {
-        alignItems: 'center',
-        gap: scale(16),
-        marginVertical: scale(16),
-        flexDirection: 'column',
-    },
-    goalArrowUp: {
-        width: scale(20),
-        height: scale(20),
-        transform: [{ rotate: '-90deg' }],
-    },
-    goalArrowDown: {
-        width: scale(20),
-        height: scale(20),
-        transform: [{ rotate: '90deg' }],
-    },
-    goalValue: {
-        fontSize: fontScale(28),
-        fontWeight: '800',
-        color: '#111827',
-    },
-    modalWithdrawBox: {
-        width: '40%',
-        maxWidth: 400,
-        backgroundColor: '#FFFFFF',
-        borderRadius: scale(16),
-        paddingVertical: scale(40),
-        paddingHorizontal: scale(32),
-        alignItems: 'center',
-    },
-    modalWithdrawMessage: {
-        fontSize: fontScale(14),
-        textAlign: 'center',
-        color: '#111827',
-        lineHeight: fontScale(20),
-        marginBottom: scale(24),
-    },
-    modalWithdrawStrong: {
-        fontSize: fontScale(20),
-        fontWeight: '800',
-        color: '#EF4444',
-        marginBottom: scale(32),
-    },
-    modalButtonRow: {
-        flexDirection: 'row',
-        width: '100%',
-        gap: scale(12),
-    },
-    modalButton: {
-        flex: 1,
-        borderRadius: scale(8),
-        paddingVertical: scale(12),
-        alignItems: 'center',
-    },
-    modalCancel: {
-        backgroundColor: '#E5E7EB',
-    },
-    modalDanger: {
-        backgroundColor: '#F97373',
-    },
-    modalCancelText: {
-        fontWeight: '700',
-        fontSize: fontScale(15),
-        color: '#111827',
-    },
-    modalDangerText: {
-        fontWeight: '700',
-        fontSize: fontScale(15),
-        color: '#FFFFFF',
     },
 });

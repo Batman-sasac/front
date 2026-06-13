@@ -743,12 +743,12 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: 'transparent',
-  } as any,
+  },
   svgOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
-  } as any,
+  },
   xAxisLabels: {
     flexDirection: 'row',
     justifyContent: 'space-around',
