@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Image, Animated, Easing } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
+import StudyFlowProgressCard from '../../components/study/StudyFlowProgressCard';
+import CenteredActionButton from '../../components/common/CenteredActionButton';
 
 type Props = {
   mode: 'loading' | 'intro';
@@ -92,21 +94,20 @@ export default function StudyFlowScreen({
         />
 
         {mode === 'loading' ? (
-          <View style={styles.progressCard}>
-            <Text style={styles.progressText}>{displayProgress}%</Text>
-            <View
-              style={styles.progressTrack}
-              onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-            >
-              <Animated.View style={[styles.progressFill, { width: animatedFillWidth }]} />
-            </View>
-          </View>
+          <StudyFlowProgressCard
+            progressLabel={`${displayProgress}%`}
+            fillWidth={animatedFillWidth}
+            onTrackLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+          />
         ) : (
           <>
             <Text style={styles.caption}>3라운드까지 학습을 완료한 후 다음 페이지의 학습이 진행돼요.</Text>
-            <Pressable style={styles.primaryButton} onPress={onStart}>
-              <Text style={styles.primaryButtonText}>{currentPage}페이지 학습 시작</Text>
-            </Pressable>
+            <CenteredActionButton
+              label={`${currentPage}페이지 학습 시작`}
+              onPress={onStart ?? (() => {})}
+              style={styles.primaryButton}
+              textStyle={styles.primaryButtonText}
+            />
           </>
         )}
       </View>
@@ -175,53 +176,11 @@ const styles = StyleSheet.create({
     marginBottom: scale(16),
   },
   primaryButton: {
-    width: '100%',
-    maxWidth: scale(360),
     height: scale(56),
     borderRadius: scale(16),
-    backgroundColor: '#5E82FF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 0,
   },
   primaryButtonText: {
     fontSize: fontScale(18),
-    fontWeight: '900',
-    color: '#FFFFFF',
-  },
-  progressCard: {
-    width: '100%',
-    maxWidth: scale(560),
-    backgroundColor: '#FFFFFF',
-    borderRadius: scale(18),
-    paddingHorizontal: scale(18),
-    paddingVertical: scale(14),
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(14),
-    shadowColor: '#4B5563',
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
-  },
-  progressText: {
-    minWidth: scale(62),
-    fontSize: fontScale(22),
-    fontWeight: '900',
-    color: '#111827',
-    textAlign: 'center',
-  },
-  progressTrack: {
-    flex: 1,
-    minWidth: scale(220),
-    height: scale(18),
-    borderRadius: scale(999),
-    backgroundColor: '#D1D5DB',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: scale(999),
-    backgroundColor: '#7C93FF',
   },
 });

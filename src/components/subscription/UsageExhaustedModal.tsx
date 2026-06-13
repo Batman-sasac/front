@@ -1,5 +1,7 @@
 import React from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import AppModalShell from '../common/AppModalShell';
+import SubscriptionButton from './SubscriptionButton';
 
 type UsageExhaustedModalProps = {
   visible: boolean;
@@ -15,34 +17,33 @@ export default function UsageExhaustedModal({
   onSubscribe,
 }: UsageExhaustedModalProps) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>사용량 소진 안내</Text>
-            <Pressable onPress={onClose}>
-              <Image source={require('../../../assets/subscribe/close.png')} style={styles.closeIcon} resizeMode="contain" />
-            </Pressable>
-          </View>
-
-          <View style={styles.modalBody}>
-            <Image source={require('../../../assets/character/bat-character.png')} style={styles.modalBat} resizeMode="contain" />
-            <Text style={styles.modalDesc}>{message}</Text>
-            <Text style={styles.modalDesc}>계속 학습하고 싶으시다면</Text>
-            <Text style={styles.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>
-          </View>
-
-          <View style={styles.modalButtons}>
-            <Pressable style={styles.modalBtn} onPress={onClose}>
-              <Image source={require('../../../assets/subscribe/popup-cancel.png')} style={styles.modalBtnImg} resizeMode="stretch" />
-            </Pressable>
-            <Pressable style={styles.modalBtn} onPress={onSubscribe}>
-              <Image source={require('../../../assets/subscribe/popup-subscribe.png')} style={styles.modalBtnImg} resizeMode="stretch" />
-            </Pressable>
-          </View>
+    <AppModalShell
+      visible={visible}
+      title="사용량 소진 안내"
+      onClose={onClose}
+      backdropStyle={styles.modalBackdrop}
+      cardStyle={styles.modalCard}
+      headerStyle={styles.modalHeader}
+      titleStyle={styles.modalTitle}
+      closeIconStyle={styles.closeIcon}
+      footer={(
+        <View style={styles.modalButtons}>
+          <SubscriptionButton style={styles.modalBtn} variant="secondary" onPress={onClose} textStyle={styles.modalBtnSecondaryText}>
+            다음에 할게요
+          </SubscriptionButton>
+          <SubscriptionButton style={styles.modalBtn} onPress={onSubscribe}>
+            구독하기
+          </SubscriptionButton>
         </View>
+      )}
+    >
+      <View style={styles.modalBody}>
+        <Image source={require('../../../assets/character/bat-character.png')} style={styles.modalBat} resizeMode="contain" />
+        <Text style={styles.modalDesc}>{message}</Text>
+        <Text style={styles.modalDesc}>계속 학습하고 싶으시다면</Text>
+        <Text style={styles.modalDesc}>프리미엄 요금제를 이용해 보세요.</Text>
       </View>
-    </Modal>
+    </AppModalShell>
   );
 }
 
@@ -79,6 +80,11 @@ const styles = StyleSheet.create({
   closeIcon: {
     width: 36,
     height: 36,
+    color: '#111218',
+    fontSize: 32,
+    fontWeight: '700',
+    lineHeight: 36,
+    textAlign: 'center',
   },
   modalBody: {
     alignItems: 'center',
@@ -106,9 +112,9 @@ const styles = StyleSheet.create({
   },
   modalBtn: {
     flex: 1,
-  },
-  modalBtnImg: {
-    width: '100%',
     height: 58,
+  },
+  modalBtnSecondaryText: {
+    color: '#11131A',
   },
 });

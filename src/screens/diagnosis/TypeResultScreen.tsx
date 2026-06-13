@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   Image,
   ScrollView,
 } from 'react-native';
@@ -12,14 +11,15 @@ import {
   typeProfiles,
 } from '../../data/learningTypeTest';
 import { scale, fontScale } from '../../lib/layout';
+import AppPrimaryButton from '../../components/common/AppPrimaryButton';
+import LearningMetricBar from '../../components/diagnosis/LearningMetricBar';
+import { appColors, appFontWeight, appRadius } from '../../styles/theme';
 
 type Props = {
   nickname: string;
   result: ResultStats;
   onGoHome: () => void;
 };
-
-const BG = '#F3F4F6';
 
 export default function TypeResultScreen({
   nickname,
@@ -78,68 +78,14 @@ export default function TypeResultScreen({
             {/* 퍼센트 바 2줄 */}
             <View style={styles.barGroup}>
               <Text style={styles.barTitle}>장독립 / 장의존</Text>
-              <View style={styles.barRow}>
-                <Text style={styles.barLabel}>장독립</Text>
-                <View style={styles.barBackground}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      { width: `${result.fieldIndependent}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.barValue}>
-                  {result.fieldIndependent}%
-                </Text>
-              </View>
-
-              <View style={styles.barRow}>
-                <Text style={styles.barLabel}>장의존</Text>
-                <View style={styles.barBackground}>
-                  <View
-                    style={[
-                      styles.barFillSecondary,
-                      { width: `${result.fieldDependent}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.barValue}>
-                  {result.fieldDependent}%
-                </Text>
-              </View>
+              <LearningMetricBar label="장독립" value={result.fieldIndependent} />
+              <LearningMetricBar label="장의존" value={result.fieldDependent} variant="secondary" />
 
               <Text style={[styles.barTitle, { marginTop: scale(12) }]}>
                 숙고 / 충동
               </Text>
-              <View style={styles.barRow}>
-                <Text style={styles.barLabel}>숙고</Text>
-                <View style={styles.barBackground}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      { width: `${result.reflective}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.barValue}>
-                  {result.reflective}%
-                </Text>
-              </View>
-
-              <View style={styles.barRow}>
-                <Text style={styles.barLabel}>충동</Text>
-                <View style={styles.barBackground}>
-                  <View
-                    style={[
-                      styles.barFillSecondary,
-                      { width: `${result.impulsive}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.barValue}>
-                  {result.impulsive}%
-                </Text>
-              </View>
+              <LearningMetricBar label="숙고" value={result.reflective} />
+              <LearningMetricBar label="충동" value={result.impulsive} variant="secondary" />
             </View>
           </View>
 
@@ -162,9 +108,9 @@ export default function TypeResultScreen({
 
       {/* 하단 버튼 */}
       <View style={styles.bottomButtonWrap}>
-        <Pressable style={styles.button} onPress={onGoHome}>
-          <Text style={styles.buttonText}>이제 진짜 학습 시작하기</Text>
-        </Pressable>
+        <AppPrimaryButton style={styles.button} textStyle={styles.buttonText} onPress={onGoHome}>
+          이제 진짜 학습 시작하기
+        </AppPrimaryButton>
       </View>
     </View>
   );
@@ -174,7 +120,7 @@ const styles = StyleSheet.create({
   /* 전체 레이아웃 */
   root: {
     flex: 1,
-    backgroundColor: BG,
+    backgroundColor: appColors.screenBgMuted,
   },
   scroll: {
     flex: 1,
@@ -189,13 +135,13 @@ const styles = StyleSheet.create({
   /* 화면 타이틀 */
   title: {
     fontSize: fontScale(22),
-    fontWeight: '800',
+    fontWeight: appFontWeight.extraBold,
   },
 
   /* 상단 결과 카드 */
   topCard: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
+    backgroundColor: appColors.surface,
     borderRadius: scale(24),
     paddingVertical: scale(24),
     paddingHorizontal: scale(24),
@@ -210,19 +156,19 @@ const styles = StyleSheet.create({
   /* 유형 텍스트 */
   subtitle: {
     fontSize: fontScale(14),
-    color: '#6B7280',
+    color: appColors.textSecondary,
     marginBottom: scale(4),
   },
   typeText: {
     fontSize: fontScale(18),
-    fontWeight: '800',
+    fontWeight: appFontWeight.extraBold,
     marginBottom: scale(8),
-    color: '#111827',
+    color: appColors.text,
   },
   typeLabel: {
     fontSize: fontScale(14),
-    fontWeight: '700',
-    color: '#4B5563',
+    fontWeight: appFontWeight.bold,
+    color: appColors.textMuted,
   },
 
   /* 태그 라인 */
@@ -236,12 +182,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(10),
     paddingVertical: scale(4),
     borderRadius: scale(999),
-    backgroundColor: '#EEF2FF',
+    backgroundColor: appColors.primarySoft,
   },
   tagText: {
     fontSize: fontScale(11),
-    color: '#4F46E5',
-    fontWeight: '600',
+    color: appColors.indigo,
+    fontWeight: appFontWeight.semibold,
   },
 
   /* 퍼센트 바 그룹 */
@@ -250,44 +196,9 @@ const styles = StyleSheet.create({
   },
   barTitle: {
     fontSize: fontScale(13),
-    fontWeight: '700',
+    fontWeight: appFontWeight.bold,
     marginBottom: scale(4),
   },
-  barRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: scale(4),
-  },
-  barLabel: {
-    width: scale(52),
-    fontSize: fontScale(12),
-    color: '#4B5563',
-  },
-  barBackground: {
-    flex: 1,
-    height: scale(8),
-    borderRadius: scale(999),
-    backgroundColor: '#E5E7EB',
-    overflow: 'hidden',
-    marginHorizontal: scale(8),
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: scale(999),
-    backgroundColor: '#5E82FF',
-  },
-  barFillSecondary: {
-    height: '100%',
-    borderRadius: scale(999),
-    backgroundColor: '#9CA3AF',
-  },
-  barValue: {
-    width: scale(40),
-    textAlign: 'right',
-    fontSize: fontScale(11),
-    color: '#4B5563',
-  },
-
   /* 결과 캐릭터 */
   character: {
     width: scale(140),
@@ -296,20 +207,20 @@ const styles = StyleSheet.create({
 
   /* 설명 섹션 */
   section: {
-    backgroundColor: '#ffffff',
+    backgroundColor: appColors.surface,
     borderRadius: scale(16),
     paddingVertical: scale(16),
     paddingHorizontal: scale(18),
   },
   sectionTitle: {
     fontSize: fontScale(15),
-    fontWeight: '700',
+    fontWeight: appFontWeight.bold,
     marginBottom: scale(8),
   },
   sectionBody: {
     fontSize: fontScale(13),
     lineHeight: fontScale(19),
-    color: '#4B5563',
+    color: appColors.textMuted,
   },
 
   /* 하단 버튼 */
@@ -318,14 +229,13 @@ const styles = StyleSheet.create({
     paddingBottom: scale(24),
   },
   button: {
-    backgroundColor: '#5E82FF',
-    borderRadius: scale(999),
+    borderRadius: scale(appRadius.pill),
     paddingVertical: scale(16),
     alignItems: 'center',
   },
   buttonText: {
-    color: '#ffffff',
-    fontWeight: '700',
+    color: appColors.white,
+    fontWeight: appFontWeight.bold,
     fontSize: fontScale(15),
   },
 });

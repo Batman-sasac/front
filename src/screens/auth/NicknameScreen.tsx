@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 import {
-    View,
     Text,
+    View,
     StyleSheet,
     TextInput,
     Pressable,
-    Image,
-    Platform,
     Alert,
-    ActivityIndicator,
 } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import { setNickname } from '../../api/auth';
 import { saveAuthData } from '../../lib/storage';
+import CharacterFormLayout from '../../components/common/CharacterFormLayout';
+import FormHelperText from '../../components/common/FormHelperText';
+import FormSubmitButton from '../../components/common/FormSubmitButton';
 
 type Props = {
     email: string;
@@ -81,17 +81,10 @@ export default function NicknameScreen({ email, socialId, onNicknameSet }: Props
     };
 
     return (
-        <View style={styles.root}>
-            <View style={styles.contentRow}>
+        <CharacterFormLayout>
                 {/* 왼쪽 캐릭터 */}
-                <Image
-                    source={require('../../../assets/character/bat-character.png')}
-                    style={styles.character}
-                    resizeMode="contain"
-                />
 
                 {/* 오른쪽 입력 영역 */}
-                <View style={styles.rightBox}>
                     <Text style={styles.title}>닉네임을 입력해주세요!</Text>
 
                     <View style={styles.inputWrapper}>
@@ -110,53 +103,21 @@ export default function NicknameScreen({ email, socialId, onNicknameSet }: Props
                         )}
                     </View>
 
-                    <Text style={[styles.helperText, !errorText && { opacity: 0 }]}>
-                        {errorText || ' '}
-                    </Text>
+                    <FormHelperText visible={Boolean(errorText)}>
+                        {errorText}
+                    </FormHelperText>
 
-                    <Pressable
-                        style={[
-                            styles.button,
-                            (!isValid || loading) && styles.buttonDisabled,
-                        ]}
+                    <FormSubmitButton
+                        label="확인"
                         onPress={handleSubmit}
                         disabled={!isValid || loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color="#fff" />
-                        ) : (
-                            <Text style={styles.buttonText}>확인</Text>
-                        )}
-                    </Pressable>
-                </View>
-            </View>
-        </View>
+                        loading={loading}
+                    />
+        </CharacterFormLayout>
     );
 }
 
-const BG = '#F3F4F6';
-
 const styles = StyleSheet.create({
-    root: {
-        flex: 1,
-        backgroundColor: BG,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    contentRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        width: '80%',
-        maxWidth: scale(900),
-    },
-    character: {
-        width: scale(260),
-        height: scale(260),
-        marginRight: scale(80),
-    },
-    rightBox: {
-        width: scale(520),
-    },
     title: {
         fontSize: fontScale(28),
         fontWeight: '800',
@@ -186,29 +147,4 @@ const styles = StyleSheet.create({
         fontSize: fontScale(16),
         color: '#9CA3AF',
     },
-    button: {
-        marginTop: scale(8),
-        height: scale(64),
-        borderRadius: scale(999),
-        backgroundColor: '#5E82FF',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    buttonDisabled: {
-        backgroundColor: '#D1D5DB',
-    },
-    buttonText: {
-        color: '#ffffff',
-        fontSize: fontScale(35),
-        fontWeight: '700',
-    },
-    helperText: {
-        marginTop: scale(2),
-        height: fontScale(14),
-        fontSize: fontScale(14),
-        color: '#EF4444',
-        marginBottom: scale(4),
-        paddingHorizontal: scale(8),
-    },
-
 });

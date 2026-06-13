@@ -76,6 +76,14 @@ import config from '../lib/config';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
 export type OcrProgressMessage = {
     type: 'ocr_progress';
     status: 'page_done' | 'page_error';
@@ -353,7 +361,7 @@ export async function runOcr(
             uri: fileUri,
             name: uploadFileName,
             type: mimeType,
-        } as any);
+        } as unknown as Blob);
     }
 
     // crop 정보가 있으면 form에 추가 (서버에서 crop)
@@ -433,11 +441,11 @@ export async function runOcr(
                 'Authorization': `Bearer ${token || ''}`,
             },
             });
-        } catch (e: any) {
+        } catch (error) {
             // React Native/Expo에서 네트워크 레벨 실패는 "Network request failed"로 뭉뚱그려진다.
             // URL/파일정보만이라도 남겨서 원인 파악을 쉽게 한다.
             console.error('OCR 네트워크 실패:', {
-                message: e?.message ?? String(e),
+                message: getErrorMessage(error),
                 apiBase: API_BASE,
                 url: `${API_BASE}/ocr`,
                 fileUri,
@@ -445,7 +453,7 @@ export async function runOcr(
                 mimeType,
                 cropInfo,
             });
-            throw e;
+            throw error;
         }
 
         console.log('OCR 응답 상태:', res.status);
@@ -455,13 +463,18 @@ export async function runOcr(
             console.error('OCR 오류 응답:', errorText);
             throw new Error(`OCR HTTP ${res.status}: ${errorText}`);
         }
-        const data = (await res.json()) as any;
+        const rawData: unknown = await res.json();
+        const data = isRecord(rawData) ? rawData : {};
 
         if (data.status === 'limit_reached') {
-            throw new Error(data.message || '이용 가능한 무료 횟수를 모두 사용했습니다.');
+            throw new Error(
+                typeof data.message === 'string'
+                    ? data.message
+                    : '이용 가능한 무료 횟수를 모두 사용했습니다.',
+            );
         }
 
-        const inner = data.data ?? data;
+        const inner = isRecord(data.data) ? data.data : data;
 
         let pages: PageItem[] = [];
         let originalText: string;
@@ -505,7 +518,7 @@ export async function runOcr(
             }
         } else {
             // 하위 호환: 단일 original_text, keywords
-            originalText = inner.original_text ?? '';
+            originalText = typeof inner.original_text === 'string' ? inner.original_text : '';
             const rawKeywords = Array.isArray(inner.keywords)
                 ? inner.keywords.map((value: unknown) => String(value ?? '').trim()).filter(Boolean)
                 : [];
@@ -563,6 +576,55 @@ export async function getOcrUsage(): Promise<OcrUsageResponse> {
     }
 
     return res.json();
+}
+
+export type ReviewCardApiItem = {
+    id: number;
+    study_name: string;
+    subject_name: string;
+    ocr_preview?: string | null;
+    created_at: string;
+};
+
+export type ReviewCardListResponse = {
+    data?: ReviewCardApiItem[];
+    has_more?: boolean;
+};
+
+export async function getReviewCards(page: number, size: number): Promise<ReviewCardListResponse> {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const res = await fetch(`${API_BASE}/ocr/list?page=${page}&size=${size}`, {
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+        },
+    });
+
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`복습 카드 조회 HTTP ${res.status}: ${errorText}`);
+    }
+
+    return res.json();
+}
+
+export async function deleteReviewCard(quizId: number): Promise<void> {
+    const { getToken } = await import('../lib/storage');
+    const token = await getToken();
+
+    const res = await fetch(`${API_BASE}/ocr/ocr-data/delete/${quizId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${token || ''}`,
+        },
+    });
+
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`복습 카드 삭제 HTTP ${res.status}: ${errorText}`);
+    }
 }
 
 export type SaveTestRequest = {

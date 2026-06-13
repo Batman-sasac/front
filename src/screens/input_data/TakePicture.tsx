@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Platform, Alert, Linking, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Platform, Alert, Linking } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { scale, fontScale } from '../../lib/layout';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getStudySourceExtension, getStudySourceName, isImageStudySource, StudySource } from './studySource';
+import { StudySource } from './studySource';
+import CameraIconButton from '../../components/inputData/CameraIconButton';
+import SelectedSourceStrip from '../../components/inputData/SelectedSourceStrip';
+import StudySourcePreview from '../../components/inputData/StudySourcePreview';
 
 type Props = {
     onBack: () => void;
@@ -182,8 +185,9 @@ export default function TakePicture({ onBack, onDone }: Props) {
                 input.type = 'file';
                 input.multiple = true;
 
-                input.onchange = async (e: any) => {
-                    const files = e.target.files;
+                input.onchange = async (event) => {
+                    const files = (event.target as HTMLInputElement).files;
+                    if (!files) return;
                     console.log('📁 선택된 파일 개수:', files.length);
 
                     for (let i = 0; i < files.length; i++) {
@@ -258,8 +262,7 @@ export default function TakePicture({ onBack, onDone }: Props) {
         try {
             if (!cameraRef.current) return;
 
-            const cam: any = cameraRef.current;
-            const photo = await cam.takePictureAsync({
+            const photo = await cameraRef.current.takePictureAsync({
                 quality: 0.8,
                 skipProcessing: Platform.OS === 'android' ? false : false,
             });
@@ -332,21 +335,6 @@ export default function TakePicture({ onBack, onDone }: Props) {
 
     const getShotKey = (shot: StudySource, index: number) => {
         return shot.uri ? `uri-${shot.uri}-${index}` : `shot-${index}`;
-    };
-
-    const renderShotPreview = (shot: StudySource, style: any) => {
-        if (isImageStudySource(shot)) {
-            return <Image source={{ uri: shot.uri }} style={style} />;
-        }
-
-        return (
-            <View style={[style, styles.filePreview]}>
-                <Text style={styles.filePreviewExt}>{getStudySourceExtension(shot) || 'FILE'}</Text>
-                <Text style={styles.filePreviewName} numberOfLines={1}>
-                    {getStudySourceName(shot)}
-                </Text>
-            </View>
-        );
     };
 
     const visibleShotCount = Math.min(shots.length, 4);
@@ -464,33 +452,24 @@ export default function TakePicture({ onBack, onDone }: Props) {
                 <View style={styles.rightButtons}>
                     {/* 타이머 버튼 */}
                     <View style={styles.timerBtnGroup}>
-                        <Pressable style={styles.iconBtn} onPress={toggleTimer}>
-                            <Image
-                                source={require('../../../assets/take-picture/timer.png')}
-                                style={styles.icon}
-                                resizeMode="contain"
-                            />
-                        </Pressable>
+                        <CameraIconButton
+                            source={require('../../../assets/take-picture/timer.png')}
+                            onPress={toggleTimer}
+                        />
                         <Text style={styles.timerLabel}>{timer === 0 ? 'OFF' : `${timer}s`}</Text>
                     </View>
 
                     {/* 플래시 버튼 */}
-                    <Pressable style={styles.iconBtn} onPress={toggleFlash}>
-                        <Image
-                            source={require('../../../assets/take-picture/flash.png')}
-                            style={styles.icon}
-                            resizeMode="contain"
-                        />
-                    </Pressable>
+                    <CameraIconButton
+                        source={require('../../../assets/take-picture/flash.png')}
+                        onPress={toggleFlash}
+                    />
 
                     {/* 전환 버튼 */}
-                    <Pressable style={styles.iconBtn} onPress={toggleFacing}>
-                        <Image
-                            source={require('../../../assets/take-picture/turn.png')}
-                            style={styles.icon}
-                            resizeMode="contain"
-                        />
-                    </Pressable>
+                    <CameraIconButton
+                        source={require('../../../assets/take-picture/turn.png')}
+                        onPress={toggleFacing}
+                    />
 
                     {/* 촬영 버튼 (중앙) */}
                     <Pressable style={[styles.shutterOuter, !canShoot && { opacity: 0.5 }]} onPress={handleShutter}>
@@ -502,49 +481,33 @@ export default function TakePicture({ onBack, onDone }: Props) {
                     </Pressable>
 
                     {/* 갤러리 선택 버튼 */}
-                    <Pressable style={styles.iconBtn} onPress={handlePickFromGallery}>
-                        <Image
-                            source={require('../../../assets/take-picture/select_photo.png')}
-                            style={styles.icon}
-                            resizeMode="contain"
-                        />
-                    </Pressable>
+                    <CameraIconButton
+                        source={require('../../../assets/take-picture/select_photo.png')}
+                        onPress={handlePickFromGallery}
+                    />
 
                     {/* 문서/PDF 선택 버튼 */}
-                    <Pressable style={styles.iconBtn} onPress={handlePickDocument}>
-                        <Image
-                            source={require('../../../assets/take-picture/select_folder.png')}
-                            style={styles.icon}
-                            resizeMode="contain"
-                        />
-                    </Pressable>
+                    <CameraIconButton
+                        source={require('../../../assets/take-picture/select_folder.png')}
+                        onPress={handlePickDocument}
+                    />
 
                     {/* 선택/촬영 사진 썸네일 버튼 */}
                     {shots.length > 0 && (
                         <View style={styles.thumbnailAnchor}>
                             <Pressable style={styles.iconBtn} onPress={handleToggleShotList}>
                                 <View style={styles.thumbnailContainer}>
-                                    {renderShotPreview(shots[0], styles.thumbnailImage)}
+                                    <StudySourcePreview source={shots[0]} style={styles.thumbnailImage} />
                                 </View>
                             </Pressable>
 
                             {isShotListVisible && (
-                                <View style={[styles.selectedShotsRow, { width: selectedShotListWidth }]}>
-                                    <ScrollView
-                                        horizontal
-                                        showsHorizontalScrollIndicator={false}
-                                        contentContainerStyle={styles.selectedShotsContent}
-                                    >
-                                        {shots.map((shot, idx) => (
-                                            <View key={getShotKey(shot, idx)} style={styles.selectedShotItem}>
-                                                {renderShotPreview(shot, styles.selectedShotImage)}
-                                                <Pressable style={styles.removeShotBtn} onPress={() => handleRemoveShot(idx)}>
-                                                    <Text style={styles.removeShotText}>x</Text>
-                                                </Pressable>
-                                            </View>
-                                        ))}
-                                    </ScrollView>
-                                </View>
+                                <SelectedSourceStrip
+                                    sources={shots}
+                                    width={selectedShotListWidth}
+                                    getSourceKey={getShotKey}
+                                    onRemove={handleRemoveShot}
+                                />
                             )}
                         </View>
 
@@ -627,10 +590,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    icon: {
-        width: scale(40),
-        height: scale(40),
-    },
     timerLabel: {
         color: '#fff',
         fontSize: fontScale(10),
@@ -709,72 +668,6 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.35)',
     },
     moreText: { color: '#fff', fontSize: fontScale(12), fontWeight: '800', marginLeft: scale(4) },
-
-    selectedShotsRow: {
-        position: 'absolute',
-        right: scale(52),
-        top: scale(-2),
-        zIndex: 5,
-    },
-    selectedShotsContent: {
-        flexDirection: 'row-reverse',
-        paddingVertical: scale(4),
-        paddingHorizontal: scale(4),
-        alignItems: 'center',
-    },
-    selectedShotItem: {
-        width: scale(44),
-        height: scale(44),
-        marginRight: scale(8),
-        marginTop: scale(2),
-    },
-    selectedShotImage: {
-        width: '100%',
-        height: '100%',
-        borderRadius: scale(8),
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.35)',
-        backgroundColor: 'rgba(0,0,0,0.1)',
-    },
-    filePreview: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: scale(4),
-        backgroundColor: 'rgba(255,255,255,0.9)',
-    },
-    filePreviewExt: {
-        color: '#111827',
-        fontSize: fontScale(10),
-        fontWeight: '800',
-    },
-    filePreviewName: {
-        color: '#4B5563',
-        fontSize: fontScale(7),
-        fontWeight: '700',
-        textAlign: 'center',
-        marginTop: scale(2),
-        width: '100%',
-    },
-    removeShotBtn: {
-        position: 'absolute',
-        top: scale(-5),
-        right: scale(-5),
-        width: scale(16),
-        height: scale(16),
-        borderRadius: scale(8),
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        borderWidth: 1,
-        borderColor: '#fff',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    removeShotText: {
-        color: '#fff',
-        fontSize: fontScale(11),
-        fontWeight: '800',
-        lineHeight: scale(12),
-        textTransform: 'lowercase',
-    },
 
     countOverlay: {
         ...StyleSheet.absoluteFillObject,

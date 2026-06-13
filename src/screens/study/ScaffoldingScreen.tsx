@@ -10,9 +10,9 @@ import {
   Platform,
   Alert,
   Modal,
-  ActivityIndicator,
   PanResponder,
   Keyboard,
+  LayoutChangeEvent,
 } from "react-native";
 import { scale, fontScale } from "../../lib/layout";
 import type {
@@ -26,6 +26,10 @@ import { StudySource } from "../input_data/studySource";
 import { buildKeywordInstances, normalizeBlankWord } from "./scaffoldingLogic";
 import { tokenizeWithKeywords } from "./tokenizeKeywords";
 import SpeechBubbleShell from "../../components/SpeechBubbleShell";
+import StudyImageActionButton from "../../components/study/StudyImageActionButton";
+import StudyProgressHeader from "../../components/study/StudyProgressHeader";
+import { getErrorMessage } from "../../app/error/errors";
+import AppLoadingState from "../../components/common/AppLoadingState";
 
 const HINT_BUBBLE_WIDTH = scale(168);
 const DEFAULT_PAGE_CANVAS_ASPECT_RATIO = 0.72;
@@ -682,7 +686,7 @@ export default function ScaffoldingScreen({
     else if (step === "3-1") setStep("3-2");
   };
 
-  const recordTokenLayout = (idx: number) => (event: any) => {
+  const recordTokenLayout = (idx: number) => (event: LayoutChangeEvent) => {
     const { x, y, width, height } = event.nativeEvent.layout;
     tokenLayoutsRef.current[idx] = { x, y, width, height };
   };
@@ -824,10 +828,11 @@ export default function ScaffoldingScreen({
   /** 로딩/에러 UI (모든 Hook 선언 이후) */
   if (loading) {
     return (
-      <View style={[styles.root, styles.center]}>
-        <ActivityIndicator size="large" color="#5E82FF" />
-        <Text style={styles.loadingText}>학습화면 불러오는 중입니다...</Text>
-      </View>
+      <AppLoadingState
+        message="학습화면 불러오는 중입니다..."
+        style={[styles.root, styles.center]}
+        textStyle={styles.loadingText}
+      />
     );
   }
   if (error || !payload) {
@@ -2000,40 +2005,16 @@ export default function ScaffoldingScreen({
   return (
     <View style={styles.root}>
       {/* 설명 */}
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={onBack} hitSlop={10}>
-          <Image
-            source={require("../../../assets/shift.png")}
-            style={styles.backIcon}
-            resizeMode="contain"
-          />
-        </Pressable>
-
-        <View style={styles.headerTopRow}>
-          <View style={styles.titleRow}>
-            <Text style={styles.headerTitle}>{title}</Text>
-            <Text style={styles.headerSubtitle}>{roundLabel}</Text>
-          </View>
-          <Text style={styles.scoreText}>
-            {correctCount}/{totalBars}
-          </Text>
-        </View>
-
-        <View style={styles.barsRow}>
-          {Array.from({ length: totalBars }).map((_, i) => {
-            const s = barStates[i] ?? "idle";
-            const bg =
-              s === "correct"
-                ? CORRECT_BG
-                : s === "wrong"
-                  ? WRONG_BG
-                  : "#E5E7EB";
-            return (
-              <View key={i} style={[styles.bar, { backgroundColor: bg }]} />
-            );
-          })}
-        </View>
-      </View>
+      <StudyProgressHeader
+        title={title}
+        roundLabel={roundLabel}
+        correctCount={correctCount}
+        totalBars={totalBars}
+        barStates={barStates}
+        correctColor={CORRECT_BG}
+        wrongColor={WRONG_BG}
+        onBack={onBack}
+      />
 
       <View style={styles.content}>
         {/* 설명 */}
@@ -2042,68 +2023,50 @@ export default function ScaffoldingScreen({
 
           {(step === "1-1" || step === "2-1" || step === "3-1") && (
             <View style={styles.buttonGroup}>
-              <Pressable style={styles.imgBtnWrap} onPress={onStartLearning}>
-                <Image
-                  source={require("../../../assets/study/start-study-button.png")}
-                  style={styles.startImg}
-                  resizeMode="contain"
-                />
-              </Pressable>
+              <StudyImageActionButton
+                source={require("../../../assets/study/start-study-button.png")}
+                onPress={onStartLearning}
+              />
             </View>
           )}
 
           {(step === "1-2" || step === "2-2" || step === "3-2") && (
             <View style={styles.buttonGroup}>
-              <Pressable style={styles.imgBtnWrap} onPress={onGrade}>
-                <Image
-                  source={require("../../../assets/study/grade-button.png")}
-                  style={styles.startImg}
-                  resizeMode="contain"
-                />
-              </Pressable>
+              <StudyImageActionButton
+                source={require("../../../assets/study/grade-button.png")}
+                onPress={onGrade}
+              />
             </View>
           )}
 
           {step === "1-3" && (
             <View style={styles.buttonGroup}>
-              <Pressable
-                style={styles.imgBtnWrap}
+              <StudyImageActionButton
+                source={require("../../../assets/study/Round2.png")}
                 onPress={() => {
                   setAnswers({});
                   setStep("2-1");
                 }}
-              >
-                <Image
-                  source={require("../../../assets/study/Round2.png")}
-                  style={styles.startImg}
-                  resizeMode="contain"
-                />
-              </Pressable>
+              />
             </View>
           )}
 
           {step === "2-3" && (
             <View style={styles.buttonGroup}>
-              <Pressable
-                style={styles.imgBtnWrap}
+              <StudyImageActionButton
+                source={require("../../../assets/study/Round3.png")}
                 onPress={() => {
                   setAnswers({});
                   setStep("3-1");
                 }}
-              >
-                <Image
-                  source={require("../../../assets/study/Round3.png")}
-                  style={styles.startImg}
-                  resizeMode="contain"
-                />
-              </Pressable>
+              />
             </View>
           )}
 
           {step === "3-3" && (
             <View style={styles.buttonGroup}>
-              <Pressable
-                style={styles.imgBtnWrap}
+              <StudyImageActionButton
+                source={require("../../../assets/study/finish_study.png")}
                 onPress={async () => {
                   if (onSave) {
                     try {
@@ -2184,10 +2147,10 @@ export default function ScaffoldingScreen({
                       });
                       setPopupVisible(true);
                       return;
-                    } catch (e: any) {
+                    } catch (error) {
                       Alert.alert(
                         "저장 실패",
-                        e?.message ?? "알 수 없는 오류가 발생했습니다.",
+                        getErrorMessage(error, "알 수 없는 오류가 발생했습니다."),
                       );
                       return;
                     }
@@ -2216,13 +2179,7 @@ export default function ScaffoldingScreen({
                   });
                   setPopupVisible(true);
                 }}
-              >
-                <Image
-                  source={require("../../../assets/study/finish_study.png")}
-                  style={styles.startImg}
-                  resizeMode="contain"
-                />
-              </Pressable>
+              />
             </View>
           )}
         </View>
@@ -2562,54 +2519,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  header: { backgroundColor: "transparent" },
-  backBtn: {
-    position: "absolute",
-    left: scale(0),
-    top: scale(-13),
-    width: scale(36),
-    height: scale(36),
-    borderRadius: scale(18),
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
-  },
-  backIcon: {
-    width: scale(16),
-    height: scale(16),
-    transform: [{ rotate: "180deg" }],
-  },
-
-  headerTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: scale(10),
-    paddingLeft: scale(44),
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: scale(8),
-    flex: 1,
-  },
-  headerTitle: { fontSize: fontScale(16), fontWeight: "900", color: "#111827" },
-  headerSubtitle: {
-    fontSize: fontScale(12),
-    fontWeight: "800",
-    color: "#111827",
-    opacity: 0.75,
-  },
-  scoreText: {
-    fontSize: fontScale(16),
-    fontWeight: "900",
-    color: "#9CA3AF",
-    paddingTop: scale(2),
-  },
-
-  barsRow: { marginTop: scale(8), flexDirection: "row", gap: scale(4) },
-  bar: { flex: 1, height: scale(10), borderRadius: scale(3) },
-
   content: { flex: 1, flexDirection: "row", gap: scale(12) },
   pageIndicatorWrap: {
     position: "absolute",
@@ -2679,24 +2588,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   helpDescBottom: { marginTop: scale(2) },
-
-  imgBtnWrap: { width: "100%", alignItems: "center" },
-  reselectImg: { width: "100%", height: scale(70) },
-  startImg: { width: "100%", height: scale(110) },
-
-  primaryRectBtn: {
-    width: "100%",
-    height: scale(52),
-    borderRadius: scale(14),
-    backgroundColor: "#5E82FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryRectBtnText: {
-    color: "#FFFFFF",
-    fontSize: fontScale(12),
-    fontWeight: "900",
-  },
 
   rightCard: {
     flex: 1,
@@ -2874,7 +2765,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
     borderWidth: 0,
     ...(Platform.OS === "web"
-      ? ({ outlineStyle: "none", outlineWidth: 0 } as any)
+      ? { outlineStyle: "solid", outlineWidth: 0 }
       : {}),
   },
   blankHiddenInput: {

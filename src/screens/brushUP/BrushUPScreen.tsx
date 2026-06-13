@@ -4,36 +4,24 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
-  Image,
-  Modal,
-  ActivityIndicator,
 } from "react-native";
-import { scale, fontScale } from "../../lib/layout";
+import { appColors, appShadow, scale, fontScale } from "../../styles/theme";
 import Sidebar from "../../components/Sidebar";
-import config from "../../lib/config";
-import { getToken } from "../../lib/storage";
 import type { Screen } from "../../components/Sidebar";
 import { confirmLogout } from "../../lib/auth";
+import { deleteReviewCard, getReviewCards } from "../../api/ocr";
+import AppConfirmDialog from "../../components/common/AppConfirmDialog";
+import AppSearchBar from "../../components/common/AppSearchBar";
+import BrushupSearchModal from "../../components/brushup/BrushupSearchModal";
+import ReviewCard from "../../components/brushup/ReviewCard";
+import SubjectFilterChip from "../../components/brushup/SubjectFilterChip";
+import BrushupLoadingState from "../../components/brushup/BrushupLoadingState";
+import BrushupEmptyState from "../../components/brushup/BrushupEmptyState";
+import BrushupLoadMoreButton from "../../components/brushup/BrushupLoadMoreButton";
+import type { Card, Subject } from "../../components/brushup/types";
+import AppLoadingState from "../../components/common/AppLoadingState";
 
-const API_BASE_URL = config.apiBaseUrl;
-
-type Subject = {
-  id: string;
-  icon: string;
-  name: string;
-  emoji: string;
-};
-
-export type Card = {
-  id: string;
-  title: string;
-  subject: string;
-  description: string;
-  progress: number;
-  daysAgo: number;
-  quiz_id?: number; // 백엔드의 실제 quiz ID
-};
+export type { Card } from "../../components/brushup/types";
 
 type Props = {
   onBack: () => void;
@@ -64,7 +52,6 @@ export default function BrushUPScreen({
   const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
   const [suppressCardPress, setSuppressCardPress] = useState(false);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
-  const [searchText, setSearchText] = useState("");
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -81,23 +68,11 @@ export default function BrushUPScreen({
     try {
       if (reset) setLoading(true);
       else setLoadingMore(true);
-      const token = await getToken();
-
-      // /ocr/list에서 복습 카드 데이터 조회
-      const response = await fetch(
-        `${API_BASE_URL}/ocr/list?page=${nextPage}&size=${PAGE_SIZE}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      const data = await response.json();
+      const data = await getReviewCards(nextPage, PAGE_SIZE);
 
       if (data.data && Array.isArray(data.data)) {
         // OCR 데이터를 카드 형식으로 변환
-        const cardList: Card[] = data.data.map((item: any) => {
+        const cardList: Card[] = data.data.map((item) => {
           // 경과 일수 계산
           const created = new Date(item.created_at);
           const now = new Date();
@@ -139,11 +114,6 @@ export default function BrushUPScreen({
     return subject?.emoji ?? "📚";
   };
 
-  const getCardCountBySubject = (subjectName: string) => {
-    if (subjectName === "전체") return cards.length;
-    return cards.filter((card) => card.subject === subjectName).length;
-  };
-
   const filteredCards =
     selectedSubject === "all"
       ? cards
@@ -170,28 +140,12 @@ export default function BrushUPScreen({
     }
 
     try {
-      const token = await getToken();
-      const response = await fetch(
-        `${API_BASE_URL}/ocr/ocr-data/delete/${cardToDelete.quiz_id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
+      await deleteReviewCard(cardToDelete.quiz_id);
+      setCards((prevCards) =>
+        prevCards.filter((c) => c.id !== cardToDelete.id),
       );
-
-      if (response.ok) {
-        // 카드 목록에서 제거
-        setCards((prevCards) =>
-          prevCards.filter((c) => c.id !== cardToDelete.id),
-        );
-        setDeleteModalVisible(false);
-        setCardToDelete(null);
-      } else {
-        console.error("삭제 실패:", await response.text());
-        alert("삭제에 실패했습니다.");
-      }
+      setDeleteModalVisible(false);
+      setCardToDelete(null);
     } catch (error) {
       console.error("삭제 오류:", error);
       alert("삭제 중 오류가 발생했습니다.");
@@ -237,122 +191,50 @@ export default function BrushUPScreen({
             contentContainerStyle={styles.subjectScroll}
           >
             {SUBJECTS.map((subject) => (
-              <Pressable
+              <SubjectFilterChip
                 key={subject.id}
-                style={[
-                  styles.subjectChip,
-                  selectedSubject === subject.id && styles.subjectChipActive,
-                ]}
+                subject={subject}
+                selected={selectedSubject === subject.id}
                 onPress={() => setSelectedSubject(subject.id)}
-              >
-                <Text style={styles.subjectEmoji}>{subject.emoji}</Text>
-                <Text
-                  style={[
-                    styles.subjectText,
-                    selectedSubject === subject.id && styles.subjectTextActive,
-                  ]}
-                >
-                  {subject.name}
-                </Text>
-              </Pressable>
+              />
             ))}
           </ScrollView>
 
           {/* 검색 바 */}
-          <View style={styles.searchBar}>
-            <Text style={styles.searchBarPlaceholder}>
-              검색어를 입력하세요.
-            </Text>
-            <Pressable
-              style={styles.searchButton}
-              onPress={() => setSearchModalVisible(true)}
-            >
-              <Image
-                source={require("../../../assets/serch.png")}
-                style={styles.searchButtonIcon}
-                resizeMode="contain"
-              />
-            </Pressable>
-          </View>
+          <AppSearchBar
+            placeholder="검색어를 입력하세요."
+            onSearchPress={() => setSearchModalVisible(true)}
+            style={styles.searchBar}
+          />
         </View>
 
         {/* 카드 목록 */}
         <ScrollView contentContainerStyle={styles.cardList}>
           {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#5E82FF" />
-              <Text style={styles.loadingText}>복습 카드를 불러오는 중.</Text>
-            </View>
+            <BrushupLoadingState />
           ) : filteredCards.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>📚</Text>
-              <Text style={styles.emptyTitle}>복습할 카드가 없어요</Text>
-              <Text style={styles.emptyDesc}>
-                학습을 완료하면 여기에 표시돼요!
-              </Text>
-            </View>
+            <BrushupEmptyState />
           ) : (
             <>
               {filteredCards.map((card) => (
-                <View key={card.id} style={styles.card}>
-                  {/* X 버튼 */}
-                  <Pressable
-                    style={styles.closeBtn}
-                    hitSlop={10}
-                    onPressIn={() => setSuppressCardPress(true)}
-                    onPress={() => handleDeletePress(card)}
-                  >
-                    <Image
-                      source={require("../../../assets/delete.png")}
-                      style={styles.closeIcon}
-                      resizeMode="contain"
-                    />
-                  </Pressable>
-
-                  {/* 카드 클릭 영역 */}
-                  <Pressable
-                    style={styles.cardPressable}
-                    onPress={() => {
-                      if (suppressCardPress) return;
-                      onCardPress?.(card);
-                    }}
-                  >
-                    {/* 제목 + 과목 아이콘 */}
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.cardSubjectIcon}>
-                        {getSubjectIcon(card.subject)}
-                      </Text>
-                      <Text style={styles.cardTitle}>{card.title}</Text>
-                    </View>
-
-                    {/* 설명 */}
-                    <Text style={styles.cardDesc} numberOfLines={2}>
-                      {card.description}
-                    </Text>
-
-                    {/* 경과 기간 */}
-                    <View style={styles.cardFooter}>
-                      <Text></Text>
-                      <Text style={styles.cardDays}>{card.daysAgo}일 전</Text>
-                    </View>
-                  </Pressable>
-                </View>
+                <ReviewCard
+                  key={card.id}
+                  card={card}
+                  subjectIcon={getSubjectIcon(card.subject)}
+                  suppressPress={suppressCardPress}
+                  onPress={(nextCard) => onCardPress?.(nextCard)}
+                  onDeletePress={handleDeletePress}
+                  onDeletePressIn={() => setSuppressCardPress(true)}
+                />
               ))}
 
               {selectedSubject === "all" && (
                 <>
                   {loadingMore && (
-                    <View style={styles.loadMoreLoading}>
-                      <ActivityIndicator size="small" color="#5E82FF" />
-                    </View>
+                    <AppLoadingState size="small" style={styles.loadMoreLoading} />
                   )}
                   {!loadingMore && hasMore && (
-                    <Pressable
-                      style={styles.loadMoreBtn}
-                      onPress={() => void loadReviewCards(page + 1, false)}
-                    >
-                      <Text style={styles.loadMoreText}>더보기</Text>
-                    </Pressable>
+                    <BrushupLoadMoreButton onPress={() => void loadReviewCards(page + 1, false)} />
                   )}
                 </>
               )}
@@ -362,68 +244,24 @@ export default function BrushUPScreen({
       </View>
 
       {/* 삭제 확인 모달 */}
-      <Modal
+      <AppConfirmDialog
         visible={deleteModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelDelete}
-      >
-        <Pressable style={styles.modalOverlay} onPress={handleCancelDelete}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>정말 삭제하시겠어요?</Text>
-            <Text style={styles.modalMessage}>
-              삭제한 기록은 복구할 수 없어요.{"\n"}그래도 삭제할까요?
-            </Text>
+        title="정말 삭제하시겠어요?"
+        message={
+          <>
+            삭제한 기록은 복구할 수 없어요.{"\n"}그래도 삭제할까요?
+          </>
+        }
+        cancelLabel="취소"
+        confirmLabel="삭제"
+        onCancel={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+      />
 
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={handleCancelDelete}
-              >
-                <Text style={styles.modalButtonTextCancel}>취소</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalButton, styles.modalButtonConfirm]}
-                onPress={handleConfirmDelete}
-              >
-                <Text style={styles.modalButtonTextConfirm}>삭제</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* 검색 모달 */}
-      <Modal
+      <BrushupSearchModal
         visible={searchModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSearchModalVisible(false)}
-      >
-        <View style={styles.searchModalContainer}>
-          <View style={styles.searchModalContent}>
-            <View style={styles.searchModalHeader}>
-              <Text style={styles.searchModalTitle}>카드 검색</Text>
-              <Pressable onPress={() => setSearchModalVisible(false)}>
-                <Image
-                  source={require("../../../assets/delete.png")}
-                  style={styles.searchModalCloseIcon}
-                  resizeMode="contain"
-                />
-              </Pressable>
-            </View>
-
-            <View style={styles.searchInputContainer}>
-              <Text style={styles.searchIcon}>🔎</Text>
-              <Text style={styles.searchPlaceholder}>검색어를 입력하세요.</Text>
-            </View>
-
-            <Text style={styles.searchHint}>
-              제목, 과목명, 설명에서 검색할 수 있어요.
-            </Text>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setSearchModalVisible(false)}
+      />
     </View>
   );
 }
@@ -432,25 +270,11 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#F6F7FB",
+    backgroundColor: appColors.screenBg,
   },
   mainContent: {
     flex: 1,
     paddingTop: scale(20),
-  },
-  loadMoreBtn: {
-    alignSelf: "center",
-    marginTop: scale(10),
-    marginBottom: scale(24),
-    paddingHorizontal: scale(18),
-    paddingVertical: scale(12),
-    borderRadius: scale(12),
-    backgroundColor: "#EEF2FF",
-  },
-  loadMoreText: {
-    color: "#3B5BFF",
-    fontWeight: "800",
-    fontSize: fontScale(16),
   },
   loadMoreLoading: {
     alignSelf: "center",
@@ -459,169 +283,27 @@ const styles = StyleSheet.create({
   },
   // 상단 카드 컨테이너
   headerCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: appColors.white,
     marginHorizontal: scale(20),
     marginBottom: scale(20),
     borderRadius: scale(20),
     padding: scale(24),
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    ...appShadow.card,
   },
   pageTitle: {
     fontSize: fontScale(28),
     fontWeight: "900",
-    color: "#111827",
+    color: appColors.text,
     marginBottom: scale(20),
   },
   // 검색 바
   searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    borderRadius: scale(12),
-    paddingLeft: scale(16),
-    paddingRight: scale(6),
-    paddingVertical: scale(6),
-    gap: scale(10),
     marginTop: scale(16),
-  },
-  searchBarPlaceholder: {
-    fontSize: fontScale(15),
-    color: "#9CA3AF",
-    flex: 1,
-  },
-  searchButton: {
-    width: scale(40),
-    height: scale(40),
-    borderRadius: scale(10),
-    backgroundColor: "#5E82FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  searchButtonIcon: {
-    width: scale(24),
-    height: scale(24),
-    tintColor: "#FFFFFF",
-  },
-  // 로딩 상태
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: scale(60),
-    gap: scale(16),
-  },
-  loadingText: {
-    fontSize: fontScale(15),
-    color: "#6B7280",
-    fontWeight: "600",
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: scale(60),
-    gap: scale(12),
-  },
-  emptyIcon: {
-    fontSize: fontScale(48),
-    marginBottom: scale(8),
-  },
-  emptyTitle: {
-    fontSize: fontScale(18),
-    fontWeight: "800",
-    color: "#111827",
-  },
-  emptyDesc: {
-    fontSize: fontScale(14),
-    color: "#9CA3AF",
-    textAlign: "center",
-  },
-  // 상단 카드 스크롤 영역
-  topCardsScroll: {
-    paddingHorizontal: scale(24),
-    paddingBottom: scale(20),
-    gap: scale(12),
-  },
-  topCard: {
-    width: scale(110),
-    backgroundColor: "#FFFFFF",
-    borderRadius: scale(16),
-    padding: scale(16),
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#E5E7EB",
-    gap: scale(8),
-  },
-  topCardActive: {
-    borderColor: "#5E82FF",
-    backgroundColor: "#F0F4FF",
-  },
-  topCardIconContainer: {
-    width: scale(48),
-    height: scale(48),
-    borderRadius: scale(24),
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  topCardIconContainerActive: {
-    backgroundColor: "#5E82FF",
-  },
-  topCardIcon: {
-    fontSize: fontScale(24),
-  },
-  topCardLabel: {
-    fontSize: fontScale(14),
-    fontWeight: "700",
-    color: "#374151",
-  },
-  topCardLabelActive: {
-    color: "#5E82FF",
-  },
-  topCardCount: {
-    fontSize: fontScale(12),
-    fontWeight: "600",
-    color: "#9CA3AF",
-  },
-  topCardCountActive: {
-    color: "#5E82FF",
   },
   // 과목 필터 스크롤
   subjectScroll: {
     paddingBottom: scale(4),
     gap: scale(10),
-  },
-  subjectChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: scale(18),
-    paddingVertical: scale(10),
-    borderRadius: scale(20),
-    backgroundColor: "#F3F4F6",
-    borderWidth: 2,
-    borderColor: "#F3F4F6",
-    gap: scale(6),
-  },
-  subjectChipActive: {
-    backgroundColor: "#EEF3FF",
-    borderColor: "#5E82FF",
-  },
-  subjectEmoji: {
-    fontSize: fontScale(16),
-  },
-  subjectText: {
-    fontSize: fontScale(14),
-    fontWeight: "600",
-    color: "#6B7280",
-  },
-  subjectTextActive: {
-    color: "#5E82FF",
-    fontWeight: "700",
   },
   // 카드 목록 레이아웃 (2열 그리드)
   cardList: {
@@ -632,188 +314,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: scale(16),
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    position: "relative",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-    width: "48%",
-  },
-  cardPressable: {
-    padding: scale(16),
-  },
-  closeBtn: {
-    position: "absolute",
-    right: scale(14),
-    top: scale(14),
-    width: scale(30),
-    height: scale(30),
-    borderRadius: scale(15),
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F3F4F6",
-    zIndex: 10,
-    elevation: 10,
-  },
-  closeIcon: {
-    width: scale(14),
-    height: scale(14),
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: scale(6),
-    gap: scale(6),
-  },
-  cardTitle: {
-    fontSize: fontScale(15),
-    fontWeight: "800",
-    color: "#111827",
-    flex: 1,
-  },
-  cardSubjectIcon: {
-    fontSize: fontScale(18),
-  },
-  cardSubject: {
-    fontSize: fontScale(11),
-    fontWeight: "600",
-    color: "#9CA3AF",
-    marginBottom: scale(6),
-  },
-  cardDesc: {
-    fontSize: fontScale(12),
-    fontWeight: "500",
-    color: "#374151",
-    lineHeight: fontScale(18),
-    marginBottom: scale(10),
-  },
-  cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: scale(8),
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
-  },
-  cardProgress: {
-    fontSize: fontScale(20),
-    fontWeight: "700",
-    color: "#5E82FF",
-  },
-  cardDays: {
-    fontSize: fontScale(10),
-    fontWeight: "600",
-    color: "#9CA3AF",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: scale(20),
-    padding: scale(28),
-    width: scale(300),
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: fontScale(20),
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: scale(12),
-  },
-  modalMessage: {
-    fontSize: fontScale(15),
-    fontWeight: "500",
-    color: "#6B7280",
-    textAlign: "center",
-    lineHeight: fontScale(22),
-    marginBottom: scale(24),
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: scale(12),
-    width: "100%",
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: scale(14),
-    borderRadius: scale(12),
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalButtonCancel: {
-    backgroundColor: "#F3F4F6",
-  },
-  modalButtonConfirm: {
-    backgroundColor: "#EF4444",
-  },
-  modalButtonTextCancel: {
-    fontSize: fontScale(15),
-    fontWeight: "700",
-    color: "#6B7280",
-  },
-  modalButtonTextConfirm: {
-    fontSize: fontScale(15),
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  searchModalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  searchModalContent: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: scale(24),
-    borderTopRightRadius: scale(24),
-    padding: scale(24),
-    minHeight: scale(300),
-  },
-  searchModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: scale(20),
-  },
-  searchModalTitle: {
-    fontSize: fontScale(22),
-    fontWeight: "800",
-    color: "#111827",
-  },
-  searchModalCloseIcon: {
-    width: scale(24),
-    height: scale(24),
-  },
-  searchInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    borderRadius: scale(12),
-    padding: scale(16),
-    gap: scale(12),
-    marginBottom: scale(12),
-  },
-  searchIcon: {
-    fontSize: fontScale(20),
-  },
-  searchPlaceholder: {
-    fontSize: fontScale(16),
-    color: "#9CA3AF",
-    flex: 1,
-  },
-  searchHint: {
-    fontSize: fontScale(13),
-    color: "#9CA3AF",
-    textAlign: "center",
   },
 });
