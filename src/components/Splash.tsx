@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Image, Dimensions } from 'react-native';
+import { View, StyleSheet, Animated, Image, Text, useWindowDimensions } from 'react-native';
 
 type Props = {
   onDone?: () => void;
@@ -8,6 +8,7 @@ type Props = {
 
 export default function Splash({ onDone, duration = 1500 }: Props) {
   const opacity = useRef(new Animated.Value(1)).current;
+  const { width } = useWindowDimensions();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -21,7 +22,6 @@ export default function Splash({ onDone, duration = 1500 }: Props) {
     return () => clearTimeout(timer);
   }, [duration, onDone, opacity]);
 
-  const { width } = Dimensions.get('window');
   // 패드 기준 비율 유지용 – 화면 크기에 따라 살짝 조정
   const characterSize = Math.min(260, width * 0.35);
   const logoWidth = Math.min(200, width * 0.28);
@@ -39,6 +39,9 @@ export default function Splash({ onDone, duration = 1500 }: Props) {
           style={{ width: logoWidth, height: 60, marginTop: 24 }}
           resizeMode="contain"
         />
+        <Text style={styles.deviceNotice}>
+          이 앱은 iPad 전용입니다.{'\n'}iPad로 접속해 주세요.
+        </Text>
       </View>
     </Animated.View>
   );
@@ -56,5 +59,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     // 위/아래 여백은 디자인처럼 위쪽이 조금 더 많이 비어 보이도록
     marginTop: -40,
+  },
+  deviceNotice: {
+    marginTop: 20,
+    color: '#6B7280',
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
+    textAlign: 'center',
   },
 });
