@@ -26,6 +26,13 @@ export type KeywordInstance = {
     base: BlankItem | null;
 };
 
+export type KeywordOccurrence = {
+    instanceId: number;
+    pageIndex: number;
+    candidateId?: string;
+    normalizedWord: string;
+};
+
 export function normalizeBlankWord(value: string) {
     return value.replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -64,6 +71,50 @@ export function buildKeywordInstances(
             base: baseInfoByWord.get(token.baseWord) ?? sameWordBlankItem,
         };
     });
+}
+
+export function selectReviewKeywordInstanceIds({
+    reviewBlankItems,
+    keywordOccurrences,
+    targetCount,
+}: {
+    reviewBlankItems: BlankItemSave[];
+    keywordOccurrences: KeywordOccurrence[];
+    targetCount: number;
+}) {
+    const remaining = [...keywordOccurrences];
+    const selected: number[] = [];
+
+    reviewBlankItems.forEach((item) => {
+        const normalizedWord = normalizeBlankWord(item.word);
+        let matchIndex = item.candidate_id
+            ? remaining.findIndex(
+                (occurrence) =>
+                    occurrence.pageIndex === item.page_index
+                    && occurrence.candidateId === item.candidate_id,
+            )
+            : -1;
+
+        // 이전 저장본의 위치 ID가 현재 렌더링 ID와 달라도 같은 단어로 복원한다.
+        if (matchIndex < 0) {
+            matchIndex = remaining.findIndex(
+                (occurrence) =>
+                    occurrence.pageIndex === item.page_index
+                    && occurrence.normalizedWord === normalizedWord,
+            );
+        }
+
+        if (matchIndex < 0) return;
+        const [matched] = remaining.splice(matchIndex, 1);
+        selected.push(matched.instanceId);
+    });
+
+    for (const occurrence of remaining) {
+        if (selected.length >= targetCount) break;
+        selected.push(occurrence.instanceId);
+    }
+
+    return selected.slice(0, targetCount);
 }
 
 export function buildOrderedStudySaveData(params: {

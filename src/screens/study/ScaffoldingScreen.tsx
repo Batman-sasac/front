@@ -23,7 +23,11 @@ import type {
   ScaffoldingPayload,
 } from "../../api/ocr";
 import { StudySource } from "../input_data/studySource";
-import { buildKeywordInstances, normalizeBlankWord } from "./scaffoldingLogic";
+import {
+  buildKeywordInstances,
+  normalizeBlankWord,
+  selectReviewKeywordInstanceIds,
+} from "./scaffoldingLogic";
 import { tokenizeWithKeywords } from "./tokenizeKeywords";
 import SpeechBubbleShell from "../../components/SpeechBubbleShell";
 import StudyImageActionButton from "../../components/study/StudyImageActionButton";
@@ -430,26 +434,14 @@ export default function ScaffoldingScreen({
 
     const userAnswers = payload?.user_answers || [];
     let selected: number[] = [];
+    const targetCount = Math.min(20, keywordInstances.length);
 
     if (reviewBlankItems.length > 0) {
-      const remaining = [...keywordOccurrenceOrder];
-      selected = reviewBlankItems
-        .map((item) => {
-          const normalizedWord = normalizeBlankWord(item.word);
-          const matchIndex = remaining.findIndex((occurrence) => {
-            if (occurrence.pageIndex !== item.page_index) return false;
-            if (item.candidate_id) {
-              return occurrence.candidateId === item.candidate_id;
-            }
-            return occurrence.normalizedWord === normalizedWord;
-          });
-          if (matchIndex < 0) return null;
-          const [matched] = remaining.splice(matchIndex, 1);
-          return matched.instanceId;
-        })
-        .filter(
-          (instanceId): instanceId is number => typeof instanceId === "number",
-        );
+      selected = selectReviewKeywordInstanceIds({
+        reviewBlankItems,
+        keywordOccurrences: keywordOccurrenceOrder,
+        targetCount,
+      });
     }
 
     // 1) 저장된 빈칸 정의를 최우선으로 사용
@@ -477,11 +469,17 @@ export default function ScaffoldingScreen({
     }
 
     // 3) 최종 안전장치: 복습은 항상 최대 20개 빈칸 표시
-    const targetCount = Math.min(20, keywordInstances.length);
     if (selected.length === 0) {
       selected = keywordInstances
         .slice(0, targetCount)
         .map((ki) => ki.instanceId);
+    } else if (selected.length < targetCount) {
+      const selectedSet = new Set(selected);
+      const supplements = keywordInstances
+        .filter((instance) => !selectedSet.has(instance.instanceId))
+        .slice(0, targetCount - selected.length)
+        .map((instance) => instance.instanceId);
+      selected = [...selected, ...supplements];
     } else if (selected.length > targetCount) {
       selected = selected.slice(0, targetCount);
     }
@@ -701,11 +699,20 @@ export default function ScaffoldingScreen({
 
   const onStartLearning = () => {
     const requiredTotal =
-      currentRound === 1
+      isReviewMode
+        ? orderedSelectedBlanks.length
+        : currentRound === 1
         ? round1Count
         : currentRound === 2
           ? round2Count
           : round3Count;
+    if (isReviewMode && requiredTotal === 0) {
+      setPopupTitle("복습 불가");
+      setPopupMessage("복습할 빈칸을 불러오지 못했습니다.");
+      setPopupOnConfirm(null);
+      setPopupVisible(true);
+      return;
+    }
     if (orderedSelectedBlanks.length < requiredTotal) {
       setPopupTitle("알림");
       setPopupMessage(`${requiredTotal}개가 아직 설정되지 않았어요!`);
