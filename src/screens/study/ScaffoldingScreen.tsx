@@ -340,11 +340,48 @@ export default function ScaffoldingScreen({
           tokenEntries,
         };
       });
+      const tables = (page.tables ?? []).map((table, tableIndex) => ({
+        key: `page-${pageIndex}-table-${tableIndex}`,
+        rows: table.rows.map((row, rowIndex) =>
+          row.map((cell, colIndex) => {
+            const tokenEntries = tokenizeWithKeywords(cell, pageKeywords).map(
+              (token, tokenIndex) => {
+                const renderToken: RenderToken =
+                  token.type === "keyword"
+                    ? { ...token, instanceId: nextInstanceId++ }
+                    : token;
+
+                return {
+                  key: `page-${pageIndex}-table-${tableIndex}-row-${rowIndex}-cell-${colIndex}-token-${nextTokenIndex}`,
+                  globalIndex: nextTokenIndex++,
+                  pageIndex,
+                  candidateId:
+                    token.type === "keyword"
+                      ? buildTableCandidateId({
+                        tableIndex,
+                        rowIndex,
+                        colIndex,
+                        tokenIndex,
+                      })
+                      : undefined,
+                  token: renderToken,
+                };
+              },
+            );
+
+            return {
+              key: `page-${pageIndex}-table-${tableIndex}-row-${rowIndex}-cell-${colIndex}`,
+              tokenEntries,
+            };
+          }),
+        ),
+      }));
 
       return {
         pageIndex,
         page,
         sections,
+        tables,
         hasLayoutBlocks: (page.layout_blocks?.length ?? 0) > 0,
       };
     });
@@ -353,9 +390,7 @@ export default function ScaffoldingScreen({
   const tokens = useMemo(
     () =>
       pageRenderData.flatMap((page) =>
-        page.sections.flatMap((section) =>
-          section.tokenEntries.map((entry) => entry.token),
-        ),
+        getPageRenderTokenEntries(page).map((entry) => entry.token),
       ),
     [pageRenderData],
   );
@@ -372,21 +407,19 @@ export default function ScaffoldingScreen({
   const keywordOccurrenceOrder = useMemo(
     () =>
       pageRenderData.flatMap((page) =>
-        page.sections.flatMap((section) =>
-          section.tokenEntries
-            .filter(
-              (
-                entry,
-              ): entry is RenderTokenEntry & { token: KeywordTokenWithId } =>
-                entry.token.type === "keyword",
-            )
-            .map((entry) => ({
-              instanceId: entry.token.instanceId,
-              pageIndex: entry.pageIndex,
-              candidateId: entry.candidateId,
-              normalizedWord: normalizeBlankWord(entry.token.baseWord),
-            })),
-        ),
+        getPageRenderTokenEntries(page)
+          .filter(
+            (
+              entry,
+            ): entry is RenderTokenEntry & { token: KeywordTokenWithId } =>
+              entry.token.type === "keyword",
+          )
+          .map((entry) => ({
+            instanceId: entry.token.instanceId,
+            pageIndex: entry.pageIndex,
+            candidateId: entry.candidateId,
+            normalizedWord: normalizeBlankWord(entry.token.baseWord),
+          })),
       ),
     [pageRenderData],
   );
@@ -405,7 +438,7 @@ export default function ScaffoldingScreen({
           const normalizedWord = normalizeBlankWord(item.word);
           const matchIndex = remaining.findIndex((occurrence) => {
             if (occurrence.pageIndex !== item.page_index) return false;
-            if (item.candidate_id && occurrence.candidateId) {
+            if (item.candidate_id) {
               return occurrence.candidateId === item.candidate_id;
             }
             return occurrence.normalizedWord === normalizedWord;
@@ -1961,8 +1994,60 @@ export default function ScaffoldingScreen({
     );
   };
 
+  const renderTable = (table: PageRenderTable, tableIndex: number) => {
+    const columnCount = Math.max(...table.rows.map((row) => row.length), 0);
+    if (columnCount === 0) return null;
+
+    return (
+      <View key={table.key} style={styles.pageTableWrap}>
+        <Text style={styles.pageTableTitle}>표 {tableIndex + 1}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.pageTable}>
+            {table.rows.map((row, rowIndex) => {
+              const normalizedRow = Array.from(
+                { length: columnCount },
+                (_, colIndex) => row[colIndex],
+              );
+
+              return (
+                <View
+                  key={`${table.key}-row-${rowIndex}`}
+                  style={styles.pageTableRow}
+                >
+                  {normalizedRow.map((cell, colIndex) => (
+                    <View
+                      key={
+                        cell?.key ??
+                        `${table.key}-empty-${rowIndex}-${colIndex}`
+                      }
+                      style={[
+                        styles.pageTableCell,
+                        rowIndex === 0 && styles.pageTableHeaderCell,
+                      ]}
+                    >
+                      {cell ? (
+                        <View style={styles.pageTableCellFlow}>
+                          {cell.tokenEntries.map((entry) =>
+                            renderTokenEntry(entry, {
+                              compact: true,
+                              spacingStyle: { paddingHorizontal: scale(2) },
+                            }),
+                          )}
+                        </View>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
   const renderStructuredPage = (pageRender: PageRenderPage) => {
-    const { page, sections, pageIndex, hasLayoutBlocks } = pageRender;
+    const { page, sections, tables, pageIndex, hasLayoutBlocks } = pageRender;
 
     return (
       <View key={`page-${pageIndex}`} style={styles.pageCard}>
@@ -1995,6 +2080,7 @@ export default function ScaffoldingScreen({
             </View>
           )}
 
+          {tables.map(renderTable)}
         </View>
       </View>
     );
@@ -2429,12 +2515,47 @@ type PageRenderSection = {
   blankCandidate?: BlankCandidate;
   tokenEntries: RenderTokenEntry[];
 };
+type PageRenderTableCell = {
+  key: string;
+  tokenEntries: RenderTokenEntry[];
+};
+type PageRenderTable = {
+  key: string;
+  rows: PageRenderTableCell[][];
+};
 type PageRenderPage = {
   pageIndex: number;
   page: PageItem;
   sections: PageRenderSection[];
+  tables: PageRenderTable[];
   hasLayoutBlocks: boolean;
 };
+
+function getPageRenderTokenEntries(page: PageRenderPage) {
+  return [
+    ...page.sections.flatMap((section) => section.tokenEntries),
+    ...page.tables.flatMap((table) =>
+      table.rows.flatMap((row) =>
+        row.flatMap((cell) => cell.tokenEntries),
+      ),
+    ),
+  ];
+}
+
+function buildTableCandidateId({
+  tableIndex,
+  rowIndex,
+  colIndex,
+  tokenIndex,
+}: {
+  tableIndex: number;
+  rowIndex: number;
+  colIndex: number;
+  tokenIndex: number;
+}) {
+  return `table-${tableIndex}-${rowIndex}-${colIndex}-${tokenIndex}`;
+}
+
 type CoordinateLine = {
   key: string;
   sections: Array<PageRenderSection & { block: LayoutBlock }>;
@@ -2695,6 +2816,42 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flexShrink: 0,
+  },
+  pageTableWrap: {
+    gap: scale(6),
+  },
+  pageTableTitle: {
+    fontSize: fontScale(12),
+    lineHeight: fontScale(18),
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  pageTable: {
+    borderWidth: 1,
+    borderColor: "#D8DEEF",
+    borderRadius: scale(10),
+    overflow: "hidden",
+  },
+  pageTableRow: {
+    flexDirection: "row",
+  },
+  pageTableCell: {
+    minWidth: scale(88),
+    maxWidth: scale(240),
+    paddingHorizontal: scale(10),
+    paddingVertical: scale(8),
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#D8DEEF",
+    backgroundColor: "#FFFFFF",
+  },
+  pageTableHeaderCell: {
+    backgroundColor: "#EEF2FF",
+  },
+  pageTableCellFlow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
   },
   flow: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start" },
   newline: { width: "100%", height: fontScale(14) },
