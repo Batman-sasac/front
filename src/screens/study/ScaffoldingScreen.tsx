@@ -25,6 +25,7 @@ import type {
 import { StudySource } from "../input_data/studySource";
 import {
   buildKeywordInstances,
+  gradeKeywordInstances,
   normalizeBlankWord,
   selectReviewKeywordInstanceIds,
 } from "./scaffoldingLogic";
@@ -118,8 +119,7 @@ export default function ScaffoldingScreen({
   // 설명
   const [activeBlankId, setActiveBlankId] = useState<number | null>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({}); // instanceId 기반
-  const [graded, setGraded] = useState<Record<number, GradeState>>({}); // blankId 기반
-  const [wrongInstances, setWrongInstances] = useState<Set<number>>(new Set());
+  const [graded, setGraded] = useState<Record<number, GradeState>>({}); // instanceId 기반
   const [selectedBlanks, setSelectedBlanks] = useState<number[]>([]); // 사용자가 선택한 빈칸 instanceId
   const [selectionOrder, setSelectionOrder] = useState<Record<number, number>>(
     {},
@@ -592,11 +592,9 @@ export default function ScaffoldingScreen({
 
   const correctCount = useMemo(() => {
     return orderedSelectedBlanks.reduce((acc, instanceId) => {
-      const blankId = blankIdByInstance.get(instanceId);
-      if (blankId == null) return acc;
-      return graded[blankId] === "correct" ? acc + 1 : acc;
+      return graded[instanceId] === "correct" ? acc + 1 : acc;
     }, 0);
-  }, [orderedSelectedBlanks, blankIdByInstance, graded]);
+  }, [orderedSelectedBlanks, graded]);
 
   const barStates: GradeState[] = useMemo(() => {
     const arr: GradeState[] = Array.from({ length: totalBars }, () => "idle");
@@ -604,12 +602,10 @@ export default function ScaffoldingScreen({
     if (!isFinalStep) return arr;
 
     orderedSelectedBlanks.slice(0, totalBars).forEach((instanceId, idx) => {
-      const blankId = blankIdByInstance.get(instanceId);
-      if (blankId == null) return;
-      arr[idx] = graded[blankId] ?? "idle";
+      arr[idx] = graded[instanceId] ?? "idle";
     });
     return arr;
-  }, [orderedSelectedBlanks, blankIdByInstance, graded, step]);
+  }, [orderedSelectedBlanks, graded, step]);
 
   const roundLabel = useMemo(() => {
     const [round, substep] = step.split("-");
@@ -1022,28 +1018,14 @@ export default function ScaffoldingScreen({
   };
 
   const onGrade = () => {
-    const next: Record<number, GradeState> = { ...graded };
-    const newWrong = new Set(wrongInstances);
-
-    // 설명
-    orderedSelectedBlanks.forEach((instanceId) => {
-      const ins = keywordInstances.find((ki) => ki.instanceId === instanceId);
-      if (!ins) return;
-
-      const user = (answers[ins.instanceId] ?? "").trim();
-      const isCorrect = normalize(user) === normalize(ins.word);
-
-      if (isCorrect) {
-        next[ins.blankId] = "correct";
-        newWrong.delete(ins.blankId);
-      } else {
-        next[ins.blankId] = "wrong";
-        newWrong.add(ins.blankId);
-      }
-    });
-
-    setGraded(next);
-    setWrongInstances(newWrong);
+    setGraded(
+      gradeKeywordInstances({
+        selectedInstanceIds: orderedSelectedBlanks,
+        keywordInstances,
+        answers,
+        previousGrades: graded,
+      }),
+    );
 
     if (step === "1-2") setStep("1-3");
     else if (step === "2-2") setStep("2-3");
@@ -1271,10 +1253,7 @@ export default function ScaffoldingScreen({
     }
 
     const instanceId = t.instanceId;
-    const instanceInfo = keywordInstanceById.get(instanceId);
-    const grade = instanceInfo
-      ? (graded[instanceInfo.blankId] ?? "idle")
-      : "idle";
+    const grade = graded[instanceId] ?? "idle";
     const userValue = answers[instanceId] ?? "";
     const substep = step.split("-")[1];
     const isSelected = selectedBlankSet.has(instanceId);
@@ -1732,10 +1711,7 @@ export default function ScaffoldingScreen({
     if (token.type !== "keyword") return null;
 
     const instanceId = token.instanceId;
-    const instanceInfo = keywordInstanceById.get(instanceId);
-    const grade = instanceInfo
-      ? (graded[instanceInfo.blankId] ?? "idle")
-      : "idle";
+    const grade = graded[instanceId] ?? "idle";
     const userValue = answers[instanceId] ?? "";
     const substep = step.split("-")[1];
     const isSelected = selectedBlankSet.has(instanceId);

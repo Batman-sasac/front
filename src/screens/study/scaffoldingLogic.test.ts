@@ -5,6 +5,7 @@ import {
     KeywordTokenWithId,
     buildKeywordInstances,
     buildOrderedStudySaveData,
+    gradeKeywordInstances,
     selectReviewKeywordInstanceIds,
 } from './scaffoldingLogic';
 
@@ -61,6 +62,26 @@ describe('복습 빈칸 복원', () => {
         expect(selected).toHaveLength(4);
         expect(selected.slice(0, 2)).toEqual([1, 3]);
         expect(new Set(selected).size).toBe(4);
+    });
+});
+
+describe('중복 단어 독립 채점', () => {
+    test('같은 blankId를 공유해도 각 instanceId의 답안을 따로 채점한다', () => {
+        const keywordInstances = [
+            { instanceId: 10, blankId: 3, word: '위험', base: null },
+            { instanceId: 11, blankId: 3, word: '위험', base: null },
+        ];
+
+        const result = gradeKeywordInstances({
+            selectedInstanceIds: [10, 11],
+            keywordInstances,
+            answers: { 11: '위험' },
+        });
+
+        expect(result).toEqual({
+            10: 'wrong',
+            11: 'correct',
+        });
     });
 });
 

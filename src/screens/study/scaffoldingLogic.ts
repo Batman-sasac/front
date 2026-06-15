@@ -26,6 +26,8 @@ export type KeywordInstance = {
     base: BlankItem | null;
 };
 
+export type KeywordGradeState = 'idle' | 'correct' | 'wrong';
+
 export type KeywordOccurrence = {
     instanceId: number;
     pageIndex: number;
@@ -115,6 +117,34 @@ export function selectReviewKeywordInstanceIds({
     }
 
     return selected.slice(0, targetCount);
+}
+
+export function gradeKeywordInstances({
+    selectedInstanceIds,
+    keywordInstances,
+    answers,
+    previousGrades = {},
+}: {
+    selectedInstanceIds: number[];
+    keywordInstances: KeywordInstance[];
+    answers: Record<number, string>;
+    previousGrades?: Record<number, KeywordGradeState>;
+}) {
+    const next = { ...previousGrades };
+    const instanceById = new Map(
+        keywordInstances.map((instance) => [instance.instanceId, instance] as const),
+    );
+
+    selectedInstanceIds.forEach((instanceId) => {
+        const instance = instanceById.get(instanceId);
+        if (!instance) return;
+        next[instanceId] =
+            normalizeBlankWord(answers[instanceId] ?? '') === normalizeBlankWord(instance.word)
+                ? 'correct'
+                : 'wrong';
+    });
+
+    return next;
 }
 
 export function buildOrderedStudySaveData(params: {
