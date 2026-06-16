@@ -5,6 +5,8 @@ import {
     KeywordTokenWithId,
     buildKeywordInstances,
     buildOrderedStudySaveData,
+    gradeKeywordInstances,
+    selectReviewKeywordInstanceIds,
 } from './scaffoldingLogic';
 
 describe('키워드 인스턴스 매핑', () => {
@@ -24,6 +26,62 @@ describe('키워드 인스턴스 매핑', () => {
 
         expect(instances.map((instance) => instance.blankId)).toEqual([0, 0, 1]);
         expect(instances.map((instance) => instance.instanceId)).toEqual([1, 2, 3]);
+    });
+});
+
+describe('복습 빈칸 복원', () => {
+    const keywordOccurrences = [
+        { instanceId: 1, pageIndex: 0, candidateId: 'layout-1', normalizedWord: '설계' },
+        { instanceId: 2, pageIndex: 0, candidateId: 'table-0-1-0-0', normalizedWord: '설계' },
+        { instanceId: 3, pageIndex: 0, candidateId: 'table-0-2-0-0', normalizedWord: '피드백' },
+        { instanceId: 4, pageIndex: 0, candidateId: 'table-0-3-0-0', normalizedWord: '테스트' },
+    ];
+
+    test('저장된 표 위치 ID가 일치하면 동일한 표 빈칸을 우선 복원한다', () => {
+        const selected = selectReviewKeywordInstanceIds({
+            reviewBlankItems: [
+                { blank_index: 0, word: '설계', page_index: 0, candidate_id: 'table-0-1-0-0' },
+            ],
+            keywordOccurrences,
+            targetCount: 1,
+        });
+
+        expect(selected).toEqual([2]);
+    });
+
+    test('이전 위치 ID가 현재와 달라도 같은 페이지의 같은 단어로 복원하고 부족한 칸을 보충한다', () => {
+        const selected = selectReviewKeywordInstanceIds({
+            reviewBlankItems: [
+                { blank_index: 0, word: '설계', page_index: 0, candidate_id: 'old-table-id' },
+                { blank_index: 1, word: '피드백', page_index: 0, candidate_id: 'old-feedback-id' },
+            ],
+            keywordOccurrences,
+            targetCount: 4,
+        });
+
+        expect(selected).toHaveLength(4);
+        expect(selected.slice(0, 2)).toEqual([1, 3]);
+        expect(new Set(selected).size).toBe(4);
+    });
+});
+
+describe('중복 단어 독립 채점', () => {
+    test('같은 blankId를 공유해도 각 instanceId의 답안을 따로 채점한다', () => {
+        const keywordInstances = [
+            { instanceId: 10, blankId: 3, word: '위험', base: null },
+            { instanceId: 11, blankId: 3, word: '위험', base: null },
+        ];
+
+        const result = gradeKeywordInstances({
+            selectedInstanceIds: [10, 11],
+            keywordInstances,
+            answers: { 11: '위험' },
+        });
+
+        expect(result).toEqual({
+            10: 'wrong',
+            11: 'correct',
+        });
     });
 });
 

@@ -23,7 +23,12 @@ import type {
   ScaffoldingPayload,
 } from "../../api/ocr";
 import { StudySource } from "../input_data/studySource";
-import { buildKeywordInstances, normalizeBlankWord } from "./scaffoldingLogic";
+import {
+  buildKeywordInstances,
+  gradeKeywordInstances,
+  normalizeBlankWord,
+  selectReviewKeywordInstanceIds,
+} from "./scaffoldingLogic";
 import { tokenizeWithKeywords } from "./tokenizeKeywords";
 import SpeechBubbleShell from "../../components/SpeechBubbleShell";
 import StudyImageActionButton from "../../components/study/StudyImageActionButton";
@@ -114,8 +119,7 @@ export default function ScaffoldingScreen({
   // 설명
   const [activeBlankId, setActiveBlankId] = useState<number | null>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({}); // instanceId 기반
-  const [graded, setGraded] = useState<Record<number, GradeState>>({}); // blankId 기반
-  const [wrongInstances, setWrongInstances] = useState<Set<number>>(new Set());
+  const [graded, setGraded] = useState<Record<number, GradeState>>({}); // instanceId 기반
   const [selectedBlanks, setSelectedBlanks] = useState<number[]>([]); // 사용자가 선택한 빈칸 instanceId
   const [selectionOrder, setSelectionOrder] = useState<Record<number, number>>(
     {},
@@ -340,11 +344,48 @@ export default function ScaffoldingScreen({
           tokenEntries,
         };
       });
+      const tables = (page.tables ?? []).map((table, tableIndex) => ({
+        key: `page-${pageIndex}-table-${tableIndex}`,
+        rows: table.rows.map((row, rowIndex) =>
+          row.map((cell, colIndex) => {
+            const tokenEntries = tokenizeWithKeywords(cell, pageKeywords).map(
+              (token, tokenIndex) => {
+                const renderToken: RenderToken =
+                  token.type === "keyword"
+                    ? { ...token, instanceId: nextInstanceId++ }
+                    : token;
+
+                return {
+                  key: `page-${pageIndex}-table-${tableIndex}-row-${rowIndex}-cell-${colIndex}-token-${nextTokenIndex}`,
+                  globalIndex: nextTokenIndex++,
+                  pageIndex,
+                  candidateId:
+                    token.type === "keyword"
+                      ? buildTableCandidateId({
+                        tableIndex,
+                        rowIndex,
+                        colIndex,
+                        tokenIndex,
+                      })
+                      : undefined,
+                  token: renderToken,
+                };
+              },
+            );
+
+            return {
+              key: `page-${pageIndex}-table-${tableIndex}-row-${rowIndex}-cell-${colIndex}`,
+              tokenEntries,
+            };
+          }),
+        ),
+      }));
 
       return {
         pageIndex,
         page,
         sections,
+        tables,
         hasLayoutBlocks: (page.layout_blocks?.length ?? 0) > 0,
       };
     });
@@ -353,9 +394,7 @@ export default function ScaffoldingScreen({
   const tokens = useMemo(
     () =>
       pageRenderData.flatMap((page) =>
-        page.sections.flatMap((section) =>
-          section.tokenEntries.map((entry) => entry.token),
-        ),
+        getPageRenderTokenEntries(page).map((entry) => entry.token),
       ),
     [pageRenderData],
   );
@@ -372,21 +411,19 @@ export default function ScaffoldingScreen({
   const keywordOccurrenceOrder = useMemo(
     () =>
       pageRenderData.flatMap((page) =>
-        page.sections.flatMap((section) =>
-          section.tokenEntries
-            .filter(
-              (
-                entry,
-              ): entry is RenderTokenEntry & { token: KeywordTokenWithId } =>
-                entry.token.type === "keyword",
-            )
-            .map((entry) => ({
-              instanceId: entry.token.instanceId,
-              pageIndex: entry.pageIndex,
-              candidateId: entry.candidateId,
-              normalizedWord: normalizeBlankWord(entry.token.baseWord),
-            })),
-        ),
+        getPageRenderTokenEntries(page)
+          .filter(
+            (
+              entry,
+            ): entry is RenderTokenEntry & { token: KeywordTokenWithId } =>
+              entry.token.type === "keyword",
+          )
+          .map((entry) => ({
+            instanceId: entry.token.instanceId,
+            pageIndex: entry.pageIndex,
+            candidateId: entry.candidateId,
+            normalizedWord: normalizeBlankWord(entry.token.baseWord),
+          })),
       ),
     [pageRenderData],
   );
@@ -397,26 +434,14 @@ export default function ScaffoldingScreen({
 
     const userAnswers = payload?.user_answers || [];
     let selected: number[] = [];
+    const targetCount = Math.min(20, keywordInstances.length);
 
     if (reviewBlankItems.length > 0) {
-      const remaining = [...keywordOccurrenceOrder];
-      selected = reviewBlankItems
-        .map((item) => {
-          const normalizedWord = normalizeBlankWord(item.word);
-          const matchIndex = remaining.findIndex((occurrence) => {
-            if (occurrence.pageIndex !== item.page_index) return false;
-            if (item.candidate_id && occurrence.candidateId) {
-              return occurrence.candidateId === item.candidate_id;
-            }
-            return occurrence.normalizedWord === normalizedWord;
-          });
-          if (matchIndex < 0) return null;
-          const [matched] = remaining.splice(matchIndex, 1);
-          return matched.instanceId;
-        })
-        .filter(
-          (instanceId): instanceId is number => typeof instanceId === "number",
-        );
+      selected = selectReviewKeywordInstanceIds({
+        reviewBlankItems,
+        keywordOccurrences: keywordOccurrenceOrder,
+        targetCount,
+      });
     }
 
     // 1) 저장된 빈칸 정의를 최우선으로 사용
@@ -444,11 +469,17 @@ export default function ScaffoldingScreen({
     }
 
     // 3) 최종 안전장치: 복습은 항상 최대 20개 빈칸 표시
-    const targetCount = Math.min(20, keywordInstances.length);
     if (selected.length === 0) {
       selected = keywordInstances
         .slice(0, targetCount)
         .map((ki) => ki.instanceId);
+    } else if (selected.length < targetCount) {
+      const selectedSet = new Set(selected);
+      const supplements = keywordInstances
+        .filter((instance) => !selectedSet.has(instance.instanceId))
+        .slice(0, targetCount - selected.length)
+        .map((instance) => instance.instanceId);
+      selected = [...selected, ...supplements];
     } else if (selected.length > targetCount) {
       selected = selected.slice(0, targetCount);
     }
@@ -561,11 +592,9 @@ export default function ScaffoldingScreen({
 
   const correctCount = useMemo(() => {
     return orderedSelectedBlanks.reduce((acc, instanceId) => {
-      const blankId = blankIdByInstance.get(instanceId);
-      if (blankId == null) return acc;
-      return graded[blankId] === "correct" ? acc + 1 : acc;
+      return graded[instanceId] === "correct" ? acc + 1 : acc;
     }, 0);
-  }, [orderedSelectedBlanks, blankIdByInstance, graded]);
+  }, [orderedSelectedBlanks, graded]);
 
   const barStates: GradeState[] = useMemo(() => {
     const arr: GradeState[] = Array.from({ length: totalBars }, () => "idle");
@@ -573,12 +602,10 @@ export default function ScaffoldingScreen({
     if (!isFinalStep) return arr;
 
     orderedSelectedBlanks.slice(0, totalBars).forEach((instanceId, idx) => {
-      const blankId = blankIdByInstance.get(instanceId);
-      if (blankId == null) return;
-      arr[idx] = graded[blankId] ?? "idle";
+      arr[idx] = graded[instanceId] ?? "idle";
     });
     return arr;
-  }, [orderedSelectedBlanks, blankIdByInstance, graded, step]);
+  }, [orderedSelectedBlanks, graded, step]);
 
   const roundLabel = useMemo(() => {
     const [round, substep] = step.split("-");
@@ -668,11 +695,20 @@ export default function ScaffoldingScreen({
 
   const onStartLearning = () => {
     const requiredTotal =
-      currentRound === 1
+      isReviewMode
+        ? orderedSelectedBlanks.length
+        : currentRound === 1
         ? round1Count
         : currentRound === 2
           ? round2Count
           : round3Count;
+    if (isReviewMode && requiredTotal === 0) {
+      setPopupTitle("복습 불가");
+      setPopupMessage("복습할 빈칸을 불러오지 못했습니다.");
+      setPopupOnConfirm(null);
+      setPopupVisible(true);
+      return;
+    }
     if (orderedSelectedBlanks.length < requiredTotal) {
       setPopupTitle("알림");
       setPopupMessage(`${requiredTotal}개가 아직 설정되지 않았어요!`);
@@ -982,28 +1018,14 @@ export default function ScaffoldingScreen({
   };
 
   const onGrade = () => {
-    const next: Record<number, GradeState> = { ...graded };
-    const newWrong = new Set(wrongInstances);
-
-    // 설명
-    orderedSelectedBlanks.forEach((instanceId) => {
-      const ins = keywordInstances.find((ki) => ki.instanceId === instanceId);
-      if (!ins) return;
-
-      const user = (answers[ins.instanceId] ?? "").trim();
-      const isCorrect = normalize(user) === normalize(ins.word);
-
-      if (isCorrect) {
-        next[ins.blankId] = "correct";
-        newWrong.delete(ins.blankId);
-      } else {
-        next[ins.blankId] = "wrong";
-        newWrong.add(ins.blankId);
-      }
-    });
-
-    setGraded(next);
-    setWrongInstances(newWrong);
+    setGraded(
+      gradeKeywordInstances({
+        selectedInstanceIds: orderedSelectedBlanks,
+        keywordInstances,
+        answers,
+        previousGrades: graded,
+      }),
+    );
 
     if (step === "1-2") setStep("1-3");
     else if (step === "2-2") setStep("2-3");
@@ -1231,10 +1253,7 @@ export default function ScaffoldingScreen({
     }
 
     const instanceId = t.instanceId;
-    const instanceInfo = keywordInstanceById.get(instanceId);
-    const grade = instanceInfo
-      ? (graded[instanceInfo.blankId] ?? "idle")
-      : "idle";
+    const grade = graded[instanceId] ?? "idle";
     const userValue = answers[instanceId] ?? "";
     const substep = step.split("-")[1];
     const isSelected = selectedBlankSet.has(instanceId);
@@ -1692,10 +1711,7 @@ export default function ScaffoldingScreen({
     if (token.type !== "keyword") return null;
 
     const instanceId = token.instanceId;
-    const instanceInfo = keywordInstanceById.get(instanceId);
-    const grade = instanceInfo
-      ? (graded[instanceInfo.blankId] ?? "idle")
-      : "idle";
+    const grade = graded[instanceId] ?? "idle";
     const userValue = answers[instanceId] ?? "";
     const substep = step.split("-")[1];
     const isSelected = selectedBlankSet.has(instanceId);
@@ -1961,8 +1977,60 @@ export default function ScaffoldingScreen({
     );
   };
 
+  const renderTable = (table: PageRenderTable, tableIndex: number) => {
+    const columnCount = Math.max(...table.rows.map((row) => row.length), 0);
+    if (columnCount === 0) return null;
+
+    return (
+      <View key={table.key} style={styles.pageTableWrap}>
+        <Text style={styles.pageTableTitle}>표 {tableIndex + 1}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.pageTable}>
+            {table.rows.map((row, rowIndex) => {
+              const normalizedRow = Array.from(
+                { length: columnCount },
+                (_, colIndex) => row[colIndex],
+              );
+
+              return (
+                <View
+                  key={`${table.key}-row-${rowIndex}`}
+                  style={styles.pageTableRow}
+                >
+                  {normalizedRow.map((cell, colIndex) => (
+                    <View
+                      key={
+                        cell?.key ??
+                        `${table.key}-empty-${rowIndex}-${colIndex}`
+                      }
+                      style={[
+                        styles.pageTableCell,
+                        rowIndex === 0 && styles.pageTableHeaderCell,
+                      ]}
+                    >
+                      {cell ? (
+                        <View style={styles.pageTableCellFlow}>
+                          {cell.tokenEntries.map((entry) =>
+                            renderTokenEntry(entry, {
+                              compact: true,
+                              spacingStyle: { paddingHorizontal: scale(2) },
+                            }),
+                          )}
+                        </View>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
   const renderStructuredPage = (pageRender: PageRenderPage) => {
-    const { page, sections, pageIndex, hasLayoutBlocks } = pageRender;
+    const { page, sections, tables, pageIndex, hasLayoutBlocks } = pageRender;
 
     return (
       <View key={`page-${pageIndex}`} style={styles.pageCard}>
@@ -1995,6 +2063,7 @@ export default function ScaffoldingScreen({
             </View>
           )}
 
+          {tables.map(renderTable)}
         </View>
       </View>
     );
@@ -2429,12 +2498,47 @@ type PageRenderSection = {
   blankCandidate?: BlankCandidate;
   tokenEntries: RenderTokenEntry[];
 };
+type PageRenderTableCell = {
+  key: string;
+  tokenEntries: RenderTokenEntry[];
+};
+type PageRenderTable = {
+  key: string;
+  rows: PageRenderTableCell[][];
+};
 type PageRenderPage = {
   pageIndex: number;
   page: PageItem;
   sections: PageRenderSection[];
+  tables: PageRenderTable[];
   hasLayoutBlocks: boolean;
 };
+
+function getPageRenderTokenEntries(page: PageRenderPage) {
+  return [
+    ...page.sections.flatMap((section) => section.tokenEntries),
+    ...page.tables.flatMap((table) =>
+      table.rows.flatMap((row) =>
+        row.flatMap((cell) => cell.tokenEntries),
+      ),
+    ),
+  ];
+}
+
+function buildTableCandidateId({
+  tableIndex,
+  rowIndex,
+  colIndex,
+  tokenIndex,
+}: {
+  tableIndex: number;
+  rowIndex: number;
+  colIndex: number;
+  tokenIndex: number;
+}) {
+  return `table-${tableIndex}-${rowIndex}-${colIndex}-${tokenIndex}`;
+}
+
 type CoordinateLine = {
   key: string;
   sections: Array<PageRenderSection & { block: LayoutBlock }>;
@@ -2695,6 +2799,42 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flexShrink: 0,
+  },
+  pageTableWrap: {
+    gap: scale(6),
+  },
+  pageTableTitle: {
+    fontSize: fontScale(12),
+    lineHeight: fontScale(18),
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  pageTable: {
+    borderWidth: 1,
+    borderColor: "#D8DEEF",
+    borderRadius: scale(10),
+    overflow: "hidden",
+  },
+  pageTableRow: {
+    flexDirection: "row",
+  },
+  pageTableCell: {
+    minWidth: scale(88),
+    maxWidth: scale(240),
+    paddingHorizontal: scale(10),
+    paddingVertical: scale(8),
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#D8DEEF",
+    backgroundColor: "#FFFFFF",
+  },
+  pageTableHeaderCell: {
+    backgroundColor: "#EEF2FF",
+  },
+  pageTableCellFlow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
   },
   flow: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start" },
   newline: { width: "100%", height: fontScale(14) },
