@@ -2,100 +2,68 @@ import React, { useMemo, useRef, useState, useEffect } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   Pressable,
   Image,
   ScrollView,
   TextInput,
   Platform,
   Alert,
-  Modal,
   PanResponder,
   Keyboard,
   LayoutChangeEvent,
 } from "react-native";
 import { scale, fontScale } from "../../lib/layout";
 import type {
-  BlankCandidate,
   BlankItemSave,
   LayoutBlock,
   PageItem,
-  ScaffoldingPayload,
 } from "../../api/ocr";
-import { StudySource } from "../input_data/studySource";
 import {
   buildKeywordInstances,
   gradeKeywordInstances,
   normalizeBlankWord,
   selectReviewKeywordInstanceIds,
 } from "./scaffoldingLogic";
-import { tokenizeWithKeywords } from "./tokenizeKeywords";
-import SpeechBubbleShell from "../../components/SpeechBubbleShell";
 import StudyImageActionButton from "../../components/study/StudyImageActionButton";
 import StudyProgressHeader from "../../components/study/StudyProgressHeader";
+import ScaffoldingHelpChip from "../../components/study/ScaffoldingHelpChip";
 import { getErrorMessage } from "../../app/error/errors";
-import AppLoadingState from "../../components/common/AppLoadingState";
-
-const HINT_BUBBLE_WIDTH = scale(168);
-const DEFAULT_PAGE_CANVAS_ASPECT_RATIO = 0.72;
-
-type Step =
-  | "1-1"
-  | "1-2"
-  | "1-3"
-  | "2-1"
-  | "2-2"
-  | "2-3"
-  | "3-1"
-  | "3-2"
-  | "3-3";
-type GradeState = "idle" | "correct" | "wrong";
-
-export type BlankItem = {
-  id: number;
-  word: string;
-  meaningLong?: string;
-};
-
-type SavePayload = {
-  answers: string[];
-  selectedBlankIds: number[];
-  selectedBlankItems?: BlankItemSave[];
-};
-
-type SaveResult = {
-  earnedXp: number;
-  totalEarnedXp?: number;
-  handledCompletion?: boolean;
-};
-
-type Props = {
-  onBack: () => void;
-  onBackFromCompletion?: () => void; // 학습 완료 후 뒤로가기
-  sources: StudySource[];
-  selectedIndex: number;
-
-  payload: ScaffoldingPayload | null;
-  loading: boolean;
-  error: string | null;
-  onRetry: () => void;
-  onSave?: (payload: SavePayload) => Promise<SaveResult | void>;
-  initialRound?: Step; // 초기 라운드 설정 (복습용)
-  reviewQuizId?: number | null; // 복습용 quiz ID
-  subjectName?: string; // 과목명
-  currentStudyIndex?: number;
-  totalStudyCount?: number;
-  accumulatedEarnedXp?: number;
-};
-
-const BG = "#F6F7FB";
-const CARD = "#FFFFFF";
-const BORDER = "#E5E7EB";
-const MUTED = "#6B7280";
-
-const HIGHLIGHT_BG = "#C7CFFF";
-const CORRECT_BG = "#C5FFBA";
-const WRONG_BG = "#FF9CAD";
+import ScaffoldingHintModal from "../../components/study/ScaffoldingHintModal";
+import ScaffoldingPopup from "../../components/study/ScaffoldingPopup";
+import {
+  ScaffoldingErrorView,
+  ScaffoldingLoadingView,
+} from "../../components/study/ScaffoldingStatusViews";
+import {
+  buildPageRenderData,
+  clampNumber,
+  getPageRenderTokenEntries,
+  normalize,
+  type CoordinateColumn,
+  type CoordinateLine,
+  type KeywordTokenWithId,
+  type PageRenderPage,
+  type PageRenderSection,
+  type PageRenderTable,
+  type RenderTokenEntry,
+  type StructuredTextMetrics,
+} from "./scaffoldingRenderData";
+import { styles } from "./ScaffoldingScreen.styles";
+import {
+  CORRECT_BG,
+  DEFAULT_PAGE_CANVAS_ASPECT_RATIO,
+  HIGHLIGHT_BG,
+  WRONG_BG,
+} from "./scaffoldingConstants";
+import type {
+  BlankItem,
+  GradeState,
+  ScaffoldingScreenProps,
+  ScaffoldingStep,
+} from "./scaffoldingTypes";
+import { useScaffoldingHints } from "./useScaffoldingHints";
+import { useScaffoldingPopup } from "./useScaffoldingPopup";
+import { useScaffoldingProgress } from "./useScaffoldingProgress";
 
 export default function ScaffoldingScreen({
   onBack,
@@ -112,8 +80,8 @@ export default function ScaffoldingScreen({
   currentStudyIndex = 0,
   totalStudyCount = 1,
   accumulatedEarnedXp = 0,
-}: Props) {
-  const [step, setStep] = useState<Step>(initialRound);
+}: ScaffoldingScreenProps) {
+  const [step, setStep] = useState<ScaffoldingStep>(initialRound);
   const isReviewMode = reviewQuizId != null;
 
   // 설명
@@ -124,21 +92,6 @@ export default function ScaffoldingScreen({
   const [selectionOrder, setSelectionOrder] = useState<Record<number, number>>(
     {},
   );
-  const [popupVisible, setPopupVisible] = useState(false);
-  const [popupTitle, setPopupTitle] = useState("");
-  const [popupMessage, setPopupMessage] = useState("");
-  const [popupOnConfirm, setPopupOnConfirm] = useState<(() => void) | null>(
-    null,
-  );
-  const [hintWord, setHintWord] = useState<number | null>(null);
-  const [hintType, setHintType] = useState<"first" | "last" | "chosung" | null>(
-    null,
-  ); // 선택한 힌트 타입
-  const [hintPosition, setHintPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null); // 힌트 모달 위치
-
   const [blankDefsState, setBlankDefsState] = useState<BlankItem[]>([]);
   const [pageCanvasWidth, setPageCanvasWidth] = useState(0);
   const [pageCanvasAspectRatio, setPageCanvasAspectRatio] = useState(
@@ -177,6 +130,19 @@ export default function ScaffoldingScreen({
     box: { x: number; y: number; w: number; h: number };
   } | null>(null);
   const suppressPressAfterLongPressRef = useRef(false);
+  const popup = useScaffoldingPopup();
+  const {
+    hintWord,
+    hintType,
+    hintPosition,
+    setHintWord,
+    setHintType,
+    setHintPosition,
+    closeHint,
+    applyHint,
+  } = useScaffoldingHints({
+    setAnswers,
+  });
 
   // 설명
   const title = payload?.title ?? "";
@@ -257,139 +223,10 @@ export default function ScaffoldingScreen({
   );
 
   /** 중요: 중복 단어마다 instanceId를 부여해서 입력/채점을 분리 */
-  const pageRenderData = useMemo<PageRenderPage[]>(() => {
-    let nextInstanceId = 1;
-    let nextTokenIndex = 0;
-
-    return sourcePages.map((page, pageIndex) => {
-      const allPageCandidates = page.blank_candidates ?? [];
-      const pageKeywords =
-        isReviewMode
-          ? keywordList
-          : page.keywords?.length
-            ? page.keywords
-            : keywordList;
-      const blankCandidateByText = new Map<string, BlankCandidate>(
-        allPageCandidates.map(
-          (candidate) =>
-            [normalizeBlankWord(candidate.text), candidate] as const,
-        ),
-      );
-      const findBlockCandidate = (block: LayoutBlock, fallbackIndex: number) => {
-        const blockText = normalizeBlankWord(block.text ?? "");
-        const matchedCandidates = allPageCandidates.filter(
-          (candidate) => normalizeBlankWord(candidate.text) === blockText,
-        );
-
-        if (matchedCandidates.length === 0) {
-          return allPageCandidates[fallbackIndex];
-        }
-
-        const blockCenterX = block.x + block.width / 2;
-        const blockCenterY = block.y + block.height / 2;
-        return matchedCandidates
-          .map((candidate) => {
-            const candidateCenterX = candidate.x + candidate.width / 2;
-            const candidateCenterY = candidate.y + candidate.height / 2;
-            return {
-              candidate,
-              distance:
-                Math.abs(candidateCenterX - blockCenterX) +
-                Math.abs(candidateCenterY - blockCenterY),
-            };
-          })
-          .sort((a, b) => a.distance - b.distance)[0]?.candidate;
-      };
-      const sectionsSource =
-        page.layout_blocks && page.layout_blocks.length > 0
-          ? page.layout_blocks.map((block, blockIndex) => ({
-            key: `page-${pageIndex}-block-${blockIndex}`,
-            block,
-            text: block.text ?? "",
-            blankCandidate:
-              findBlockCandidate(block, blockIndex) ??
-              blankCandidateByText.get(normalizeBlankWord(block.text ?? "")),
-          }))
-          : [
-            {
-              key: `page-${pageIndex}-flow`,
-              block: undefined,
-              text: page.original_text ?? "",
-              blankCandidate: undefined,
-            },
-          ];
-
-      const sections = sectionsSource.map((section) => {
-        const rawTokens = tokenizeWithKeywords(section.text, pageKeywords);
-        const tokenEntries = rawTokens.map((token) => {
-          const renderToken: RenderToken =
-            token.type === "keyword"
-              ? { ...token, instanceId: nextInstanceId++ }
-              : token;
-
-          return {
-            key: `${section.key}-token-${nextTokenIndex}`,
-            globalIndex: nextTokenIndex++,
-            pageIndex,
-            candidateId:
-              token.type === "keyword" ? section.blankCandidate?.id : undefined,
-            token: renderToken,
-          };
-        });
-
-        return {
-          key: section.key,
-          block: section.block,
-          blankCandidate: section.blankCandidate,
-          tokenEntries,
-        };
-      });
-      const tables = (page.tables ?? []).map((table, tableIndex) => ({
-        key: `page-${pageIndex}-table-${tableIndex}`,
-        rows: table.rows.map((row, rowIndex) =>
-          row.map((cell, colIndex) => {
-            const tokenEntries = tokenizeWithKeywords(cell, pageKeywords).map(
-              (token, tokenIndex) => {
-                const renderToken: RenderToken =
-                  token.type === "keyword"
-                    ? { ...token, instanceId: nextInstanceId++ }
-                    : token;
-
-                return {
-                  key: `page-${pageIndex}-table-${tableIndex}-row-${rowIndex}-cell-${colIndex}-token-${nextTokenIndex}`,
-                  globalIndex: nextTokenIndex++,
-                  pageIndex,
-                  candidateId:
-                    token.type === "keyword"
-                      ? buildTableCandidateId({
-                        tableIndex,
-                        rowIndex,
-                        colIndex,
-                        tokenIndex,
-                      })
-                      : undefined,
-                  token: renderToken,
-                };
-              },
-            );
-
-            return {
-              key: `page-${pageIndex}-table-${tableIndex}-row-${rowIndex}-cell-${colIndex}`,
-              tokenEntries,
-            };
-          }),
-        ),
-      }));
-
-      return {
-        pageIndex,
-        page,
-        sections,
-        tables,
-        hasLayoutBlocks: (page.layout_blocks?.length ?? 0) > 0,
-      };
-    });
-  }, [sourcePages, keywordList, isReviewMode]);
+  const pageRenderData = useMemo(
+    () => buildPageRenderData({ sourcePages, keywordList, isReviewMode }),
+    [sourcePages, keywordList, isReviewMode],
+  );
 
   const tokens = useMemo(
     () =>
@@ -569,61 +406,25 @@ export default function ScaffoldingScreen({
   const pageCanvasHeight =
     pageCanvasWidth > 0 ? pageCanvasWidth / pageCanvasAspectRatio : 0;
 
-  // 설명
-  const totalKeywordCount = Math.min(20, keywordInstances.length);
-  const totalBars = 20;
-  const round1Count = Math.min(5, totalKeywordCount);
-  const round2Count = Math.min(12, totalKeywordCount);
-  const round3Count = Math.min(20, totalKeywordCount);
-
-  const currentRound = useMemo(() => {
-    if (step.startsWith("1-")) return 1;
-    if (step.startsWith("2-")) return 2;
-    if (step.startsWith("3-")) return 3;
-    return 1;
-  }, [step]);
-
-  // 설명
-  const requiredSelectCount = useMemo(() => {
-    if (currentRound === 1) return round1Count; // 1라운드 5개
-    if (currentRound === 2) return 7; // 2라운드 7개 추가
-    return 8; // 3라운드 8개 추가
-  }, [currentRound, round1Count]);
-
-  const correctCount = useMemo(() => {
-    return orderedSelectedBlanks.reduce((acc, instanceId) => {
-      return graded[instanceId] === "correct" ? acc + 1 : acc;
-    }, 0);
-  }, [orderedSelectedBlanks, graded]);
-
-  const barStates: GradeState[] = useMemo(() => {
-    const arr: GradeState[] = Array.from({ length: totalBars }, () => "idle");
-    const isFinalStep = step.endsWith("-3");
-    if (!isFinalStep) return arr;
-
-    orderedSelectedBlanks.slice(0, totalBars).forEach((instanceId, idx) => {
-      arr[idx] = graded[instanceId] ?? "idle";
-    });
-    return arr;
-  }, [orderedSelectedBlanks, graded, step]);
-
-  const roundLabel = useMemo(() => {
-    const [round, substep] = step.split("-");
-    const roundNum = round;
-    const label =
-      substep === "1"
-        ? "단어 확인"
-        : substep === "2"
-          ? "빈칸 학습"
-          : "학습 채점";
-    return `Round ${roundNum} - ${label}`;
-  }, [step]);
-  const safeTotalStudyCount = Math.max(totalStudyCount, 1);
-  const safeCurrentStudyIndex = Math.min(
-    Math.max(currentStudyIndex, 0),
-    safeTotalStudyCount - 1,
-  );
-  const pageIndicatorLabel = `${safeCurrentStudyIndex + 1}/${safeTotalStudyCount}`;
+  const {
+    totalBars,
+    round1Count,
+    round2Count,
+    round3Count,
+    currentRound,
+    requiredSelectCount,
+    correctCount,
+    barStates,
+    roundLabel,
+    pageIndicatorLabel,
+  } = useScaffoldingProgress({
+    step,
+    keywordCount: keywordInstances.length,
+    orderedSelectedBlanks,
+    graded,
+    currentStudyIndex,
+    totalStudyCount,
+  });
 
   useEffect(() => {
     setDragConfirm(null);
@@ -703,17 +504,11 @@ export default function ScaffoldingScreen({
           ? round2Count
           : round3Count;
     if (isReviewMode && requiredTotal === 0) {
-      setPopupTitle("복습 불가");
-      setPopupMessage("복습할 빈칸을 불러오지 못했습니다.");
-      setPopupOnConfirm(null);
-      setPopupVisible(true);
+      popup.showPopup("복습 불가", "복습할 빈칸을 불러오지 못했습니다.");
       return;
     }
     if (orderedSelectedBlanks.length < requiredTotal) {
-      setPopupTitle("알림");
-      setPopupMessage(`${requiredTotal}개가 아직 설정되지 않았어요!`);
-      setPopupOnConfirm(null);
-      setPopupVisible(true);
+      popup.showPopup("알림", `${requiredTotal}개가 아직 설정되지 않았어요!`);
       return;
     }
 
@@ -863,32 +658,16 @@ export default function ScaffoldingScreen({
 
   /** 로딩/에러 UI (모든 Hook 선언 이후) */
   if (loading) {
-    return (
-      <AppLoadingState
-        message="학습화면 불러오는 중입니다..."
-        style={[styles.root, styles.center]}
-        textStyle={styles.loadingText}
-      />
-    );
+    return <ScaffoldingLoadingView />;
   }
   if (error || !payload) {
     return (
-      <View
-        style={[styles.root, styles.center, { paddingHorizontal: scale(18) }]}
-      >
-        <Text style={styles.errorTitle}>데이터를 불러오지 못했습니다.</Text>
-        {!!error && <Text style={styles.errorDesc}>{error}</Text>}
-
-        {!reviewQuizId && (
-          <Pressable style={styles.retryBtn} onPress={onRetry}>
-            <Text style={styles.retryBtnText}>다시 시도</Text>
-          </Pressable>
-        )}
-
-        <Pressable style={styles.backOnlyBtn} onPress={onBack}>
-          <Text style={styles.backOnlyBtnText}>뒤로가기</Text>
-        </Pressable>
-      </View>
+      <ScaffoldingErrorView
+        error={error}
+        canRetry={!reviewQuizId}
+        onRetry={onRetry}
+        onBack={onBack}
+      />
     );
   }
 
@@ -917,9 +696,7 @@ export default function ScaffoldingScreen({
       return;
     }
     setActiveBlankId(instanceId);
-    setHintWord(null);
-    setHintType(null);
-    setHintPosition(null);
+    closeHint();
     requestAnimationFrame(() => inputRefs.current[instanceId]?.focus());
   };
 
@@ -935,86 +712,8 @@ export default function ScaffoldingScreen({
     }
 
     setActiveBlankId(nextInstanceId);
-    setHintWord(null);
-    setHintType(null);
-    setHintPosition(null);
+    closeHint();
     requestAnimationFrame(() => inputRefs.current[nextInstanceId]?.focus());
-  };
-
-  const handlePopupConfirm = () => {
-    setPopupVisible(false);
-    const cb = popupOnConfirm;
-    setPopupOnConfirm(null);
-    if (cb) cb();
-  };
-
-  // 한글 초성 추출 함수 (유니코드 계산)
-  const getChosung = (char: string): string => {
-    const code = char.charCodeAt(0);
-
-    // 한글 범위: AC00(가) ~ D7A3(힣)
-    if (code < 0xac00 || code > 0xd7a3) {
-      return ""; // 한글이 아니면 빈 문자열 반환
-    }
-
-    // 초성 목록 (19개)
-    const chosungList = [
-      "ㄱ",
-      "ㄲ",
-      "ㄴ",
-      "ㄷ",
-      "ㄸ",
-      "ㄹ",
-      "ㅁ",
-      "ㅂ",
-      "ㅃ",
-      "ㅅ",
-      "ㅆ",
-      "ㅇ",
-      "ㅈ",
-      "ㅉ",
-      "ㅊ",
-      "ㅋ",
-      "ㅌ",
-      "ㅍ",
-      "ㅎ",
-    ];
-
-    // 한글 오프셋 = 초성 * 588 + 중성 * 28 + 종성
-    const temp = code - 0xac00;
-    const chosungIndex = Math.floor(temp / 588);
-
-    return chosungList[chosungIndex] || "";
-  };
-
-  // 설명
-  const getFirstLetter = (word: string): string => word[0] || "";
-  const getLastLetter = (word: string): string => word[word.length - 1] || "";
-  const getChosungText = (word: string): string => {
-    let result = "";
-    for (const char of word) {
-      const chosung = getChosung(char);
-      if (chosung) result += chosung;
-    }
-    return result;
-  };
-
-  const applyHint = (
-    type: "first" | "last" | "chosung",
-    word: string,
-    instanceId: number,
-  ) => {
-    let hint = "";
-    if (type === "first") {
-      hint = getFirstLetter(word); // 첫 글자
-    } else if (type === "last") {
-      hint = getLastLetter(word); // 마지막 글자
-    } else {
-      hint = getChosungText(word); // 초성
-    }
-
-    setAnswers((prev) => ({ ...prev, [instanceId]: hint }));
-    setHintType(type); // 선택한 타입만 표시
   };
 
   const onGrade = () => {
@@ -1030,103 +729,6 @@ export default function ScaffoldingScreen({
     if (step === "1-2") setStep("1-3");
     else if (step === "2-2") setStep("2-3");
     else if (step === "3-2") setStep("3-3");
-  };
-
-  /** 왼쪽 설명 카드 */
-  const HelpChip = () => {
-    const substep = step.split("-")[1];
-
-    if (isReviewMode) {
-      return null;
-    }
-
-    if (substep === "2") {
-      return (
-        <>
-          <View style={styles.helpBox}>
-            <View
-              style={[styles.helpHeader, { backgroundColor: HIGHLIGHT_BG }]}
-            >
-              <Text style={styles.helpTitle}>빈칸 채우기</Text>
-            </View>
-            <View style={styles.helpBody}>
-              <Text style={styles.helpDesc}>빈칸에 정답을</Text>
-              <Text style={[styles.helpDesc, styles.helpDescBottom]}>
-                입력해 보세요
-              </Text>
-            </View>
-          </View>
-          <View style={styles.helpBox}>
-            <View
-              style={[styles.helpHeader, { backgroundColor: HIGHLIGHT_BG }]}
-            >
-              <Text style={styles.helpTitle}>힌트 버튼 누르기</Text>
-            </View>
-            <View style={styles.helpBody}>
-              <Text style={styles.helpDesc}>H1을 누르면 첫 글자</Text>
-              <Text style={[styles.helpDesc, styles.helpDescBottom]}>
-                H2를 누르면 마지막 글자
-              </Text>
-              <Text style={[styles.helpDesc, styles.helpDescBottom]}>
-                H3을 누르면 전체 단어 초성
-              </Text>
-              <Text style={[styles.helpDesc, styles.helpDescBottom]}>
-                힌트가 제공됩니다!
-              </Text>
-            </View>
-          </View>
-        </>
-      );
-    }
-
-    // 설명
-    if (substep === "1") {
-      let titleText = "";
-      let descText = "";
-
-      if (currentRound === 1) {
-        titleText = "단어 고르기";
-        descText = `${requiredSelectCount}개의 단어를 골라서\n학습할 빈칸을 만들어 보세요`;
-      } else if (currentRound === 2) {
-        titleText = "단어 고르기";
-        descText = `${requiredSelectCount}개의 단어를\n추가로 선택해 주세요`;
-      } else {
-        titleText = "단어 고르기";
-        descText = `${requiredSelectCount}개의 단어를\n추가로 선택해 주세요`;
-      }
-
-      return (
-        <View style={styles.helpBox}>
-          <View style={styles.helpHeader}>
-            <Text style={styles.helpTitle}>{titleText}</Text>
-          </View>
-          <View style={styles.helpBody}>
-            <Text style={[styles.helpDesc, { textAlign: "center" }]}>
-              {descText}
-            </Text>
-          </View>
-        </View>
-      );
-    }
-
-    // substep === '3' (결과 확인)
-    const titleText = "결과 확인";
-    const descTop = "단어를 다시 보고";
-    const descBottom = "의미를 확인해 보세요";
-
-    return (
-      <View style={styles.helpBox}>
-        <View style={styles.helpHeader}>
-          <Text style={styles.helpTitle}>{titleText}</Text>
-        </View>
-        <View style={styles.helpBody}>
-          <Text style={styles.helpDesc}>{descTop}</Text>
-          <Text style={[styles.helpDesc, styles.helpDescBottom]}>
-            {descBottom}
-          </Text>
-        </View>
-      </View>
-    );
   };
 
   const getStructuredTextMetrics = (block?: LayoutBlock) => {
@@ -2088,7 +1690,12 @@ export default function ScaffoldingScreen({
       <View style={styles.content}>
         {/* 설명 */}
         <View style={styles.leftCard}>
-          <HelpChip />
+          <ScaffoldingHelpChip
+            isReviewMode={isReviewMode}
+            step={step}
+            currentRound={currentRound}
+            requiredSelectCount={requiredSelectCount}
+          />
 
           {(step === "1-1" || step === "2-1" || step === "3-1") && (
             <View style={styles.buttonGroup}>
@@ -2196,25 +1803,19 @@ export default function ScaffoldingScreen({
                         accumulatedEarnedXp + earnedXp;
                       const isLastStudy =
                         currentStudyIndex >= totalStudyCount - 1;
-                      if (isLastStudy) {
-                        setPopupTitle("축하합니다");
-                        setPopupMessage(
-                          `학습을 완료해서 총 ${totalEarnedXp}xp를 획득했어요`,
-                        );
-                      } else {
-                        setPopupTitle("다음 학습으로 이동");
-                        setPopupMessage(
-                          `${currentStudyIndex + 1}번 학습을 완료했습니다. ${currentStudyIndex + 2}번 학습을 시작합니다.`,
-                        );
-                      }
-                      setPopupOnConfirm(() => () => {
-                        if (onBackFromCompletion) {
-                          onBackFromCompletion();
-                        } else {
-                          onBack();
-                        }
-                      });
-                      setPopupVisible(true);
+                      popup.showPopup(
+                        isLastStudy ? "축하합니다" : "다음 학습으로 이동",
+                        isLastStudy
+                          ? `학습을 완료해서 총 ${totalEarnedXp}xp를 획득했어요`
+                          : `${currentStudyIndex + 1}번 학습을 완료했습니다. ${currentStudyIndex + 2}번 학습을 시작합니다.`,
+                        () => {
+                          if (onBackFromCompletion) {
+                            onBackFromCompletion();
+                          } else {
+                            onBack();
+                          }
+                        },
+                      );
                       return;
                     } catch (error) {
                       Alert.alert(
@@ -2227,26 +1828,20 @@ export default function ScaffoldingScreen({
 
                   const earnedXp = correctCount * 2;
                   const isLastStudy = currentStudyIndex >= totalStudyCount - 1;
-                  if (isLastStudy) {
-                    const totalEarnedXp = accumulatedEarnedXp + earnedXp;
-                    setPopupTitle("축하합니다");
-                    setPopupMessage(
-                      `학습을 완료해서 총 ${totalEarnedXp}xp를 획득했어요`,
-                    );
-                  } else {
-                    setPopupTitle("다음 학습으로 이동");
-                    setPopupMessage(
-                      `${currentStudyIndex + 1}번 학습을 완료했습니다. ${currentStudyIndex + 2}번 학습을 시작합니다.`,
-                    );
-                  }
-                  setPopupOnConfirm(() => () => {
-                    if (onBackFromCompletion) {
-                      onBackFromCompletion();
-                    } else {
-                      onBack();
-                    }
-                  });
-                  setPopupVisible(true);
+                  const totalEarnedXp = accumulatedEarnedXp + earnedXp;
+                  popup.showPopup(
+                    isLastStudy ? "축하합니다" : "다음 학습으로 이동",
+                    isLastStudy
+                      ? `학습을 완료해서 총 ${totalEarnedXp}xp를 획득했어요`
+                      : `${currentStudyIndex + 1}번 학습을 완료했습니다. ${currentStudyIndex + 2}번 학습을 시작합니다.`,
+                    () => {
+                      if (onBackFromCompletion) {
+                        onBackFromCompletion();
+                      } else {
+                        onBack();
+                      }
+                    },
+                  );
                 }}
               />
             </View>
@@ -2324,738 +1919,32 @@ export default function ScaffoldingScreen({
         </View>
       )}
 
-      {/* 설명 */}
-      {hintWord !== null &&
-        (() => {
-          const hintInstance = keywordInstances.find(
-            (ki) => ki.instanceId === hintWord,
-          ); // instanceId로 찾음
-          return (
-            <Modal
-              visible={true}
-              transparent
-              onRequestClose={() => {
-                setHintWord(null);
-                setHintType(null);
-                setHintPosition(null);
-              }}
-            >
-              <Pressable
-                style={styles.hintModalOverlay}
-                onPress={() => {
-                  setHintWord(null);
-                  setHintType(null);
-                  setHintPosition(null);
-                }}
-              >
-                {/* 설명 */}
-                <View
-                  style={[
-                    styles.hintBalloonContainer,
-                    hintPosition && {
-                      position: "absolute" as const,
-                      top: hintPosition.y,
-                      left: hintPosition.x,
-                      transform: [{ translateX: -(HINT_BUBBLE_WIDTH / 2) }],
-                    },
-                  ]}
-                >
-                  <SpeechBubbleShell
-                    width={HINT_BUBBLE_WIDTH}
-                    minHeightRatio={86 / 505}
-                    tailRatio={34 / 505}
-                    bubbleStyle={styles.hintBalloonBubble}
-                  >
-                    <View style={styles.hintContent}>
-                      <Pressable
-                        style={[
-                          styles.hintButton,
-                          hintType === "first" && styles.hintButtonActive,
-                          hintType !== "first" && styles.hintButtonInactive,
-                        ]}
-                        onPress={() =>
-                          hintInstance &&
-                          applyHint("first", hintInstance.word, hintWord)
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.hintButtonText,
-                            hintType === "first" && styles.hintButtonTextActive,
-                            hintType !== "first" &&
-                            styles.hintButtonTextInactive,
-                          ]}
-                        >
-                          H1
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        style={[
-                          styles.hintButton,
-                          hintType === "last" && styles.hintButtonActive,
-                          hintType !== "last" && styles.hintButtonInactive,
-                        ]}
-                        onPress={() =>
-                          hintInstance &&
-                          applyHint("last", hintInstance.word, hintWord)
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.hintButtonText,
-                            hintType === "last" && styles.hintButtonTextActive,
-                            hintType !== "last" &&
-                            styles.hintButtonTextInactive,
-                          ]}
-                        >
-                          H2
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        style={[
-                          styles.hintButton,
-                          hintType === "chosung" && styles.hintButtonActive,
-                          hintType !== "chosung" && styles.hintButtonInactive,
-                        ]}
-                        onPress={() =>
-                          hintInstance &&
-                          applyHint("chosung", hintInstance.word, hintWord)
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.hintButtonText,
-                            hintType === "chosung" &&
-                            styles.hintButtonTextActive,
-                            hintType !== "chosung" &&
-                            styles.hintButtonTextInactive,
-                          ]}
-                        >
-                          H3
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </SpeechBubbleShell>
-                </View>
-              </Pressable>
-            </Modal>
-          );
-        })()}
-      {/* 설명 */}
-      {popupVisible && (
-        <View style={styles.popupOverlay}>
-          <Pressable style={styles.popupBackdrop} onPress={handlePopupConfirm}>
-            <View style={styles.popupCard}>
-              <Text style={styles.popupTitle}>{popupTitle}</Text>
-              <Text style={styles.popupMessage}>{popupMessage}</Text>
-              <Pressable
-                style={styles.popupConfirmBtn}
-                onPress={handlePopupConfirm}
-              >
-                <Text style={styles.popupConfirmText}>확인</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </View>
-      )}
+      <ScaffoldingHintModal
+        target={
+          hintWord === null
+            ? null
+            : (() => {
+              const hintInstance = keywordInstances.find(
+                (ki) => ki.instanceId === hintWord,
+              );
+              return hintInstance
+                ? { instanceId: hintWord, word: hintInstance.word }
+                : null;
+            })()
+        }
+        hintType={hintType}
+        hintPosition={hintPosition}
+        onClose={closeHint}
+        onApplyHint={applyHint}
+      />
+      <ScaffoldingPopup
+        visible={popup.visible}
+        title={popup.title}
+        message={popup.message}
+        onConfirm={popup.handleConfirm}
+      />
     </View>
   );
 }
 
-/** Tokenize */
-type TextToken = { type: "text"; value: string };
-type SpaceToken = { type: "space"; value: string };
-type NewlineToken = { type: "newline"; value: "\n" };
-type KeywordToken = {
-  type: "keyword";
-  value: string;
-  occ: number;
-  baseWord: string;
-};
 
-type Token = TextToken | SpaceToken | NewlineToken | KeywordToken;
-type KeywordTokenWithId = KeywordToken & { instanceId: number };
-type RenderToken = TextToken | SpaceToken | NewlineToken | KeywordTokenWithId;
-type RenderTokenEntry = {
-  key: string;
-  globalIndex: number;
-  pageIndex: number;
-  candidateId?: string;
-  token: RenderToken;
-};
-type StructuredTextMetrics = {
-  bodyFontSize: number;
-  bodyLineHeight: number;
-  keywordFontSize: number;
-  keywordLineHeight: number;
-  horizontalPadding: number;
-  marginHorizontal: number;
-  borderRadius: number;
-};
-type PageRenderSection = {
-  key: string;
-  block?: LayoutBlock;
-  blankCandidate?: BlankCandidate;
-  tokenEntries: RenderTokenEntry[];
-};
-type PageRenderTableCell = {
-  key: string;
-  tokenEntries: RenderTokenEntry[];
-};
-type PageRenderTable = {
-  key: string;
-  rows: PageRenderTableCell[][];
-};
-type PageRenderPage = {
-  pageIndex: number;
-  page: PageItem;
-  sections: PageRenderSection[];
-  tables: PageRenderTable[];
-  hasLayoutBlocks: boolean;
-};
-
-function getPageRenderTokenEntries(page: PageRenderPage) {
-  return [
-    ...page.sections.flatMap((section) => section.tokenEntries),
-    ...page.tables.flatMap((table) =>
-      table.rows.flatMap((row) =>
-        row.flatMap((cell) => cell.tokenEntries),
-      ),
-    ),
-  ];
-}
-
-function buildTableCandidateId({
-  tableIndex,
-  rowIndex,
-  colIndex,
-  tokenIndex,
-}: {
-  tableIndex: number;
-  rowIndex: number;
-  colIndex: number;
-  tokenIndex: number;
-}) {
-  return `table-${tableIndex}-${rowIndex}-${colIndex}-${tokenIndex}`;
-}
-
-type CoordinateLine = {
-  key: string;
-  sections: Array<PageRenderSection & { block: LayoutBlock }>;
-  x: number;
-  width: number;
-  containerWidthRatio: number;
-  density: number;
-};
-type CoordinateColumn = {
-  key: string;
-  sections: Array<PageRenderSection & { block: LayoutBlock }>;
-  widthRatio: number;
-};
-
-/**
- * keyword가 text의 pos 위치에서 시작하는지 확인.
- * OCR 단어 중간에 공백이 끼는 경우("연 구")를 매칭하기 위해 텍스트의 공백을 건너뛰며 비교.
- * 반환: 매칭 시 원문 기준 길이(공백 포함), 아니면 0.
- */
-function normalize(s: string) {
-  return normalizeBlankWord(s);
-}
-
-function clampNumber(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
-
-/** Styles */
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: BG,
-    paddingHorizontal: scale(18),
-    paddingTop: scale(16),
-    paddingBottom: scale(16),
-    gap: scale(12),
-  },
-  center: { justifyContent: "center", alignItems: "center" },
-
-  loadingText: { color: MUTED, fontSize: fontScale(12), fontWeight: "700" },
-
-  errorTitle: {
-    color: "#111827",
-    fontSize: fontScale(16),
-    fontWeight: "900",
-    marginBottom: scale(8),
-  },
-  errorDesc: {
-    color: MUTED,
-    fontSize: fontScale(12),
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: scale(16),
-  },
-  retryBtn: {
-    width: "100%",
-    maxWidth: scale(320),
-    height: scale(48),
-    borderRadius: scale(14),
-    backgroundColor: "#5E82FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: scale(10),
-  },
-  retryBtnText: {
-    color: "#FFFFFF",
-    fontSize: fontScale(12),
-    fontWeight: "900",
-  },
-  backOnlyBtn: {
-    width: "100%",
-    maxWidth: scale(320),
-    height: scale(48),
-    borderRadius: scale(14),
-    backgroundColor: "#E5E7EB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backOnlyBtnText: {
-    color: "#111827",
-    fontSize: fontScale(12),
-    fontWeight: "900",
-  },
-
-  content: { flex: 1, flexDirection: "row", gap: scale(12) },
-  pageIndicatorWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: scale(8),
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  pageIndicatorText: {
-    color: "#6B7280",
-    fontSize: fontScale(14),
-    fontWeight: "900",
-  },
-
-  leftCard: {
-    width: scale(170),
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: scale(16),
-    paddingHorizontal: scale(12),
-    paddingVertical: scale(12),
-    gap: scale(12),
-    justifyContent: "flex-start",
-  },
-
-  buttonGroup: {
-    marginTop: "auto",
-    gap: scale(12),
-  },
-
-  helpBox: {
-    borderRadius: scale(14),
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#D6DBFF",
-    overflow: "hidden",
-  },
-  helpHeader: {
-    backgroundColor: "#EEF1FF",
-    paddingHorizontal: scale(12),
-    paddingVertical: scale(12),
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  helpBody: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: scale(12),
-    paddingVertical: scale(12),
-    alignItems: "center",
-    justifyContent: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#D6DBFF",
-  },
-  helpTitle: {
-    fontSize: fontScale(13),
-    fontWeight: "900",
-    color: "#111827",
-    textAlign: "center",
-  },
-  helpDesc: {
-    fontSize: fontScale(11),
-    fontWeight: "700",
-    color: MUTED,
-    lineHeight: fontScale(16),
-    textAlign: "center",
-  },
-  helpDescBottom: { marginTop: scale(2) },
-
-  rightCard: {
-    flex: 1,
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: scale(16),
-    overflow: "hidden",
-    position: "relative",
-  },
-  textContainer: { paddingHorizontal: scale(14), paddingVertical: scale(14) },
-  pageList: { gap: scale(14) },
-  pageCard: {
-    gap: scale(8),
-  },
-  pageCardTitle: {
-    fontSize: fontScale(12),
-    lineHeight: fontScale(18),
-    fontWeight: "700",
-    color: "#6B7280",
-  },
-  pageSheet: {
-    padding: scale(14),
-    borderRadius: scale(14),
-    backgroundColor: "#F8FAFF",
-    borderWidth: 1,
-    borderColor: "#E3E8F8",
-    gap: scale(12),
-  },
-  pageCanvas: {
-    position: "relative",
-    width: "100%",
-    borderRadius: scale(12),
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E8ECF8",
-    overflow: "hidden",
-  },
-  layoutBlock: {
-    position: "absolute",
-    paddingHorizontal: scale(3),
-    paddingVertical: scale(2),
-    overflow: "visible",
-  },
-  structuredBlockText: {
-    color: "#111827",
-    fontWeight: "500",
-    padding: 0,
-    margin: 0,
-  },
-  structuredKeywordBox: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-  },
-  structuredKeywordInlineBox: {
-    alignSelf: "flex-start",
-    justifyContent: "center",
-    position: "relative",
-    overflow: "hidden",
-  },
-  structuredKeywordBoxDefault: {
-    backgroundColor: HIGHLIGHT_BG,
-    borderRadius: scale(2),
-  },
-  structuredKeywordBoxSelected: {
-    backgroundColor: "rgba(199, 207, 255, 0.55)",
-  },
-  structuredKeywordInputBox: {
-    backgroundColor: HIGHLIGHT_BG,
-    borderRadius: scale(2),
-  },
-  structuredKeywordInputBoxActive: {
-    borderColor: "#5E82FF",
-  },
-  layoutBlockFlow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "flex-start",
-  },
-  coordinatePage: {
-    width: "100%",
-    borderRadius: scale(12),
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E8ECF8",
-    paddingHorizontal: scale(16),
-    paddingVertical: scale(16),
-  },
-  coordinateColumns: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: scale(18),
-  },
-  coordinateColumn: {
-    flex: 1,
-    minWidth: 0,
-  },
-  coordinateLine: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-  },
-  coordinateWord: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexShrink: 0,
-  },
-  pageTableWrap: {
-    gap: scale(6),
-  },
-  pageTableTitle: {
-    fontSize: fontScale(12),
-    lineHeight: fontScale(18),
-    fontWeight: "700",
-    color: "#6B7280",
-  },
-  pageTable: {
-    borderWidth: 1,
-    borderColor: "#D8DEEF",
-    borderRadius: scale(10),
-    overflow: "hidden",
-  },
-  pageTableRow: {
-    flexDirection: "row",
-  },
-  pageTableCell: {
-    minWidth: scale(88),
-    maxWidth: scale(240),
-    paddingHorizontal: scale(10),
-    paddingVertical: scale(8),
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: "#D8DEEF",
-    backgroundColor: "#FFFFFF",
-  },
-  pageTableHeaderCell: {
-    backgroundColor: "#EEF2FF",
-  },
-  pageTableCellFlow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-  },
-  flow: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start" },
-  newline: { width: "100%", height: fontScale(14) },
-  bodyText: {
-    fontSize: fontScale(14),
-    lineHeight: fontScale(22),
-    fontWeight: "600",
-    color: "#111827",
-  },
-  compactBodyText: { fontWeight: "500", color: "#1F2937" },
-
-  wordPill: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    borderRadius: scale(4),
-    marginVertical: 0,
-  },
-  compactWordPill: { marginVertical: 0, minHeight: 0 },
-  blankTokenSpacing: {
-    marginHorizontal: scale(3),
-    paddingHorizontal: scale(4),
-  },
-  wordText: {
-    fontSize: fontScale(13),
-    lineHeight: fontScale(20),
-    fontWeight: "600",
-    color: "#111827",
-  },
-  compactWordText: { fontWeight: "500" },
-
-  blankBox: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    borderRadius: scale(4),
-    marginVertical: 0,
-    justifyContent: "center",
-  },
-  blankBoxBase: {
-    borderWidth: 2,
-    borderColor: "transparent",
-    position: "relative",
-    overflow: "hidden",
-  },
-  blankBoxActive: { borderColor: "#5E82FF" },
-  blankInputOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  blankAnswerScroll: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  blankAnswerScrollContent: {
-    alignItems: "center",
-  },
-  blankInput: {
-    ...StyleSheet.absoluteFillObject,
-    height: "100%",
-    minHeight: 0,
-    padding: 0,
-    paddingVertical: 0,
-    margin: 0,
-    fontSize: fontScale(13),
-    fontWeight: "600",
-    color: "#111827",
-    lineHeight: fontScale(20),
-    includeFontPadding: false,
-    textAlignVertical: "center",
-    borderWidth: 0,
-    ...(Platform.OS === "web"
-      ? { outlineStyle: "solid", outlineWidth: 0 }
-      : {}),
-  },
-  blankHiddenInput: {
-    opacity: 0,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: scale(18),
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: scale(430),
-    backgroundColor: "#FFFFFF",
-    borderRadius: scale(16),
-    paddingHorizontal: scale(18),
-    paddingTop: scale(18),
-    paddingBottom: scale(16),
-  },
-  modalClose: {
-    position: "absolute",
-    right: scale(12),
-    top: scale(10),
-    width: scale(32),
-    height: scale(32),
-    borderRadius: scale(16),
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalCloseText: {
-    fontSize: fontScale(22),
-    fontWeight: "900",
-    color: "#9CA3AF",
-  },
-  modalWord: {
-    fontSize: fontScale(20),
-    fontWeight: "900",
-    color: "#111827",
-    marginBottom: scale(8),
-  },
-  modalLong: {
-    fontSize: fontScale(12),
-    fontWeight: "700",
-    color: "#111827",
-    lineHeight: fontScale(18),
-  },
-
-  hintModalOverlay: {
-    flex: 1,
-    backgroundColor: "transparent",
-    paddingHorizontal: scale(18),
-  },
-
-  // 설명
-  popupOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  popupBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(15, 23, 42, 0.25)",
-    paddingHorizontal: scale(18),
-  },
-  popupCard: {
-    width: scale(300),
-    borderRadius: scale(20),
-    backgroundColor: "#FFFFFF",
-    paddingVertical: scale(22),
-    paddingHorizontal: scale(18),
-    alignItems: "center",
-    elevation: 6,
-  },
-  popupTitle: {
-    fontSize: fontScale(18),
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: scale(10),
-    textAlign: "center",
-  },
-  popupMessage: {
-    fontSize: fontScale(14),
-    color: "#111827",
-    marginBottom: scale(16),
-    textAlign: "center",
-    lineHeight: fontScale(20),
-  },
-  popupConfirmBtn: {
-    width: "100%",
-    height: scale(44),
-    borderRadius: scale(12),
-    backgroundColor: "#5E82FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  popupConfirmText: {
-    color: "#FFFFFF",
-    fontSize: fontScale(14),
-    fontWeight: "800",
-  },
-  hintBalloonContainer: { alignItems: "center", justifyContent: "center" },
-  hintBalloonBubble: {
-    paddingHorizontal: scale(14),
-    paddingVertical: scale(8),
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  hintContent: {
-    flexDirection: "row",
-    gap: scale(8),
-    justifyContent: "center",
-  },
-  hintButton: {
-    paddingHorizontal: scale(10),
-    paddingVertical: scale(6),
-    borderRadius: scale(6),
-    minWidth: scale(42),
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  hintButtonActive: { backgroundColor: "#5E82FF" },
-  hintButtonInactive: { backgroundColor: "#E5E7EB" },
-  hintButtonText: { fontSize: fontScale(13), fontWeight: "700" },
-  hintButtonTextActive: { color: "#FFFFFF" },
-  hintButtonTextInactive: { color: "#9CA3AF" },
-  dragSelectionBox: {
-    position: "absolute",
-    borderWidth: 1,
-    borderColor: "#5E82FF",
-    backgroundColor: "rgba(94,130,255,0.15)",
-    borderRadius: scale(4),
-  },
-  dragConfirmBtn: {
-    position: "absolute",
-    paddingHorizontal: scale(10),
-    paddingVertical: scale(6),
-    backgroundColor: "#111827",
-    borderRadius: scale(10),
-    zIndex: 5,
-  },
-  dragConfirmText: {
-    color: "#FFFFFF",
-    fontSize: fontScale(11),
-    fontWeight: "800",
-  },
-});
