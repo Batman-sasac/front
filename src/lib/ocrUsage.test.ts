@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { getOcrUsageExhaustedMessage } from '../../lib/ocrUsage';
+import { getOcrUsageExhaustedMessage } from './ocrUsage';
 
 describe('OCR 사용량 소진 메시지', () => {
     test('남은 횟수가 0이고 백엔드 메시지가 있으면 그 문구를 그대로 사용해야 함', () => {

@@ -1,4 +1,4 @@
-﻿import type { ScaffoldingPayload } from '../../api/ocr';
+﻿import type { ScaffoldingPayload } from '../../../../api/ocr';
 
 export const tableLayoutFixture: ScaffoldingPayload = {
     title: '프로그램 소개',

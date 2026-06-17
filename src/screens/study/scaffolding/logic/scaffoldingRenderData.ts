@@ -1,6 +1,6 @@
 import type { BlankCandidate, LayoutBlock, PageItem } from "../../../../api/ocr";
 import { normalizeBlankWord } from "./scaffoldingLogic";
-import { tokenizeWithKeywords } from "../../tokenizeKeywords";
+import { tokenizeWithKeywords } from "../../shared/logic/tokenizeKeywords";
 
 /** Tokenize */
 type TextToken = { type: "text"; value: string };

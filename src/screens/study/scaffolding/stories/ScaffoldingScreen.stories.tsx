@@ -2,11 +2,11 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite';
 import React from 'react';
 import { View } from 'react-native';
 
-import ScaffoldingScreen from './ScaffoldingScreen';
+import ScaffoldingScreen from '../../ScaffoldingScreen';
 import {
     centeredTitleFixture,
     tableLayoutFixture,
-} from './ocr-layout-fixtures';
+} from '../fixtures/ocrLayoutFixtures';
 
 const meta = {
     title: 'Study/Scaffolding Screen',
