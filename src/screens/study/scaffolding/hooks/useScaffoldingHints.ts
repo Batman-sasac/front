@@ -1,5 +1,5 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
-import type { HintType } from "../../components/study/ScaffoldingHintModal";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import type { HintType } from "../components/ScaffoldingHintModal";
 
 const CHOSUNG = [
   "ㄱ",
@@ -59,6 +59,21 @@ export function useScaffoldingHints({
     setHintType(null);
     setHintPosition(null);
   };
+
+  useEffect(() => {
+    if (hintWord !== null || hintType === null) return;
+    setAnswers((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((keyStr) => {
+        const key = parseInt(keyStr, 10);
+        const value = next[key];
+        if (value && (value.length === 1 || /^[ㄱ-ㅎ]+$/.test(value))) {
+          delete next[key];
+        }
+      });
+      return next;
+    });
+  }, [hintWord, hintType, setAnswers]);
 
   const applyHint = (type: HintType, word: string, instanceId: number) => {
     setHintType(type);

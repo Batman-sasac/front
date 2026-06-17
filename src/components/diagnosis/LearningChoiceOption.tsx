@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fontScale, scale } from '../../lib/layout';
 import { appColors, appFontWeight } from '../../styles/theme';

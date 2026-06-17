@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import AppModalShell from '../common/AppModalShell';
 import { fontScale, scale } from '../../lib/layout';

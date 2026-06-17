@@ -1,5 +1,5 @@
-import type { BlankItemSave, ScaffoldingPayload } from "../../api/ocr";
-import type { StudySource } from "../input_data/studySource";
+import type { BlankItemSave, ScaffoldingPayload } from "../../../../api/ocr";
+import type { StudySource } from "../../../input_data/studySource";
 
 export type ScaffoldingStep =
   | "1-1"

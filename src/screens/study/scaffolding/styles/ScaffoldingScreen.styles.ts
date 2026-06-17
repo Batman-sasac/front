@@ -1,6 +1,6 @@
 import { Platform, StyleSheet } from "react-native";
-import { fontScale, scale } from "../../lib/layout";
-import { BG, BORDER, CARD, HIGHLIGHT_BG, MUTED } from "./scaffoldingConstants";
+import { fontScale, scale } from "../../../../lib/layout";
+import { BG, BORDER, CARD, HIGHLIGHT_BG, MUTED } from "../logic/scaffoldingConstants";
 
 export const styles = StyleSheet.create({
   root: {

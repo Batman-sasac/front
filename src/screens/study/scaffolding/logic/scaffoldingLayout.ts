@@ -1,5 +1,5 @@
-import type { LayoutBlock } from "../../api/ocr";
-import { fontScale, scale } from "../../lib/layout";
+import type { LayoutBlock } from "../../../../api/ocr";
+import { fontScale, scale } from "../../../../lib/layout";
 import type {
   CoordinateColumn,
   CoordinateLine,

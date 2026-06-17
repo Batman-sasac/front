@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Image } from "react-native";
-import type { BlankItemSave, PageItem, ScaffoldingPayload } from "../../api/ocr";
-import type { StudySource } from "../input_data/studySource";
+import type { BlankItemSave, PageItem, ScaffoldingPayload } from "../../../../api/ocr";
+import type { StudySource } from "../../../input_data/studySource";
 import {
   buildKeywordInstances,
   normalizeBlankWord,
   type KeywordOccurrence,
-} from "./scaffoldingLogic";
+} from "../logic/scaffoldingLogic";
 import {
   buildPageRenderData,
   getPageRenderTokenEntries,
   type KeywordTokenWithId,
   type RenderTokenEntry,
-} from "./scaffoldingRenderData";
-import type { BlankItem } from "./scaffoldingTypes";
-import { DEFAULT_PAGE_CANVAS_ASPECT_RATIO } from "./scaffoldingConstants";
+} from "../logic/scaffoldingRenderData";
+import type { BlankItem } from "../logic/scaffoldingTypes";
+import { DEFAULT_PAGE_CANVAS_ASPECT_RATIO } from "../logic/scaffoldingConstants";
 
 export function useScaffoldingRenderModel({
   payload,

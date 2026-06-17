@@ -1,7 +1,7 @@
 import React from "react";
 import { Text, View } from "react-native";
-import { HIGHLIGHT_BG } from "../../screens/study/scaffoldingConstants";
-import { styles } from "../../screens/study/ScaffoldingScreen.styles";
+import { HIGHLIGHT_BG } from "../logic/scaffoldingConstants";
+import { styles } from "../styles/ScaffoldingScreen.styles";
 
 export default function ScaffoldingHelpChip({
   isReviewMode,

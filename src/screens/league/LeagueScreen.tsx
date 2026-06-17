@@ -1,4 +1,4 @@
-// src/screens/league/LeagueScreen.tsx
+﻿// src/screens/league/LeagueScreen.tsx
 import React from 'react';
 import {
     View,

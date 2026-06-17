@@ -10,7 +10,7 @@ import {
   type ScaffoldingPayload,
 } from '../../api/ocr';
 import type { RewardType } from '../../screens/reward/Reward';
-import { buildOrderedStudySaveData } from '../../screens/study/scaffoldingLogic';
+import { buildOrderedStudySaveData } from '../../screens/study/scaffolding/logic/scaffoldingLogic';
 import type { StudySource } from '../../screens/input_data/studySource';
 import type { AppStep } from '../../navigation/routes';
 import type { SourceCropMap } from './studyFlow';

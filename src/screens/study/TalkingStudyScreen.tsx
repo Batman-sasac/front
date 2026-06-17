@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import FloatingBackButton from '../../components/common/FloatingBackButton';

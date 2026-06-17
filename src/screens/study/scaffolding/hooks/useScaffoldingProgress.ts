@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { GradeState, ScaffoldingStep } from "./scaffoldingTypes";
+import type { GradeState, ScaffoldingStep } from "../logic/scaffoldingTypes";
 
 export function useScaffoldingProgress({
   step,

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { BlankItemSave } from "../../api/ocr";
+import type { BlankItemSave } from "../../../../api/ocr";
 import {
   normalizeBlankWord,
   selectReviewKeywordInstanceIds,
   type KeywordInstance,
   type KeywordOccurrence,
-} from "./scaffoldingLogic";
+} from "../logic/scaffoldingLogic";
 
 type PendingSelection = {
   includeWord: string;

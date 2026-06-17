@@ -1,4 +1,4 @@
-import { scale } from "../../lib/layout";
+import { scale } from "../../../../lib/layout";
 
 export const HINT_BUBBLE_WIDTH = scale(168);
 export const DEFAULT_PAGE_CANVAS_ASPECT_RATIO = 0.72;

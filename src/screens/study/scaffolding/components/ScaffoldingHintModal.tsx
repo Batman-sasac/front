@@ -1,8 +1,8 @@
 import React from "react";
 import { Modal, Pressable, Text, View } from "react-native";
-import SpeechBubbleShell from "../SpeechBubbleShell";
-import { HINT_BUBBLE_WIDTH } from "../../screens/study/scaffoldingConstants";
-import { styles } from "../../screens/study/ScaffoldingScreen.styles";
+import SpeechBubbleShell from "../../../../components/SpeechBubbleShell";
+import { HINT_BUBBLE_WIDTH } from "../logic/scaffoldingConstants";
+import { styles } from "../styles/ScaffoldingScreen.styles";
 
 export type HintType = "first" | "last" | "chosung";
 

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { PanResponder, type LayoutChangeEvent } from "react-native";
-import type { BlankItem } from "./scaffoldingTypes";
-import { normalizeBlankWord } from "./scaffoldingLogic";
-import type { RenderToken } from "./scaffoldingRenderData";
+import type { BlankItem } from "../logic/scaffoldingTypes";
+import { normalizeBlankWord } from "../logic/scaffoldingLogic";
+import type { RenderToken } from "../logic/scaffoldingRenderData";
 
 type SelectionBox = { x: number; y: number; w: number; h: number };
 type DragSelection = {

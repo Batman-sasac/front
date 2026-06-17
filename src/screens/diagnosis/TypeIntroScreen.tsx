@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import AppPrimaryButton from '../../components/common/AppPrimaryButton';

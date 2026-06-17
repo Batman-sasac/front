@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import { styles } from "../../screens/study/ScaffoldingScreen.styles";
+import { styles } from "../styles/ScaffoldingScreen.styles";
 
 export default function ScaffoldingPopup({
   visible,

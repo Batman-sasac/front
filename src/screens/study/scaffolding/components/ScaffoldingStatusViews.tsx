@@ -1,8 +1,8 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import AppLoadingState from "../common/AppLoadingState";
-import { scale } from "../../lib/layout";
-import { styles } from "../../screens/study/ScaffoldingScreen.styles";
+import AppLoadingState from "../../../../components/common/AppLoadingState";
+import { scale } from "../../../../lib/layout";
+import { styles } from "../styles/ScaffoldingScreen.styles";
 
 export function ScaffoldingLoadingView() {
   return (

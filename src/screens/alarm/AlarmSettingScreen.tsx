@@ -1,4 +1,4 @@
-// src/screens/alarm/AlarmSettingScreen.tsx
+﻿// src/screens/alarm/AlarmSettingScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
     View,
