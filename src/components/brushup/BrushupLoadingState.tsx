@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { StyleSheet } from 'react-native';
 import { scale } from '../../styles/theme';
 import AppLoadingState from '../common/AppLoadingState';

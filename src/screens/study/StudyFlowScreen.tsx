@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Image, Animated, Easing } from 'react-native';
 import { scale, fontScale } from '../../lib/layout';
 import StudyFlowProgressCard from '../../components/study/StudyFlowProgressCard';
