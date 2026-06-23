@@ -55,6 +55,7 @@ const meta = {
     planBorderColor: subscriptionColors.primaryBlue,
     onFreePress: () => {},
     onSubscribe: () => {},
+    isProcessing: false,
   },
   parameters: {
     layout: 'fullscreen',

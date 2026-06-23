@@ -93,6 +93,8 @@ export type AppRoutesProps = {
   ocrUsage: React.ComponentProps<typeof SubscribeScreen>['ocrUsage'];
   handleSubscribe: React.ComponentProps<typeof SubscribeScreen>['onSubscribe'];
   handleCancelSubscribe: React.ComponentProps<typeof SubscribeScreen>['onCancelSubscribe'];
+  handleSubscriptionStatusChange: React.ComponentProps<typeof SubscribeScreen>['onSubscriptionStatusChange'];
+  isSubscriptionProcessing: React.ComponentProps<typeof SubscribeScreen>['isSubscriptionProcessing'];
   handleErrorRetry: React.ComponentProps<typeof ErrorScreen>['onRetry'];
   handleSubmitReport: React.ComponentProps<typeof ErrorScreen>['onSubmitReport'];
   showUsageExhaustedModal: boolean;
@@ -163,6 +165,8 @@ export default function AppRoutes({
   ocrUsage,
   handleSubscribe,
   handleCancelSubscribe,
+  handleSubscriptionStatusChange,
+  isSubscriptionProcessing,
   handleErrorRetry,
   handleSubmitReport,
   showUsageExhaustedModal,
@@ -368,6 +372,8 @@ export default function AppRoutes({
           onBack={() => setStep('mypage')}
           onSubscribe={handleSubscribe}
           onCancelSubscribe={handleCancelSubscribe}
+          onSubscriptionStatusChange={handleSubscriptionStatusChange}
+          isSubscriptionProcessing={isSubscriptionProcessing}
         />
       )}
 

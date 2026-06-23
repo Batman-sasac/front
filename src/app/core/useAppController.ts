@@ -192,12 +192,15 @@ export default function useAppController() {
   const {
     handleSubscribe,
     handleCancelSubscribe,
+    handleSubscriptionStatusChange,
     handleUsageModalClose,
     handleUsageModalSubscribe,
+    isSubscriptionProcessing,
   } = useSubscriptionActions({
     setStep,
     setIsSubscribed,
     setShowUsageExhaustedModal,
+    refreshOcrUsage,
   });
 
   const {
@@ -288,6 +291,8 @@ export default function useAppController() {
     ocrUsage,
     handleSubscribe,
     handleCancelSubscribe,
+    handleSubscriptionStatusChange,
+    isSubscriptionProcessing,
     handleErrorRetry,
     handleSubmitReport,
     showUsageExhaustedModal,
