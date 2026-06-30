@@ -9,7 +9,7 @@ import { getToken } from '../../lib/storage';
 import type { AppStep } from '../../navigation/routes';
 
 const IOS_SUBSCRIPTION_PRODUCT_ID =
-  process.env.EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID ?? 'com.batman.bat.premium.monthly';
+  process.env.EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID?.trim() ?? '';
 
 const canUseStoreKit = Platform.OS === 'ios' && Constants.appOwnership !== 'expo';
 
@@ -116,6 +116,10 @@ export default function useSubscriptionActions({
   const handleSubscribe = async () => {
     if (!canUseStoreKit) {
       Alert.alert('안내', 'iOS dev client 또는 실제 앱 빌드에서만 App Store 구독 결제를 사용할 수 있습니다.');
+      return;
+    }
+    if (!IOS_SUBSCRIPTION_PRODUCT_ID) {
+      Alert.alert('설정 필요', 'EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID를 App Store Connect 구독 상품 ID로 설정해주세요.');
       return;
     }
 

@@ -23,7 +23,7 @@ export default function ScaffoldingActionButtons({
     return (
       <View style={styles.buttonGroup}>
         <StudyImageActionButton
-          source={require("../../../assets/study/start-study-button.png")}
+          source={require("../../../../../assets/study/start-study-button.png")}
           onPress={onStartLearning}
         />
       </View>
@@ -34,7 +34,7 @@ export default function ScaffoldingActionButtons({
     return (
       <View style={styles.buttonGroup}>
         <StudyImageActionButton
-          source={require("../../../assets/study/grade-button.png")}
+          source={require("../../../../../assets/study/grade-button.png")}
           onPress={onGrade}
         />
       </View>
@@ -45,7 +45,7 @@ export default function ScaffoldingActionButtons({
     return (
       <View style={styles.buttonGroup}>
         <StudyImageActionButton
-          source={require("../../../assets/study/Round2.png")}
+          source={require("../../../../../assets/study/Round2.png")}
           onPress={onMoveToRound2}
         />
       </View>
@@ -56,7 +56,7 @@ export default function ScaffoldingActionButtons({
     return (
       <View style={styles.buttonGroup}>
         <StudyImageActionButton
-          source={require("../../../assets/study/Round3.png")}
+          source={require("../../../../../assets/study/Round3.png")}
           onPress={onMoveToRound3}
         />
       </View>
@@ -67,7 +67,7 @@ export default function ScaffoldingActionButtons({
     return (
       <View style={styles.buttonGroup}>
         <StudyImageActionButton
-          source={require("../../../assets/study/finish_study.png")}
+          source={require("../../../../../assets/study/finish_study.png")}
           onPress={onFinishStudy}
         />
       </View>
