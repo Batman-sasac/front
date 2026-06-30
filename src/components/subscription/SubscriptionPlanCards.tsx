@@ -20,6 +20,7 @@ type Props = {
     planBorderColor: string;
     onFreePress: () => void;
     onSubscribe: () => void;
+    isProcessing: boolean;
 };
 
 export default function SubscriptionPlanCards({
@@ -30,6 +31,7 @@ export default function SubscriptionPlanCards({
     planBorderColor,
     onFreePress,
     onSubscribe,
+    isProcessing,
 }: Props) {
     const rowDynamicStyle: StyleProp<ViewStyle> = !isCompact
         ? { maxWidth: layout.rowWidth, gap: layout.rowGap }
@@ -66,7 +68,7 @@ export default function SubscriptionPlanCards({
                         <SubscriptionButton
                             variant="muted"
                             onPress={onFreePress}
-                            disabled={!resolvedSubscribed}
+                            disabled={!resolvedSubscribed || isProcessing}
                         >
                             {resolvedSubscribed ? '구독 취소' : '현재 플랜'}
                         </SubscriptionButton>
@@ -115,15 +117,16 @@ export default function SubscriptionPlanCards({
                 <View style={[styles.planBottom, styles.planBottomPremium]}>
                     <View style={styles.planBtnWrap}>
                         {resolvedSubscribed ? (
-                            <SubscriptionButton onPress={onSubscribe}>
+                            <SubscriptionButton onPress={onSubscribe} disabled={isProcessing}>
                                 결제수단 관리하기
                             </SubscriptionButton>
                         ) : (
                             <SubscriptionButton
                                 variant={limitReached ? 'danger' : 'primary'}
                                 onPress={onSubscribe}
+                                disabled={isProcessing}
                             >
-                                월 4,800원 구독하기
+                                {isProcessing ? '결제 진행 중...' : '월 4,800원 구독하기'}
                             </SubscriptionButton>
                         )}
                     </View>

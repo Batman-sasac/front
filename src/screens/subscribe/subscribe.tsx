@@ -5,11 +5,13 @@ import {
     useWindowDimensions,
     View,
 } from 'react-native';
+import { getSubscriptionStatus } from '../../api/iap';
 import { getOcrUsage, OcrUsageResponse } from '../../api/ocr';
 import AppScreenHeader from '../../components/common/AppScreenHeader';
 import SubscriptionCancelModal from '../../components/subscription/SubscriptionCancelModal';
 import SubscriptionPlanCards from '../../components/subscription/SubscriptionPlanCards';
 import SubscriptionUsageCard from '../../components/subscription/SubscriptionUsageCard';
+import { getToken } from '../../lib/storage';
 import { figmaScale, subscriptionColors } from '../../styles/subscriptionStyles';
 
 type Props = {
@@ -18,13 +20,24 @@ type Props = {
     onBack: () => void;
     onSubscribe: () => void;
     onCancelSubscribe: () => void;
+    onSubscriptionStatusChange: (isActive: boolean) => void;
+    isSubscriptionProcessing: boolean;
 };
 
-export default function SubscribeScreen({ isSubscribed, ocrUsage, onBack, onSubscribe, onCancelSubscribe }: Props) {
+export default function SubscribeScreen({
+    isSubscribed,
+    ocrUsage,
+    onBack,
+    onSubscribe,
+    onCancelSubscribe,
+    onSubscriptionStatusChange,
+    isSubscriptionProcessing,
+}: Props) {
     const { width: windowWidth } = useWindowDimensions();
     const isCompact = windowWidth < 900;
     const [usage, setUsage] = useState<OcrUsageResponse | null>(ocrUsage);
     const [showCancelModal, setShowCancelModal] = useState(false);
+    const [serverSubscribed, setServerSubscribed] = useState<boolean | null>(null);
 
     useEffect(() => {
         setUsage(ocrUsage);
@@ -49,8 +62,30 @@ export default function SubscribeScreen({ isSubscribed, ocrUsage, onBack, onSubs
         };
     }, [ocrUsage]);
 
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadSubscriptionStatus = async () => {
+            try {
+                const token = await getToken();
+                if (!token) return;
+                const status = await getSubscriptionStatus(token);
+                if (cancelled) return;
+                setServerSubscribed(status.is_active);
+                onSubscriptionStatusChange(status.is_active);
+            } catch {
+                // OCR 사용량 API의 pages_limit 기반 표시로 fallback
+            }
+        };
+
+        loadSubscriptionStatus();
+        return () => {
+            cancelled = true;
+        };
+    }, [onSubscriptionStatusChange]);
+
     const inferredSubscribed = usage?.pages_limit != null ? usage.pages_limit > 50 : null;
-    const resolvedSubscribed = inferredSubscribed == null ? isSubscribed : inferredSubscribed;
+    const resolvedSubscribed = serverSubscribed ?? inferredSubscribed ?? isSubscribed;
 
     const pagesLimit = Math.max(usage?.pages_limit ?? (resolvedSubscribed ? 1000 : 50), 1);
     const pagesUsed = Math.max(usage?.pages_used ?? 0, 0);
@@ -99,7 +134,8 @@ export default function SubscribeScreen({ isSubscribed, ocrUsage, onBack, onSubs
                     onFreePress={() => {
                         if (resolvedSubscribed) setShowCancelModal(true);
                     }}
-                    onSubscribe={onSubscribe}
+                    onSubscribe={resolvedSubscribed ? onCancelSubscribe : onSubscribe}
+                    isProcessing={isSubscriptionProcessing}
                 />
             </ScrollView>
 

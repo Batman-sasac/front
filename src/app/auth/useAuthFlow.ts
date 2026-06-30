@@ -8,6 +8,11 @@ import { clearAuthData, getToken, getUserInfo } from '../../lib/storage';
 import type { AppStep } from '../../navigation/routes';
 import { TYPE_LABEL_KEY } from '../dashboard/progress';
 
+function isUnauthorizedError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message.includes('401') || error.message.includes('토큰이 만료');
+}
+
 type UseAuthFlowParams = {
   step: AppStep;
   setStep: (step: AppStep) => void;
@@ -49,9 +54,24 @@ export default function useAuthFlow({
       }
       const userState = await getUserStats(token);
       setIsSubscribed(!!userState.data.is_subscribed);
+      return true;
     } catch (error) {
       console.error('유저 상태 조회 실패:', error);
+      return !isUnauthorizedError(error);
     }
+  };
+
+  const clearSessionAndGoLogin = async () => {
+    await clearAuthData();
+    setUserEmail('');
+    setNickname('');
+    setUserSocialId('');
+    setIsSubscribed(false);
+    setOcrUsage(null);
+    setShowUsageExhaustedModal(false);
+    setPushTokenSynced(false);
+    onLogoutReset();
+    setStep('login');
   };
 
   const loadStoredTypeLabel = async () => {
@@ -70,7 +90,11 @@ export default function useAuthFlow({
         if (userInfo.email && userInfo.nickname) {
           setUserEmail(userInfo.email);
           setNickname(userInfo.nickname);
-          await applyUserState(token);
+          const isUsableToken = await applyUserState(token);
+          if (!isUsableToken) {
+            await clearSessionAndGoLogin();
+            return;
+          }
           await refreshOcrUsage();
           const storedTypeLabel = await loadStoredTypeLabel();
           setTimeout(() => setStep(storedTypeLabel ? 'home' : 'typeIntro'), 2000);
@@ -109,7 +133,11 @@ export default function useAuthFlow({
     setNickname(userNickname);
     const token = await getToken();
     if (token) {
-      await applyUserState(token);
+      const isUsableToken = await applyUserState(token);
+      if (!isUsableToken) {
+        await clearSessionAndGoLogin();
+        return;
+      }
     }
     await refreshOcrUsage();
     const storedTypeLabel = await loadStoredTypeLabel();
@@ -131,17 +159,8 @@ export default function useAuthFlow({
   const handleLogout = async () => {
     try {
       console.log('로그아웃 시작...');
-      await clearAuthData();
+      await clearSessionAndGoLogin();
       console.log('로그아웃 완료');
-      setUserEmail('');
-      setNickname('');
-      setUserSocialId('');
-      setIsSubscribed(false);
-      setOcrUsage(null);
-      setShowUsageExhaustedModal(false);
-      setPushTokenSynced(false);
-      onLogoutReset();
-      setStep('login');
     } catch (error) {
       console.error('로그아웃 오류:', error);
     }
