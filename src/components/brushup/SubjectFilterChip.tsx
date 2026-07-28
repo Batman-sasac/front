@@ -19,7 +19,6 @@ export default function SubjectFilterChip({
       style={[styles.subjectChip, selected && styles.subjectChipActive]}
       onPress={onPress}
     >
-      <Text style={styles.subjectEmoji}>{subject.emoji}</Text>
       <Text style={[styles.subjectText, selected && styles.subjectTextActive]}>
         {subject.name}
       </Text>
@@ -42,9 +41,6 @@ const styles = StyleSheet.create({
   subjectChipActive: {
     backgroundColor: appColors.primarySoftAlt,
     borderColor: appColors.primary,
-  },
-  subjectEmoji: {
-    fontSize: fontScale(16),
   },
   subjectText: {
     fontSize: fontScale(14),

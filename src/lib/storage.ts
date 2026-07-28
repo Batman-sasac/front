@@ -5,6 +5,7 @@ const USER_EMAIL_KEY = '@bat_user_email';
 const USER_NICKNAME_KEY = '@bat_user_nickname';
 const USER_PROVIDER_KEY = '@bat_user_provider';
 const NOTIFICATION_CACHE_KEY = '@bat_notification_status';
+const CUSTOM_STUDY_CATEGORIES_KEY = '@bat_custom_study_categories';
 export type AuthProvider = 'kakao' | 'naver' | 'apple';
 
 /**
@@ -191,5 +192,29 @@ export async function setCachedMyPageStats(data: MyPageStatsCache): Promise<void
         await AsyncStorage.setItem(MYPAGE_STATS_CACHE_KEY, JSON.stringify(data));
     } catch (error) {
         console.error('마이페이지 통계 캐시 저장 실패:', error);
+    }
+}
+
+export async function getCustomStudyCategories(): Promise<string[]> {
+    try {
+        const raw = await AsyncStorage.getItem(CUSTOM_STUDY_CATEGORIES_KEY);
+        if (!raw) return [];
+
+        const parsed = JSON.parse(raw) as unknown;
+        if (!Array.isArray(parsed)) return [];
+
+        return parsed
+            .map((value) => String(value ?? '').trim())
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
+export async function setCustomStudyCategories(categories: string[]): Promise<void> {
+    try {
+        await AsyncStorage.setItem(CUSTOM_STUDY_CATEGORIES_KEY, JSON.stringify(categories));
+    } catch (error) {
+        console.error('커스텀 학습 카테고리 저장 실패:', error);
     }
 }

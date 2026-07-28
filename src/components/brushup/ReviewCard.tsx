@@ -43,7 +43,9 @@ export default function ReviewCard({
         }}
       >
         <View style={styles.cardHeader}>
-          <Text style={styles.cardSubjectIcon}>{subjectIcon}</Text>
+          {subjectIcon ? (
+            <Text style={styles.cardSubjectIcon}>{subjectIcon}</Text>
+          ) : null}
           <Text style={styles.cardTitle}>{card.title}</Text>
         </View>
 

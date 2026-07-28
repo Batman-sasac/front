@@ -10,6 +10,7 @@ import Sidebar from "../../components/Sidebar";
 import type { Screen } from "../../components/Sidebar";
 import { confirmLogout } from "../../lib/auth";
 import { deleteReviewCard, getReviewCards } from "../../api/ocr";
+import { getCustomStudyCategories } from "../../lib/storage";
 import AppConfirmDialog from "../../components/common/AppConfirmDialog";
 import AppSearchBar from "../../components/common/AppSearchBar";
 import BrushupSearchModal from "../../components/brushup/BrushupSearchModal";
@@ -30,15 +31,15 @@ type Props = {
   onLogout?: () => void;
 };
 
-const SUBJECTS: Subject[] = [
-  { id: "all", icon: "📚", name: "전체", emoji: "📚" },
-  { id: "korean", icon: "📖", name: "국어", emoji: "📖" },
-  { id: "english", icon: "abc", name: "영어", emoji: "abc" },
-  { id: "math", icon: "🧮", name: "수학", emoji: "🧮" },
-  { id: "science", icon: "🔬", name: "과학", emoji: "🔬" },
-  { id: "society", icon: "🌍", name: "사회", emoji: "🌍" },
-  { id: "history", icon: "🏺", name: "역사", emoji: "🏺" },
-  { id: "law", icon: "⚖️", name: "법", emoji: "⚖️" },
+const BASE_SUBJECTS: Subject[] = [
+  { id: "all", icon: "", name: "전체", emoji: "" },
+  { id: "korean", icon: "", name: "국어", emoji: "" },
+  { id: "english", icon: "", name: "영어", emoji: "" },
+  { id: "math", icon: "", name: "수학", emoji: "" },
+  { id: "science", icon: "", name: "과학", emoji: "" },
+  { id: "society", icon: "", name: "사회", emoji: "" },
+  { id: "history", icon: "", name: "역사", emoji: "" },
+  { id: "law", icon: "", name: "법", emoji: "" },
 ];
 
 export default function BrushUPScreen({
@@ -57,12 +58,54 @@ export default function BrushUPScreen({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
   const PAGE_SIZE = 20;
+  const subjects = React.useMemo<Subject[]>(
+    () => {
+      const savedCardSubjects = new Set(cards.map((card) => card.subject));
+      const visibleCustomCategories = customCategories.filter((category) =>
+        savedCardSubjects.has(category),
+      );
+
+      return [
+        ...BASE_SUBJECTS,
+        ...visibleCustomCategories.map((category) => ({
+        id: `custom-${category}`,
+        icon: "",
+        name: category,
+        emoji: "",
+      })),
+      ];
+    },
+    [cards, customCategories],
+  );
 
   // 복습 카드 로드
   useEffect(() => {
     void loadReviewCards(1, true);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCustomCategories = async () => {
+      const storedCategories = await getCustomStudyCategories();
+      if (!cancelled) {
+        setCustomCategories(storedCategories);
+      }
+    };
+
+    void loadCustomCategories();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!subjects.some((subject) => subject.id === selectedSubject)) {
+      setSelectedSubject("all");
+    }
+  }, [selectedSubject, subjects]);
 
   const loadReviewCards = async (nextPage: number, reset = false) => {
     try {
@@ -110,8 +153,8 @@ export default function BrushUPScreen({
   };
 
   const getSubjectIcon = (subjectName: string) => {
-    const subject = SUBJECTS.find((s) => s.name === subjectName);
-    return subject?.emoji ?? "📚";
+    const subject = subjects.find((s) => s.name === subjectName);
+    return subject?.emoji ?? "";
   };
 
   const filteredCards =
@@ -120,7 +163,7 @@ export default function BrushUPScreen({
       : cards.filter(
           (card) =>
             card.subject ===
-            SUBJECTS.find((s) => s.id === selectedSubject)?.name,
+            subjects.find((s) => s.id === selectedSubject)?.name,
         );
 
   const handleDeletePress = (card: Card) => {
@@ -190,7 +233,7 @@ export default function BrushUPScreen({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.subjectScroll}
           >
-            {SUBJECTS.map((subject) => (
+            {subjects.map((subject) => (
               <SubjectFilterChip
                 key={subject.id}
                 subject={subject}
