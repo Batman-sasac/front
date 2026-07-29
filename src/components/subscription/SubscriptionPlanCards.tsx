@@ -20,6 +20,7 @@ type Props = {
     planBorderColor: string;
     onFreePress: () => void;
     onSubscribe: () => void;
+    onCouponPress: () => void;
     isProcessing: boolean;
 };
 
@@ -31,6 +32,7 @@ export default function SubscriptionPlanCards({
     planBorderColor,
     onFreePress,
     onSubscribe,
+    onCouponPress,
     isProcessing,
 }: Props) {
     const rowDynamicStyle: StyleProp<ViewStyle> = !isCompact
@@ -129,6 +131,16 @@ export default function SubscriptionPlanCards({
                                 {isProcessing ? '결제 진행 중...' : '월 4,800원 구독하기'}
                             </SubscriptionButton>
                         )}
+                        {limitReached ? (
+                            <SubscriptionButton
+                                variant="secondary"
+                                onPress={onCouponPress}
+                                disabled={isProcessing}
+                                style={styles.couponButton}
+                            >
+                                쿠폰 입력
+                            </SubscriptionButton>
+                        ) : null}
                     </View>
                 </View>
             </View>
@@ -199,6 +211,9 @@ const styles = StyleSheet.create({
     planBtnWrap: {
         width: figmaScale(400),
         alignSelf: 'center',
+    },
+    couponButton: {
+        marginTop: figmaScale(12),
     },
     badgeWrap: {
         position: 'absolute',

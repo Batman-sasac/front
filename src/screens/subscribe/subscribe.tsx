@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
+    Alert,
     ScrollView,
     StyleSheet,
     useWindowDimensions,
@@ -9,6 +10,7 @@ import { getSubscriptionStatus } from '../../api/iap';
 import { getOcrUsage, OcrUsageResponse } from '../../api/ocr';
 import AppScreenHeader from '../../components/common/AppScreenHeader';
 import SubscriptionCancelModal from '../../components/subscription/SubscriptionCancelModal';
+import SubscriptionCouponModal from '../../components/subscription/SubscriptionCouponModal';
 import SubscriptionPlanCards from '../../components/subscription/SubscriptionPlanCards';
 import SubscriptionUsageCard from '../../components/subscription/SubscriptionUsageCard';
 import { getToken } from '../../lib/storage';
@@ -37,6 +39,7 @@ export default function SubscribeScreen({
     const isCompact = windowWidth < 900;
     const [usage, setUsage] = useState<OcrUsageResponse | null>(ocrUsage);
     const [showCancelModal, setShowCancelModal] = useState(false);
+    const [showCouponModal, setShowCouponModal] = useState(false);
     const [serverSubscribed, setServerSubscribed] = useState<boolean | null>(null);
 
     useEffect(() => {
@@ -135,6 +138,7 @@ export default function SubscribeScreen({
                         if (resolvedSubscribed) setShowCancelModal(true);
                     }}
                     onSubscribe={resolvedSubscribed ? onCancelSubscribe : onSubscribe}
+                    onCouponPress={() => setShowCouponModal(true)}
                     isProcessing={isSubscriptionProcessing}
                 />
             </ScrollView>
@@ -145,6 +149,15 @@ export default function SubscribeScreen({
                 onConfirmCancel={() => {
                     setShowCancelModal(false);
                     onCancelSubscribe();
+                }}
+            />
+
+            <SubscriptionCouponModal
+                visible={showCouponModal}
+                onClose={() => setShowCouponModal(false)}
+                onConfirm={() => {
+                    setShowCouponModal(false);
+                    Alert.alert('안내', '아직 구현중입니다.');
                 }}
             />
         </View>

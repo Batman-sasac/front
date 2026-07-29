@@ -55,6 +55,7 @@ const meta = {
     planBorderColor: subscriptionColors.primaryBlue,
     onFreePress: () => {},
     onSubscribe: () => {},
+    onCouponPress: () => {},
     isProcessing: false,
   },
   parameters: {
