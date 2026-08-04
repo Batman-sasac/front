@@ -7,7 +7,7 @@ import SubscriptionButton from './SubscriptionButton';
 type Props = {
     visible: boolean;
     onClose: () => void;
-    onConfirm: (couponCode: string) => void;
+    onConfirm: (couponCode: string) => Promise<void>;
 };
 
 export default function SubscriptionCouponModal({
@@ -16,17 +16,41 @@ export default function SubscriptionCouponModal({
     onConfirm,
 }: Props) {
     const [couponCode, setCouponCode] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const normalizedCouponCode = couponCode.trim();
 
     useEffect(() => {
-        if (!visible) setCouponCode('');
+        if (!visible) {
+            setCouponCode('');
+            setErrorMessage(null);
+            setIsSubmitting(false);
+        }
     }, [visible]);
+
+    const handleClose = () => {
+        if (!isSubmitting) onClose();
+    };
+
+    const handleConfirm = async () => {
+        if (!normalizedCouponCode || isSubmitting) return;
+
+        setIsSubmitting(true);
+        setErrorMessage(null);
+        try {
+            await onConfirm(normalizedCouponCode);
+        } catch (error) {
+            setErrorMessage(error instanceof Error ? error.message : '쿠폰을 적용하지 못했습니다.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     return (
         <AppModalShell
             visible={visible}
             title="쿠폰 입력"
-            onClose={onClose}
+            onClose={handleClose}
             backdropStyle={styles.backdrop}
             cardStyle={styles.card}
             headerStyle={styles.header}
@@ -36,17 +60,21 @@ export default function SubscriptionCouponModal({
                 <View style={styles.buttons}>
                     <SubscriptionButton
                         variant="secondary"
-                        onPress={onClose}
+                        onPress={handleClose}
+                        disabled={isSubmitting}
                         style={styles.button}
                     >
                         취소
                     </SubscriptionButton>
                     <SubscriptionButton
-                        onPress={() => onConfirm(normalizedCouponCode)}
-                        disabled={!normalizedCouponCode}
-                        style={[styles.button, !normalizedCouponCode && styles.disabledButton]}
+                        onPress={() => void handleConfirm()}
+                        disabled={!normalizedCouponCode || isSubmitting}
+                        style={[
+                            styles.button,
+                            (!normalizedCouponCode || isSubmitting) && styles.disabledButton,
+                        ]}
                     >
-                        확인
+                        {isSubmitting ? '적용 중...' : '확인'}
                     </SubscriptionButton>
                 </View>
             )}
@@ -55,19 +83,26 @@ export default function SubscriptionCouponModal({
                 <Text style={styles.description}>보유하고 계신 쿠폰 코드를 입력해 주세요.</Text>
                 <TextInput
                     value={couponCode}
-                    onChangeText={setCouponCode}
+                    onChangeText={(value) => {
+                        setCouponCode(value);
+                        if (errorMessage) setErrorMessage(null);
+                    }}
                     placeholder="쿠폰 코드 입력"
                     placeholderTextColor={subscriptionColors.grey300}
                     autoCapitalize="characters"
                     autoCorrect={false}
-                    maxLength={50}
+                    maxLength={32}
                     returnKeyType="done"
-                    onSubmitEditing={() => {
-                        if (normalizedCouponCode) onConfirm(normalizedCouponCode);
-                    }}
+                    editable={!isSubmitting}
+                    onSubmitEditing={() => void handleConfirm()}
                     accessibilityLabel="쿠폰 코드"
                     style={styles.input}
                 />
+                {errorMessage ? (
+                    <Text accessibilityRole="alert" style={styles.errorText}>
+                        {errorMessage}
+                    </Text>
+                ) : null}
             </View>
         </AppModalShell>
     );
@@ -119,6 +154,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: figmaScale(16),
         fontSize: figmaFontScale(18),
         color: subscriptionColors.textStrong,
+    },
+    errorText: {
+        marginTop: figmaScale(10),
+        fontSize: figmaFontScale(14),
+        lineHeight: figmaFontScale(20),
+        fontWeight: '600',
+        color: subscriptionColors.red,
     },
     buttons: {
         flexDirection: 'row',

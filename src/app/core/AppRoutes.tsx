@@ -91,6 +91,7 @@ export type AppRoutesProps = {
   handleScaffoldingSave: React.ComponentProps<typeof ScaffoldingScreen>['onSave'];
   handleBrushUpCardPress: React.ComponentProps<typeof BrushUPScreen>['onCardPress'];
   ocrUsage: React.ComponentProps<typeof SubscribeScreen>['ocrUsage'];
+  setOcrUsage: React.ComponentProps<typeof SubscribeScreen>['onOcrUsageChange'];
   handleSubscribe: React.ComponentProps<typeof SubscribeScreen>['onSubscribe'];
   handleCancelSubscribe: React.ComponentProps<typeof SubscribeScreen>['onCancelSubscribe'];
   handleSubscriptionStatusChange: React.ComponentProps<typeof SubscribeScreen>['onSubscriptionStatusChange'];
@@ -163,6 +164,7 @@ export default function AppRoutes({
   handleScaffoldingSave,
   handleBrushUpCardPress,
   ocrUsage,
+  setOcrUsage,
   handleSubscribe,
   handleCancelSubscribe,
   handleSubscriptionStatusChange,
@@ -369,6 +371,7 @@ export default function AppRoutes({
         <SubscribeScreen
           isSubscribed={isSubscribed}
           ocrUsage={ocrUsage}
+          onOcrUsageChange={setOcrUsage}
           onBack={() => setStep('mypage')}
           onSubscribe={handleSubscribe}
           onCancelSubscribe={handleCancelSubscribe}

@@ -6,6 +6,7 @@ import {
     useWindowDimensions,
     View,
 } from 'react-native';
+import { redeemCoupon } from '../../api/coupon';
 import { getSubscriptionStatus } from '../../api/iap';
 import { getOcrUsage, OcrUsageResponse } from '../../api/ocr';
 import AppScreenHeader from '../../components/common/AppScreenHeader';
@@ -19,6 +20,7 @@ import { figmaScale, subscriptionColors } from '../../styles/subscriptionStyles'
 type Props = {
     isSubscribed: boolean;
     ocrUsage: OcrUsageResponse | null;
+    onOcrUsageChange: (usage: OcrUsageResponse) => void;
     onBack: () => void;
     onSubscribe: () => void;
     onCancelSubscribe: () => void;
@@ -29,6 +31,7 @@ type Props = {
 export default function SubscribeScreen({
     isSubscribed,
     ocrUsage,
+    onOcrUsageChange,
     onBack,
     onSubscribe,
     onCancelSubscribe,
@@ -87,8 +90,7 @@ export default function SubscribeScreen({
         };
     }, [onSubscriptionStatusChange]);
 
-    const inferredSubscribed = usage?.pages_limit != null ? usage.pages_limit > 50 : null;
-    const resolvedSubscribed = serverSubscribed ?? inferredSubscribed ?? isSubscribed;
+    const resolvedSubscribed = serverSubscribed ?? isSubscribed;
 
     const pagesLimit = Math.max(usage?.pages_limit ?? (resolvedSubscribed ? 1000 : 50), 1);
     const pagesUsed = Math.max(usage?.pages_used ?? 0, 0);
@@ -155,9 +157,19 @@ export default function SubscribeScreen({
             <SubscriptionCouponModal
                 visible={showCouponModal}
                 onClose={() => setShowCouponModal(false)}
-                onConfirm={() => {
+                onConfirm={async (couponCode) => {
+                    const result = await redeemCoupon(couponCode);
+                    const nextUsage: OcrUsageResponse = {
+                        status: result.data.pages_remaining > 0 ? 'ok' : 'limit_reached',
+                        pages_used: result.data.pages_used,
+                        pages_limit: result.data.ocr_page_limit,
+                        remaining: result.data.pages_remaining,
+                    };
+
+                    setUsage(nextUsage);
+                    onOcrUsageChange(nextUsage);
                     setShowCouponModal(false);
-                    Alert.alert('안내', '아직 구현중입니다.');
+                    Alert.alert('쿠폰 적용 완료', result.message);
                 }}
             />
         </View>
