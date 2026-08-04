@@ -76,7 +76,7 @@ export default function SubscriptionPlanCards({
                         >
                             {resolvedSubscribed ? '구독 취소' : '현재 플랜'}
                         </SubscriptionButton>
-                        {!resolvedSubscribed && limitReached ? (
+                        {!resolvedSubscribed ? (
                             <SubscriptionButton
                                 variant="secondary"
                                 onPress={onCouponPress}
@@ -134,7 +134,7 @@ export default function SubscriptionPlanCards({
                                 {isProcessing ? '결제 진행 중...' : 'Basic 구독하기'}
                             </SubscriptionButton>
                         )}
-                        {limitReached ? (
+                        {resolvedSubscribed ? (
                             <SubscriptionButton
                                 variant="secondary"
                                 onPress={onCouponPress}
