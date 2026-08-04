@@ -75,14 +75,22 @@ export default function useHomeDashboardData() {
     try {
       const token = await getToken();
       const [weekly, monthly, homeStats, rank, leaderboard] = await Promise.all([
-        getWeeklyGrowth(),
-        getMonthlyStats(),
+        getWeeklyGrowth().catch((error) => {
+          console.error('주간 성장 데이터 로드 실패:', error);
+          return null;
+        }),
+        getMonthlyStats().catch((error) => {
+          console.error('월간 통계 데이터 로드 실패:', error);
+          return null;
+        }),
         token ? getHomeStats(token).catch(() => null) : Promise.resolve(null),
         token ? getMyRewardRank().catch(() => null) : Promise.resolve(null),
         token ? getRewardLeaderboard().catch(() => null) : Promise.resolve(null),
       ]);
 
-      setWeeklyGrowth(weekly);
+      if (weekly) {
+        setWeeklyGrowth(weekly);
+      }
 
       if (rank?.status === 'success') {
         setMyRewardRank(rank.rank);
@@ -97,15 +105,17 @@ export default function useHomeDashboardData() {
         })));
       }
 
-      const compare = monthly.compare ?? {};
-      setMonthlyStats({
-        ...compare,
-        this_month_count: homeStats?.data?.this_month_count ?? compare.this_month_count ?? 0,
-      });
+      const compare = monthly?.compare;
+      if (compare) {
+        setMonthlyStats({
+          ...compare,
+          this_month_count: homeStats?.data?.this_month_count ?? compare.this_month_count ?? 0,
+        });
+      }
 
       if (homeStats?.data?.monthly_goal != null && homeStats.data.monthly_goal > 0) {
         onMonthlyGoalChange(homeStats.data.monthly_goal);
-      } else if (compare?.target_count > 0) {
+      } else if (compare && compare.target_count > 0) {
         onMonthlyGoalChange(compare.target_count);
       }
     } catch (error) {

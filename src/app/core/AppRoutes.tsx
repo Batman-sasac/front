@@ -4,6 +4,7 @@ import type { ResultStats } from '../../data/learningTypeTest';
 import type { OcrProgressState } from '../study/studyFlow';
 import type { AppStep as Step } from '../../navigation/routes';
 import Splash from '../../components/Splash';
+import AppRecoveryScreen from '../../components/common/AppRecoveryScreen';
 import UsageExhaustedModal from '../../components/subscription/UsageExhaustedModal';
 import LoginScreen from '../../screens/auth/LoginScreen';
 import NicknameScreen from '../../screens/auth/NicknameScreen';
@@ -30,6 +31,31 @@ type RewardScreenState = {
   type: React.ComponentProps<typeof RewardScreen>['type'];
   xp: number;
 };
+
+const RENDERABLE_STEPS: ReadonlySet<Step> = new Set([
+  'splash',
+  'login',
+  'nickname',
+  'goal',
+  'typeIntro',
+  'typeTest',
+  'result',
+  'home',
+  'league',
+  'alarm',
+  'alarmSetting',
+  'mypage',
+  'takePicture',
+  'selectPicture',
+  'ocrLoading',
+  'studyIntro',
+  'talkingStudy',
+  'scaffolding',
+  'brushup',
+  'reward',
+  'subscribe',
+  'error',
+]);
 
 export type AppRoutesProps = {
   step: Step;
@@ -176,6 +202,31 @@ export default function AppRoutes({
   handleUsageModalClose,
   handleUsageModalSubscribe,
 }: AppRoutesProps) {
+  React.useEffect(() => {
+    console.info('[navigation] 화면 전환', { step });
+  }, [step]);
+
+  if (!RENDERABLE_STEPS.has(step)) {
+    console.error('[navigation] 알 수 없는 화면', { step });
+    return (
+      <AppRecoveryScreen
+        message="잘못된 화면 경로가 감지되었습니다. 로그인 화면으로 돌아가 주세요."
+        retryLabel="로그인 화면으로 이동"
+        onRetry={() => setStep('login')}
+      />
+    );
+  }
+
+  if (step === 'result' && !typeResult) {
+    console.error('[navigation] 진단 결과 데이터가 없습니다.');
+    return <AppRecoveryScreen onRetry={() => setStep('home')} />;
+  }
+
+  if (step === 'reward' && !rewardScreenState) {
+    console.error('[navigation] 보상 화면 데이터가 없습니다.');
+    return <AppRecoveryScreen onRetry={() => setStep('home')} />;
+  }
+
   return (
     <>
       {step === 'splash' && (

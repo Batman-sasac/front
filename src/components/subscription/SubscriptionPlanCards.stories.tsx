@@ -7,9 +7,9 @@ import SubscriptionUsageCard from './SubscriptionUsageCard';
 import { figmaScale, subscriptionColors } from '../../styles/subscriptionStyles';
 
 const desktopLayout = {
-  rowWidth: figmaScale(928),
-  rowGap: figmaScale(32),
-  cardWidth: figmaScale(448),
+  rowWidth: figmaScale(1160),
+  rowGap: figmaScale(20),
+  cardWidth: figmaScale(373),
   freeCardHeight: figmaScale(480),
   premiumCardHeight: figmaScale(544),
 };
@@ -55,6 +55,7 @@ const meta = {
     planBorderColor: subscriptionColors.primaryBlue,
     onFreePress: () => {},
     onSubscribe: () => {},
+    onProPress: () => {},
     onCouponPress: () => {},
     isProcessing: false,
   },

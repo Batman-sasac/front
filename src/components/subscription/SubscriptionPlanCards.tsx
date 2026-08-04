@@ -20,6 +20,7 @@ type Props = {
     planBorderColor: string;
     onFreePress: () => void;
     onSubscribe: () => void;
+    onProPress: () => void;
     onCouponPress: () => void;
     isProcessing: boolean;
 };
@@ -32,6 +33,7 @@ export default function SubscriptionPlanCards({
     planBorderColor,
     onFreePress,
     onSubscribe,
+    onProPress,
     onCouponPress,
     isProcessing,
 }: Props) {
@@ -41,7 +43,7 @@ export default function SubscriptionPlanCards({
     const freeCardDynamicStyle: StyleProp<ViewStyle> = !isCompact
         ? { width: layout.cardWidth, minHeight: layout.freeCardHeight }
         : null;
-    const premiumCardDynamicStyle: StyleProp<ViewStyle> = !isCompact
+    const paidCardDynamicStyle: StyleProp<ViewStyle> = !isCompact
         ? { width: layout.cardWidth, minHeight: layout.premiumCardHeight }
         : null;
 
@@ -61,7 +63,7 @@ export default function SubscriptionPlanCards({
                 ]}
             >
                 <Text style={styles.planTitle}>무료 플랜</Text>
-                <Text style={styles.planBullet}>• 총 50회 무료 사용</Text>
+                <Text style={styles.planBullet}>• 총 20회 무료 사용</Text>
                 <Text style={styles.planBullet}>• 기간 제한 없음</Text>
                 <Text style={styles.planBullet}>• 카드 등록 없이 사용 가능</Text>
 
@@ -74,6 +76,16 @@ export default function SubscriptionPlanCards({
                         >
                             {resolvedSubscribed ? '구독 취소' : '현재 플랜'}
                         </SubscriptionButton>
+                        {!resolvedSubscribed && limitReached ? (
+                            <SubscriptionButton
+                                variant="secondary"
+                                onPress={onCouponPress}
+                                disabled={isProcessing}
+                                style={styles.couponButton}
+                            >
+                                쿠폰 입력
+                            </SubscriptionButton>
+                        ) : null}
                     </View>
                 </View>
             </View>
@@ -81,9 +93,10 @@ export default function SubscriptionPlanCards({
             <View
                 style={[
                     styles.planCard,
-                    premiumCardDynamicStyle,
+                    paidCardDynamicStyle,
                     isCompact && styles.planCardCompact,
-                    styles.premiumCard,
+                    styles.paidCard,
+                    styles.featuredCard,
                     { borderColor: planBorderColor },
                 ]}
             >
@@ -92,7 +105,7 @@ export default function SubscriptionPlanCards({
                         <SubscriptionBadge label="현재 플랜" />
                     ) : limitReached ? (
                         <SubscriptionBadge
-                            label="학습을 위해 프리미엄 구독이 필요해요!"
+                            label="사용량을 모두 소진했어요"
                             style={[styles.limitBadge, { backgroundColor: planBorderColor }]}
                         />
                     ) : (
@@ -100,21 +113,11 @@ export default function SubscriptionPlanCards({
                     )}
                 </View>
 
-                <Text style={styles.planTitle}>프리미엄 플랜</Text>
-                <Text style={styles.planBullet}>• 월 1,000회 호출 제공</Text>
+                <Text style={styles.planTitle}>Basic 플랜</Text>
+                <Text style={styles.planPrice}>월 4,900원</Text>
+                <Text style={styles.planBullet}>• 월 100회 사용</Text>
                 <Text style={styles.planBullet}>• 매월 자동 갱신</Text>
                 <Text style={styles.planBullet}>• 월 단위 사용량 초기화 (이월 없음)</Text>
-
-                <View style={styles.coffeeWrap}>
-                    <Text style={styles.coffeeMain}>
-                        <Text style={styles.coffeeStrong}>커피 한 잔</Text>
-                        <Text> 값으로 </Text>
-                        <Text style={styles.coffeeStrong}>한 달</Text>
-                        <Text> 동안</Text>
-                    </Text>
-                    <Text style={styles.coffeeSub}>마음껏 학습할 수 있어요!</Text>
-                    <Text style={styles.coffeeEmoji}>☕</Text>
-                </View>
 
                 <View style={[styles.planBottom, styles.planBottomPremium]}>
                     <View style={styles.planBtnWrap}>
@@ -128,7 +131,7 @@ export default function SubscriptionPlanCards({
                                 onPress={onSubscribe}
                                 disabled={isProcessing}
                             >
-                                {isProcessing ? '결제 진행 중...' : '월 4,800원 구독하기'}
+                                {isProcessing ? '결제 진행 중...' : 'Basic 구독하기'}
                             </SubscriptionButton>
                         )}
                         {limitReached ? (
@@ -141,6 +144,33 @@ export default function SubscriptionPlanCards({
                                 쿠폰 입력
                             </SubscriptionButton>
                         ) : null}
+                    </View>
+                </View>
+            </View>
+
+            <View
+                style={[
+                    styles.planCard,
+                    paidCardDynamicStyle,
+                    isCompact && styles.planCardCompact,
+                    styles.paidCard,
+                ]}
+            >
+                <View style={styles.badgeWrap}>
+                    <SubscriptionBadge label="가장 넉넉한 플랜" />
+                </View>
+
+                <Text style={styles.planTitle}>Pro 플랜</Text>
+                <Text style={styles.planPrice}>월 9,900원</Text>
+                <Text style={styles.planBullet}>• 월 250회 사용</Text>
+                <Text style={styles.planBullet}>• 매월 자동 갱신</Text>
+                <Text style={styles.planBullet}>• 월 단위 사용량 초기화 (이월 없음)</Text>
+
+                <View style={[styles.planBottom, styles.planBottomPremium]}>
+                    <View style={styles.planBtnWrap}>
+                        <SubscriptionButton onPress={onProPress} disabled={isProcessing}>
+                            Pro 구독하기
+                        </SubscriptionButton>
                     </View>
                 </View>
             </View>
@@ -176,10 +206,12 @@ const styles = StyleSheet.create({
     planCardCompact: {
         minHeight: figmaScale(480),
     },
-    premiumCard: {
-        borderWidth: 4,
+    paidCard: {
         alignItems: 'center',
         paddingVertical: figmaScale(32),
+    },
+    featuredCard: {
+        borderWidth: 4,
     },
     planTitle: {
         width: '100%',
@@ -197,7 +229,16 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         marginBottom: figmaScale(8),
     },
+    planPrice: {
+        width: '100%',
+        marginBottom: figmaScale(18),
+        color: subscriptionColors.primaryBlue,
+        fontSize: figmaFontScale(28),
+        lineHeight: figmaFontScale(40),
+        fontWeight: '800',
+    },
     planBottom: {
+        width: '100%',
         paddingTop: figmaScale(12),
     },
     planBottomFree: {
@@ -209,7 +250,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     planBtnWrap: {
-        width: figmaScale(400),
+        width: '100%',
         alignSelf: 'center',
     },
     couponButton: {
@@ -222,39 +263,6 @@ const styles = StyleSheet.create({
         zIndex: 2,
     },
     limitBadge: {
-        minWidth: figmaScale(420),
-    },
-    coffeeWrap: {
-        minHeight: figmaScale(133),
-        alignSelf: 'center',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: figmaScale(22),
-        marginBottom: figmaScale(8),
-        paddingHorizontal: figmaScale(4),
-    },
-    coffeeMain: {
-        fontSize: figmaFontScale(20),
-        lineHeight: figmaFontScale(30),
-        fontWeight: '500',
-        color: subscriptionColors.grey600,
-        textAlign: 'center',
-    },
-    coffeeStrong: {
-        fontSize: figmaFontScale(24),
-        lineHeight: figmaFontScale(36),
-        fontWeight: '700',
-    },
-    coffeeSub: {
-        fontSize: figmaFontScale(20),
-        lineHeight: figmaFontScale(30),
-        fontWeight: '500',
-        color: subscriptionColors.grey600,
-        textAlign: 'center',
-    },
-    coffeeEmoji: {
-        fontSize: figmaFontScale(42),
-        lineHeight: figmaFontScale(60),
-        marginTop: figmaScale(8),
+        minWidth: figmaScale(250),
     },
 });

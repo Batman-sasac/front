@@ -1,4 +1,5 @@
 ﻿import config from '../lib/config';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import { getToken, getUserInfo as getStoredUserInfo } from '../lib/storage';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
@@ -488,7 +489,7 @@ export async function getHomeStats(token: string): Promise<{
     };
 }> {
     const endpoint = `${API_BASE_URL}/auth/home/stats`;
-    const res = await fetch(endpoint, {
+    const res = await fetchWithTimeout(endpoint, {
         method: 'GET',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -554,7 +555,7 @@ export async function getUserStats(token: string): Promise<{
     };
 
     const endpoint = `${API_BASE_URL}/auth/user/stats`;
-    const res = await fetch(endpoint, {
+    const res = await fetchWithTimeout(endpoint, {
         method: 'GET',
         headers,
     });

@@ -18,6 +18,7 @@ import ReviewCard from "../../components/brushup/ReviewCard";
 import SubjectFilterChip from "../../components/brushup/SubjectFilterChip";
 import BrushupLoadingState from "../../components/brushup/BrushupLoadingState";
 import BrushupEmptyState from "../../components/brushup/BrushupEmptyState";
+import BrushupErrorState from "../../components/brushup/BrushupErrorState";
 import BrushupLoadMoreButton from "../../components/brushup/BrushupLoadMoreButton";
 import type { Card, Subject } from "../../components/brushup/types";
 import AppLoadingState from "../../components/common/AppLoadingState";
@@ -58,6 +59,7 @@ export default function BrushUPScreen({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   const PAGE_SIZE = 20;
   const subjects = React.useMemo<Subject[]>(
@@ -111,6 +113,7 @@ export default function BrushUPScreen({
     try {
       if (reset) setLoading(true);
       else setLoadingMore(true);
+      setLoadError(false);
       const data = await getReviewCards(nextPage, PAGE_SIZE);
 
       if (data.data && Array.isArray(data.data)) {
@@ -144,7 +147,10 @@ export default function BrushUPScreen({
       }
     } catch (error) {
       console.error("카드 로드 오류:", error);
-      if (reset) setCards([]);
+      if (reset) {
+        setCards([]);
+        setLoadError(true);
+      }
       setHasMore(false);
     } finally {
       if (reset) setLoading(false);
@@ -255,6 +261,8 @@ export default function BrushUPScreen({
         <ScrollView contentContainerStyle={styles.cardList}>
           {loading ? (
             <BrushupLoadingState />
+          ) : loadError ? (
+            <BrushupErrorState onRetry={() => void loadReviewCards(1, true)} />
           ) : filteredCards.length === 0 ? (
             <BrushupEmptyState />
           ) : (
