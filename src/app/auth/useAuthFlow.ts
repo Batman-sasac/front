@@ -44,21 +44,34 @@ export default function useAuthFlow({
   const [pushTokenSynced, setPushTokenSynced] = useState(false);
 
   const applyUserState = async (token: string) => {
-    try {
-      const homeStats = await getHomeStats(token);
+    const [homeResult, userResult] = await Promise.allSettled([
+      getHomeStats(token),
+      getUserStats(token),
+    ]);
+
+    if (homeResult.status === 'fulfilled') {
+      const homeStats = homeResult.value;
       if (typeof homeStats.data.points === 'number' && Number.isFinite(homeStats.data.points)) {
         setExp(homeStats.data.points);
       }
       if (typeof homeStats.data.monthly_goal === 'number' && homeStats.data.monthly_goal > 0) {
         setMonthlyGoal(homeStats.data.monthly_goal);
       }
-      const userState = await getUserStats(token);
-      setIsSubscribed(!!userState.data.is_subscribed);
-      return true;
-    } catch (error) {
-      console.error('유저 상태 조회 실패:', error);
-      return !isUnauthorizedError(error);
+    } else {
+      console.error('홈 상태 조회 실패:', homeResult.reason);
     }
+
+    if (userResult.status === 'fulfilled') {
+      const userState = userResult.value;
+      setIsSubscribed(!!userState.data.is_subscribed);
+    } else {
+      console.error('사용자 통계 조회 실패:', userResult.reason);
+    }
+
+    const errors = [homeResult, userResult]
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => result.reason);
+    return !errors.some(isUnauthorizedError);
   };
 
   const clearSessionAndGoLogin = async () => {
@@ -90,21 +103,23 @@ export default function useAuthFlow({
         if (userInfo.email && userInfo.nickname) {
           setUserEmail(userInfo.email);
           setNickname(userInfo.nickname);
-          const isUsableToken = await applyUserState(token);
-          if (!isUsableToken) {
-            await clearSessionAndGoLogin();
-            return;
-          }
-          await refreshOcrUsage();
           const storedTypeLabel = await loadStoredTypeLabel();
-          setTimeout(() => setStep(storedTypeLabel ? 'home' : 'typeIntro'), 2000);
+          setStep(storedTypeLabel ? 'home' : 'typeIntro');
+          void (async () => {
+            const isUsableToken = await applyUserState(token);
+            if (!isUsableToken) {
+              await clearSessionAndGoLogin();
+              return;
+            }
+            await refreshOcrUsage();
+          })();
           return;
         }
       }
-      setTimeout(() => setStep('login'), 2000);
+      setStep('login');
     } catch (error) {
       console.error('자동 로그인 확인 오류:', error);
-      setTimeout(() => setStep('login'), 2000);
+      setStep('login');
     }
   };
 
@@ -131,6 +146,9 @@ export default function useAuthFlow({
   const handleLoginSuccess = async (email: string, userNickname: string) => {
     setUserEmail(email);
     setNickname(userNickname);
+    const storedTypeLabel = await loadStoredTypeLabel();
+    setStep(storedTypeLabel ? 'home' : 'typeIntro');
+
     const token = await getToken();
     if (token) {
       const isUsableToken = await applyUserState(token);
@@ -140,8 +158,6 @@ export default function useAuthFlow({
       }
     }
     await refreshOcrUsage();
-    const storedTypeLabel = await loadStoredTypeLabel();
-    setStep(storedTypeLabel ? 'home' : 'typeIntro');
   };
 
   const handleNicknameRequired = (email: string, socialId: string) => {

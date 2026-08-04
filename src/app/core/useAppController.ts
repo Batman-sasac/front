@@ -289,6 +289,7 @@ export default function useAppController() {
     handleScaffoldingSave: studyActions.handleScaffoldingSave,
     handleBrushUpCardPress: studyRoutes.handleBrushUpCardPress,
     ocrUsage,
+    setOcrUsage,
     handleSubscribe,
     handleCancelSubscribe,
     handleSubscriptionStatusChange,

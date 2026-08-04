@@ -1,11 +1,11 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
     Alert,
-    ScrollView,
     StyleSheet,
     useWindowDimensions,
     View,
 } from 'react-native';
+import { redeemCoupon } from '../../api/coupon';
 import { getSubscriptionStatus } from '../../api/iap';
 import { getOcrUsage, OcrUsageResponse } from '../../api/ocr';
 import AppScreenHeader from '../../components/common/AppScreenHeader';
@@ -19,6 +19,7 @@ import { figmaScale, subscriptionColors } from '../../styles/subscriptionStyles'
 type Props = {
     isSubscribed: boolean;
     ocrUsage: OcrUsageResponse | null;
+    onOcrUsageChange: (usage: OcrUsageResponse) => void;
     onBack: () => void;
     onSubscribe: () => void;
     onCancelSubscribe: () => void;
@@ -29,6 +30,7 @@ type Props = {
 export default function SubscribeScreen({
     isSubscribed,
     ocrUsage,
+    onOcrUsageChange,
     onBack,
     onSubscribe,
     onCancelSubscribe,
@@ -36,7 +38,7 @@ export default function SubscribeScreen({
     isSubscriptionProcessing,
 }: Props) {
     const { width: windowWidth } = useWindowDimensions();
-    const isCompact = windowWidth < 900;
+    const isCompact = windowWidth < 700;
     const [usage, setUsage] = useState<OcrUsageResponse | null>(ocrUsage);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [showCouponModal, setShowCouponModal] = useState(false);
@@ -87,8 +89,7 @@ export default function SubscribeScreen({
         };
     }, [onSubscriptionStatusChange]);
 
-    const inferredSubscribed = usage?.pages_limit != null ? usage.pages_limit > 50 : null;
-    const resolvedSubscribed = serverSubscribed ?? inferredSubscribed ?? isSubscribed;
+    const resolvedSubscribed = serverSubscribed ?? isSubscribed;
 
     const pagesLimit = Math.max(usage?.pages_limit ?? (resolvedSubscribed ? 1000 : 50), 1);
     const pagesUsed = Math.max(usage?.pages_used ?? 0, 0);
@@ -105,11 +106,11 @@ export default function SubscribeScreen({
     const planBorderColor = !resolvedSubscribed && limitReached ? subscriptionColors.red : subscriptionColors.blue;
     const progressColor = limitReached ? subscriptionColors.red : subscriptionColors.blue;
     const layout = useMemo(() => {
-        const rowMaxWidth = figmaScale(928);
-        const rowGap = figmaScale(32);
+        const rowMaxWidth = figmaScale(1160);
+        const rowGap = figmaScale(20);
         const contentWidth = Math.max(figmaScale(402), windowWidth - figmaScale(116));
         const rowWidth = Math.min(contentWidth, rowMaxWidth);
-        const cardWidth = isCompact ? rowWidth : Math.min(figmaScale(448), Math.max(figmaScale(300), (rowWidth - rowGap) / 2));
+        const cardWidth = isCompact ? rowWidth : (rowWidth - rowGap * 2) / 3;
         const freeCardHeight = isCompact ? Math.round(cardWidth * (480 / 448)) : figmaScale(480);
         const premiumCardHeight = isCompact ? Math.round(cardWidth * (544 / 448)) : figmaScale(544);
         return { rowWidth, rowGap, cardWidth, freeCardHeight, premiumCardHeight };
@@ -119,7 +120,7 @@ export default function SubscribeScreen({
         <View style={styles.root}>
             <AppScreenHeader title="구독 관리" onBack={onBack} />
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.content}>
                 <SubscriptionUsageCard
                     pagesUsed={pagesUsed}
                     pagesLimit={pagesLimit}
@@ -138,10 +139,13 @@ export default function SubscribeScreen({
                         if (resolvedSubscribed) setShowCancelModal(true);
                     }}
                     onSubscribe={resolvedSubscribed ? onCancelSubscribe : onSubscribe}
+                    onProPress={() => {
+                        Alert.alert('Pro 플랜', 'Pro 플랜 결제 연동은 준비 중입니다.');
+                    }}
                     onCouponPress={() => setShowCouponModal(true)}
                     isProcessing={isSubscriptionProcessing}
                 />
-            </ScrollView>
+            </View>
 
             <SubscriptionCancelModal
                 visible={showCancelModal}
@@ -155,9 +159,19 @@ export default function SubscribeScreen({
             <SubscriptionCouponModal
                 visible={showCouponModal}
                 onClose={() => setShowCouponModal(false)}
-                onConfirm={() => {
+                onConfirm={async (couponCode) => {
+                    const result = await redeemCoupon(couponCode);
+                    const nextUsage: OcrUsageResponse = {
+                        status: result.data.pages_remaining > 0 ? 'ok' : 'limit_reached',
+                        pages_used: result.data.pages_used,
+                        pages_limit: result.data.ocr_page_limit,
+                        remaining: result.data.pages_remaining,
+                    };
+
+                    setUsage(nextUsage);
+                    onOcrUsageChange(nextUsage);
                     setShowCouponModal(false);
-                    Alert.alert('안내', '아직 구현중입니다.');
+                    Alert.alert('쿠폰 적용 완료', result.message);
                 }}
             />
         </View>
@@ -169,9 +183,11 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: subscriptionColors.screenBg,
     },
-    scrollContent: {
+    content: {
+        flex: 1,
         paddingHorizontal: figmaScale(58),
         paddingTop: figmaScale(31),
-        paddingBottom: figmaScale(56),
+        paddingBottom: figmaScale(24),
+        overflow: 'hidden',
     },
 });

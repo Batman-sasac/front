@@ -135,6 +135,7 @@ export default function MyPageScreen({
 
     const [showSingleDisconnectModal, setShowSingleDisconnectModal] = useState(false);
     const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+    const [planTooltipTextWidth, setPlanTooltipTextWidth] = useState<number | null>(null);
     const [showMonthlyGoalModal, setShowMonthlyGoalModal] = useState(false);
     const [showNicknameModal, setShowNicknameModal] = useState(false);
 
@@ -455,17 +456,53 @@ export default function MyPageScreen({
                                 <Text style={styles.statValue}>{monthlyGoalState || 0}회</Text>
                             </Pressable>
 
-                            <Pressable style={styles.statItem} onPress={onPlanManage}>
-                                <View style={styles.statIconRow}>
-                                    <Image
-                                        source={require('../../../assets/mypage/subscription-plan.png')}
-                                        style={styles.statIcon}
-                                        resizeMode="contain"
-                                    />
-                                    <Text style={styles.statTitle}>플랜 관리</Text>
+                            <View style={styles.planGuideWrap}>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel="구독 플랜 관리"
+                                    style={styles.statItem}
+                                    onPress={onPlanManage}
+                                >
+                                    <View style={styles.statIconRow}>
+                                        <Image
+                                            source={require('../../../assets/mypage/subscription-plan.png')}
+                                            style={styles.statIcon}
+                                            resizeMode="contain"
+                                        />
+                                        <Text style={styles.statTitle}>플랜 관리</Text>
+                                    </View>
+                                    <Text style={styles.statValue}>{isSubscribed ? '구독중' : '무료플랜'}</Text>
+                                </Pressable>
+
+                                <View
+                                    style={[
+                                        styles.planTooltip,
+                                        planTooltipTextWidth != null && {
+                                            width: planTooltipTextWidth + scale(24),
+                                        },
+                                    ]}
+                                    pointerEvents="none"
+                                >
+                                    <View style={styles.planTooltipArrow} />
+                                    <Text
+                                        style={styles.planTooltipText}
+                                        numberOfLines={1}
+                                        onTextLayout={(event) => {
+                                            const measuredWidth = event.nativeEvent.lines[0]?.width;
+                                            if (!measuredWidth) return;
+                                            const nextWidth = Math.ceil(measuredWidth);
+                                            setPlanTooltipTextWidth((currentWidth) =>
+                                                currentWidth === nextWidth ? currentWidth : nextWidth,
+                                            );
+                                        }}
+                                    >
+                                        <Text style={styles.planTooltipStrong}>구독</Text>
+                                        {'하고 AI 학습을 '}
+                                        <Text style={styles.planTooltipStrong}>월 250회</Text>
+                                        {'까지 이용해 보세요.'}
+                                    </Text>
                                 </View>
-                                <Text style={styles.statValue}>{isSubscribed ? '구독중' : '무료플랜'}</Text>
-                            </Pressable>
+                            </View>
                         </View>
                     </View>
                 </View>
@@ -734,6 +771,48 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#111827',
         marginTop: scale(4),
+    },
+    planGuideWrap: {
+        position: 'relative',
+        alignItems: 'center',
+    },
+    planTooltip: {
+        position: 'absolute',
+        top: scale(72),
+        width: scale(344),
+        left: '50%',
+        transform: [{ translateX: scale(-213) }],
+        height: scale(48),
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: scale(12),
+        borderRadius: scale(12),
+        backgroundColor: '#212124',
+        overflow: 'visible',
+        zIndex: 2,
+    },
+    planTooltipArrow: {
+        position: 'absolute',
+        top: scale(-14),
+        left: scale(204),
+        width: 0,
+        height: 0,
+        borderLeftWidth: scale(9),
+        borderRightWidth: scale(9),
+        borderBottomWidth: scale(16),
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: '#212124',
+    },
+    planTooltipText: {
+        color: '#FFFFFF',
+        fontSize: fontScale(16),
+        lineHeight: fontScale(24),
+        fontWeight: '500',
+        textAlign: 'center',
+    },
+    planTooltipStrong: {
+        fontWeight: '700',
     },
     accountSection: {
         backgroundColor: '#FFFFFF',

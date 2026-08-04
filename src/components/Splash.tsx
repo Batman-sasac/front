@@ -1,33 +1,15 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Image, Text, useWindowDimensions } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, Image, Text, useWindowDimensions } from 'react-native';
 
-type Props = {
-  onDone?: () => void;
-  duration?: number;
-};
-
-export default function Splash({ onDone, duration = 1500 }: Props) {
-  const opacity = useRef(new Animated.Value(1)).current;
+export default function Splash() {
   const { width } = useWindowDimensions();
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }).start(() => onDone?.());
-    }, duration);
-
-    return () => clearTimeout(timer);
-  }, [duration, onDone, opacity]);
 
   // 패드 기준 비율 유지용 – 화면 크기에 따라 살짝 조정
   const characterSize = Math.min(260, width * 0.35);
   const logoWidth = Math.min(200, width * 0.28);
 
   return (
-    <Animated.View style={[styles.container, { opacity }]}>
+    <View style={styles.container}>
       <View style={styles.inner}>
         <Image
           source={require('../../assets/character/bat-character.png')}
@@ -43,7 +25,7 @@ export default function Splash({ onDone, duration = 1500 }: Props) {
           이 앱은 iPad 전용입니다.{'\n'}iPad로 접속해 주세요.
         </Text>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 

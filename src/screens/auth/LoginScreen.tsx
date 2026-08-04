@@ -22,7 +22,12 @@ export default function LoginScreen({ onLoginSuccess, onNicknameRequired }: Prop
 
   useEffect(() => {
     if (Platform.OS === 'ios') {
-      AppleAuthentication.isAvailableAsync().then(setAppleAuthAvailable);
+      AppleAuthentication.isAvailableAsync()
+        .then(setAppleAuthAvailable)
+        .catch((error: unknown) => {
+          console.warn('[auth] Apple 로그인 사용 가능 여부 확인 실패', error);
+          setAppleAuthAvailable(false);
+        });
     }
   }, []);
 

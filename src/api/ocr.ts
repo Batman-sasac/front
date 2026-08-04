@@ -73,6 +73,7 @@ export type OcrUsageResponse = {
 };
 
 import config from '../lib/config';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
@@ -562,7 +563,7 @@ export async function getOcrUsage(): Promise<OcrUsageResponse> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/ocr/usage`, {
+    const res = await fetchWithTimeout(`${API_BASE}/ocr/usage`, {
         method: 'GET',
         headers: {
             'Accept': 'application/json',
@@ -587,6 +588,8 @@ export type ReviewCardApiItem = {
 };
 
 export type ReviewCardListResponse = {
+    status?: string;
+    message?: string;
     data?: ReviewCardApiItem[];
     has_more?: boolean;
 };
@@ -595,7 +598,7 @@ export async function getReviewCards(page: number, size: number): Promise<Review
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/ocr/list?page=${page}&size=${size}`, {
+    const res = await fetchWithTimeout(`${API_BASE}/ocr/list?page=${page}&size=${size}`, {
         headers: {
             'Accept': 'application/json',
             'Authorization': `Bearer ${token || ''}`,
@@ -607,7 +610,11 @@ export async function getReviewCards(page: number, size: number): Promise<Review
         throw new Error(`복습 카드 조회 HTTP ${res.status}: ${errorText}`);
     }
 
-    return res.json();
+    const json = await res.json() as ReviewCardListResponse;
+    if (json.status === 'error') {
+        throw new Error(json.message || '복습 카드를 불러오지 못했습니다.');
+    }
+    return json;
 }
 
 export async function deleteReviewCard(quizId: number): Promise<void> {
@@ -794,7 +801,7 @@ export async function getWeeklyGrowth(): Promise<WeeklyGrowthResponse> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/cycle/stats/weekly-growth`, {
+    const res = await fetchWithTimeout(`${API_BASE}/cycle/stats/weekly-growth`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -867,7 +874,7 @@ export async function getMonthlyStats(): Promise<MonthlyStatsResponse> {
     const { getToken } = await import('../lib/storage');
     const token = await getToken();
 
-    const res = await fetch(`${API_BASE}/cycle/learning-stats`, {
+    const res = await fetchWithTimeout(`${API_BASE}/cycle/learning-stats`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
