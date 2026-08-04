@@ -179,7 +179,7 @@ export default function AppRoutes({
   return (
     <>
       {step === 'splash' && (
-        <Splash duration={1500} onDone={() => { }} />
+        <Splash />
       )}
 
       {step === 'login' && (

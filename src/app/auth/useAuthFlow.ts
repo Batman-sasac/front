@@ -8,6 +8,21 @@ import { clearAuthData, getToken, getUserInfo } from '../../lib/storage';
 import type { AppStep } from '../../navigation/routes';
 import { TYPE_LABEL_KEY } from '../dashboard/progress';
 
+const AUTO_LOGIN_TIMEOUT_MS = 8000;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('자동 로그인 요청 시간이 초과되었습니다.')), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 function isUnauthorizedError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return error.message.includes('401') || error.message.includes('토큰이 만료');
@@ -90,12 +105,18 @@ export default function useAuthFlow({
         if (userInfo.email && userInfo.nickname) {
           setUserEmail(userInfo.email);
           setNickname(userInfo.nickname);
-          const isUsableToken = await applyUserState(token);
+          const isUsableToken = await withTimeout(
+            (async () => {
+              const usable = await applyUserState(token);
+              if (usable) await refreshOcrUsage();
+              return usable;
+            })(),
+            AUTO_LOGIN_TIMEOUT_MS,
+          );
           if (!isUsableToken) {
             await clearSessionAndGoLogin();
             return;
           }
-          await refreshOcrUsage();
           const storedTypeLabel = await loadStoredTypeLabel();
           setTimeout(() => setStep(storedTypeLabel ? 'home' : 'typeIntro'), 2000);
           return;
