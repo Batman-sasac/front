@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { redeemCoupon } from '../../api/coupon';
 import { getSubscriptionStatus } from '../../api/iap';
+import type { SubscriptionPlan } from '../../api/iap';
 import { getOcrUsage, OcrUsageResponse } from '../../api/ocr';
 import AppScreenHeader from '../../components/common/AppScreenHeader';
 import SubscriptionCancelModal from '../../components/subscription/SubscriptionCancelModal';
@@ -21,7 +22,7 @@ type Props = {
     ocrUsage: OcrUsageResponse | null;
     onOcrUsageChange: (usage: OcrUsageResponse) => void;
     onBack: () => void;
-    onSubscribe: () => void;
+    onSubscribe: (plan: Exclude<SubscriptionPlan, 'free'>) => void;
     onCancelSubscribe: () => void;
     onSubscriptionStatusChange: (isActive: boolean) => void;
     isSubscriptionProcessing: boolean;
@@ -42,10 +43,11 @@ export default function SubscribeScreen({
     const [usage, setUsage] = useState<OcrUsageResponse | null>(ocrUsage);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [showCouponModal, setShowCouponModal] = useState(false);
-    const [serverSubscribed, setServerSubscribed] = useState<boolean | null>(null);
+    const [serverPlan, setServerPlan] = useState<SubscriptionPlan | null>(null);
 
     useEffect(() => {
         setUsage(ocrUsage);
+        if (ocrUsage?.plan) setServerPlan(ocrUsage.plan);
     }, [ocrUsage]);
 
     useEffect(() => {
@@ -76,7 +78,7 @@ export default function SubscribeScreen({
                 if (!token) return;
                 const status = await getSubscriptionStatus(token);
                 if (cancelled) return;
-                setServerSubscribed(status.is_active);
+                setServerPlan(status.is_active ? status.plan : 'free');
                 onSubscriptionStatusChange(status.is_active);
             } catch {
                 // OCR 사용량 API의 pages_limit 기반 표시로 fallback
@@ -87,11 +89,13 @@ export default function SubscribeScreen({
         return () => {
             cancelled = true;
         };
-    }, [onSubscriptionStatusChange]);
+    }, [isSubscribed, onSubscriptionStatusChange]);
 
-    const resolvedSubscribed = serverSubscribed ?? isSubscribed;
+    const currentPlan = serverPlan ?? usage?.plan ?? (isSubscribed ? 'basic' : 'free');
+    const resolvedSubscribed = currentPlan !== 'free';
 
-    const pagesLimit = Math.max(usage?.pages_limit ?? (resolvedSubscribed ? 1000 : 50), 1);
+    const fallbackLimit = currentPlan === 'pro' ? 250 : currentPlan === 'basic' ? 100 : 20;
+    const pagesLimit = Math.max(usage?.pages_limit ?? fallbackLimit, 1);
     const pagesUsed = Math.max(usage?.pages_used ?? 0, 0);
     const remaining = usage?.remaining ?? Math.max(0, pagesLimit - pagesUsed);
     const isUnlimitedUser = usage?.is_unlimited === true;
@@ -132,16 +136,14 @@ export default function SubscribeScreen({
                 <SubscriptionPlanCards
                     isCompact={isCompact}
                     layout={layout}
-                    resolvedSubscribed={resolvedSubscribed}
+                    currentPlan={currentPlan}
                     limitReached={limitReached}
                     planBorderColor={planBorderColor}
                     onFreePress={() => {
                         if (resolvedSubscribed) setShowCancelModal(true);
                     }}
-                    onSubscribe={resolvedSubscribed ? onCancelSubscribe : onSubscribe}
-                    onProPress={() => {
-                        Alert.alert('Pro 플랜', 'Pro 플랜 결제 연동은 준비 중입니다.');
-                    }}
+                    onSubscribe={onSubscribe}
+                    onManage={onCancelSubscribe}
                     onCouponPress={() => setShowCouponModal(true)}
                     isProcessing={isSubscriptionProcessing}
                 />

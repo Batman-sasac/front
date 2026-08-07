@@ -5,11 +5,24 @@ import { Alert, Platform } from 'react-native';
 import type { Purchase } from 'react-native-iap';
 
 import { verifySubscription } from '../../api/iap';
+import type { SubscriptionPlan } from '../../api/iap';
 import { getToken } from '../../lib/storage';
 import type { AppStep } from '../../navigation/routes';
 
-const IOS_SUBSCRIPTION_PRODUCT_ID =
-  process.env.EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID?.trim() ?? '';
+const IOS_BASIC_SUBSCRIPTION_PRODUCT_ID =
+  process.env.EXPO_PUBLIC_IOS_BASIC_SUBSCRIPTION_PRODUCT_ID?.trim()
+  || process.env.EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID?.trim()
+  || '';
+const IOS_PRO_SUBSCRIPTION_PRODUCT_ID =
+  process.env.EXPO_PUBLIC_IOS_PRO_SUBSCRIPTION_PRODUCT_ID?.trim() ?? '';
+
+const PRODUCT_IDS_BY_PLAN: Record<Exclude<SubscriptionPlan, 'free'>, string> = {
+  basic: IOS_BASIC_SUBSCRIPTION_PRODUCT_ID,
+  pro: IOS_PRO_SUBSCRIPTION_PRODUCT_ID,
+};
+const IOS_SUBSCRIPTION_PRODUCT_IDS = new Set(
+  Object.values(PRODUCT_IDS_BY_PLAN).filter(Boolean),
+);
 
 const canUseStoreKit = Platform.OS === 'ios' && Constants.appOwnership !== 'expo';
 
@@ -34,7 +47,7 @@ export default function useSubscriptionActions({
   const processingTransactionIds = useRef<Set<string>>(new Set());
 
   const handlePurchaseUpdated = useCallback(async (purchase: Purchase) => {
-    if (purchase.productId !== IOS_SUBSCRIPTION_PRODUCT_ID) return;
+    if (!IOS_SUBSCRIPTION_PRODUCT_IDS.has(purchase.productId)) return;
     if (purchase.purchaseState !== 'purchased') return;
 
     const transactionId = purchase.transactionId;
@@ -60,7 +73,8 @@ export default function useSubscriptionActions({
       await finishTransaction({ purchase, isConsumable: false });
       setIsSubscribed(true);
       await refreshOcrUsage();
-      Alert.alert('구독 완료', '프리미엄 플랜이 적용되었습니다.');
+      const planName = status.plan === 'pro' ? 'Pro' : 'Basic';
+      Alert.alert('구독 완료', `${planName} 플랜이 적용되었습니다.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : '구독 검증에 실패했습니다.';
       Alert.alert('구독 검증 실패', message);
@@ -113,13 +127,17 @@ export default function useSubscriptionActions({
     };
   }, [handlePurchaseUpdated]);
 
-  const handleSubscribe = async () => {
+  const handleSubscribe = async (plan: Exclude<SubscriptionPlan, 'free'>) => {
     if (!canUseStoreKit) {
       Alert.alert('안내', 'iOS dev client 또는 실제 앱 빌드에서만 App Store 구독 결제를 사용할 수 있습니다.');
       return;
     }
-    if (!IOS_SUBSCRIPTION_PRODUCT_ID) {
-      Alert.alert('설정 필요', 'EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID를 App Store Connect 구독 상품 ID로 설정해주세요.');
+    const productId = PRODUCT_IDS_BY_PLAN[plan];
+    if (!productId) {
+      const envName = plan === 'basic'
+        ? 'EXPO_PUBLIC_IOS_BASIC_SUBSCRIPTION_PRODUCT_ID'
+        : 'EXPO_PUBLIC_IOS_PRO_SUBSCRIPTION_PRODUCT_ID';
+      Alert.alert('설정 필요', `${envName}를 App Store Connect 구독 상품 ID로 설정해주세요.`);
       return;
     }
 
@@ -128,7 +146,7 @@ export default function useSubscriptionActions({
       const { fetchProducts, initConnection, requestPurchase } = await loadIapModule();
       await initConnection();
       const products = await fetchProducts({
-        skus: [IOS_SUBSCRIPTION_PRODUCT_ID],
+        skus: [productId],
         type: 'subs',
       });
 
@@ -140,7 +158,7 @@ export default function useSubscriptionActions({
         type: 'subs',
         request: {
           apple: {
-            sku: IOS_SUBSCRIPTION_PRODUCT_ID,
+            sku: productId,
             andDangerouslyFinishTransactionAutomatically: false,
           },
         },

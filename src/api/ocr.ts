@@ -70,6 +70,11 @@ export type OcrUsageResponse = {
     message?: string;
     /** 백엔드에서 화이트리스트 유저인 경우 내려주는 플래그 */
     is_unlimited?: boolean;
+    plan?: 'free' | 'basic' | 'pro';
+    plan_limit?: number;
+    page_bonus?: number;
+    product_id?: string | null;
+    is_subscribed?: boolean;
 };
 
 import config from '../lib/config';

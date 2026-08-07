@@ -2,12 +2,16 @@ import config from '../lib/config';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
+export type SubscriptionPlan = 'free' | 'basic' | 'pro';
+
 export type SubscriptionStatus = {
     status: 'none' | 'active' | 'grace_period' | 'billing_retry' | 'expired' | 'revoked' | string;
     is_active: boolean;
     product_id: string | null;
     expires_at: string | null;
     auto_renew: boolean | null;
+    plan: SubscriptionPlan;
+    ocr_page_limit: number;
 };
 
 type VerifySubscriptionPayload = {

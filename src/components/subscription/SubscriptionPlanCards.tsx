@@ -3,6 +3,7 @@ import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { figmaFontScale, figmaScale, subscriptionColors, subscriptionShadow } from '../../styles/subscriptionStyles';
 import SubscriptionBadge from './SubscriptionBadge';
 import SubscriptionButton from './SubscriptionButton';
+import type { SubscriptionPlan } from '../../api/iap';
 
 type PlanLayout = {
     rowWidth: number;
@@ -15,12 +16,12 @@ type PlanLayout = {
 type Props = {
     isCompact: boolean;
     layout: PlanLayout;
-    resolvedSubscribed: boolean;
+    currentPlan: SubscriptionPlan;
     limitReached: boolean;
     planBorderColor: string;
     onFreePress: () => void;
-    onSubscribe: () => void;
-    onProPress: () => void;
+    onSubscribe: (plan: Exclude<SubscriptionPlan, 'free'>) => void;
+    onManage: () => void;
     onCouponPress: () => void;
     isProcessing: boolean;
 };
@@ -28,15 +29,16 @@ type Props = {
 export default function SubscriptionPlanCards({
     isCompact,
     layout,
-    resolvedSubscribed,
+    currentPlan,
     limitReached,
     planBorderColor,
     onFreePress,
     onSubscribe,
-    onProPress,
+    onManage,
     onCouponPress,
     isProcessing,
 }: Props) {
+    const resolvedSubscribed = currentPlan !== 'free';
     const rowDynamicStyle: StyleProp<ViewStyle> = !isCompact
         ? { maxWidth: layout.rowWidth, gap: layout.rowGap }
         : null;
@@ -63,8 +65,8 @@ export default function SubscriptionPlanCards({
                 ]}
             >
                 <Text style={styles.planTitle}>무료 플랜</Text>
-                <Text style={styles.planBullet}>• 총 20회 무료 사용</Text>
-                <Text style={styles.planBullet}>• 기간 제한 없음</Text>
+                <Text style={styles.planBullet}>• 월 20페이지 사용</Text>
+                <Text style={styles.planBullet}>• 매월 사용량 초기화 (이월 없음)</Text>
                 <Text style={styles.planBullet}>• 카드 등록 없이 사용 가능</Text>
 
                 <View style={[styles.planBottom, styles.planBottomFree]}>
@@ -101,7 +103,7 @@ export default function SubscriptionPlanCards({
                 ]}
             >
                 <View style={styles.badgeWrap}>
-                    {resolvedSubscribed ? (
+                    {currentPlan === 'basic' ? (
                         <SubscriptionBadge label="현재 플랜" />
                     ) : limitReached ? (
                         <SubscriptionBadge
@@ -115,23 +117,23 @@ export default function SubscriptionPlanCards({
 
                 <Text style={styles.planTitle}>Basic 플랜</Text>
                 <Text style={styles.planPrice}>월 4,900원</Text>
-                <Text style={styles.planBullet}>• 월 100회 사용</Text>
+                <Text style={styles.planBullet}>• 월 100페이지 사용</Text>
                 <Text style={styles.planBullet}>• 매월 자동 갱신</Text>
                 <Text style={styles.planBullet}>• 월 단위 사용량 초기화 (이월 없음)</Text>
 
                 <View style={[styles.planBottom, styles.planBottomPremium]}>
                     <View style={styles.planBtnWrap}>
-                        {resolvedSubscribed ? (
-                            <SubscriptionButton onPress={onSubscribe} disabled={isProcessing}>
-                                결제수단 관리하기
+                        {currentPlan === 'basic' ? (
+                            <SubscriptionButton onPress={onManage} disabled={isProcessing}>
+                                구독 관리하기
                             </SubscriptionButton>
                         ) : (
                             <SubscriptionButton
                                 variant={limitReached ? 'danger' : 'primary'}
-                                onPress={onSubscribe}
+                                onPress={() => onSubscribe('basic')}
                                 disabled={isProcessing}
                             >
-                                {isProcessing ? '결제 진행 중...' : 'Basic 구독하기'}
+                                {isProcessing ? '결제 진행 중...' : currentPlan === 'pro' ? 'Basic으로 변경' : 'Basic 구독하기'}
                             </SubscriptionButton>
                         )}
                         {resolvedSubscribed ? (
@@ -157,19 +159,22 @@ export default function SubscriptionPlanCards({
                 ]}
             >
                 <View style={styles.badgeWrap}>
-                    <SubscriptionBadge label="가장 넉넉한 플랜" />
+                    <SubscriptionBadge label={currentPlan === 'pro' ? '현재 플랜' : '가장 넉넉한 플랜'} />
                 </View>
 
                 <Text style={styles.planTitle}>Pro 플랜</Text>
                 <Text style={styles.planPrice}>월 9,900원</Text>
-                <Text style={styles.planBullet}>• 월 250회 사용</Text>
+                <Text style={styles.planBullet}>• 월 250페이지 사용</Text>
                 <Text style={styles.planBullet}>• 매월 자동 갱신</Text>
                 <Text style={styles.planBullet}>• 월 단위 사용량 초기화 (이월 없음)</Text>
 
                 <View style={[styles.planBottom, styles.planBottomPremium]}>
                     <View style={styles.planBtnWrap}>
-                        <SubscriptionButton onPress={onProPress} disabled={isProcessing}>
-                            Pro 구독하기
+                        <SubscriptionButton
+                            onPress={currentPlan === 'pro' ? onManage : () => onSubscribe('pro')}
+                            disabled={isProcessing}
+                        >
+                            {isProcessing ? '결제 진행 중...' : currentPlan === 'pro' ? '구독 관리하기' : 'Pro 구독하기'}
                         </SubscriptionButton>
                     </View>
                 </View>
