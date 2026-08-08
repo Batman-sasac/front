@@ -51,6 +51,23 @@ export default function useSubscriptionActions({
   const lastSyncedToken = useRef<string | null>(null);
   const isSyncingAvailablePurchases = useRef(false);
   const hasFetchedSubscriptionPrices = useRef(false);
+  const storeKitConnection = useRef<Promise<boolean> | null>(null);
+
+  const ensureStoreKitConnection = useCallback(async () => {
+    if (!storeKitConnection.current) {
+      storeKitConnection.current = loadIapModule().then(({ initConnection }) => initConnection());
+    }
+
+    const connection = storeKitConnection.current;
+    try {
+      return await connection;
+    } catch (error) {
+      if (storeKitConnection.current === connection) {
+        storeKitConnection.current = null;
+      }
+      throw error;
+    }
+  }, []);
 
   const processPurchase = useCallback(async (purchase: Purchase, showAlert: boolean) => {
     if (!IOS_SUBSCRIPTION_PRODUCT_IDS.has(purchase.productId)) return;
@@ -105,15 +122,15 @@ export default function useSubscriptionActions({
     const registerListeners = async () => {
       const {
         endConnection,
-        initConnection,
         purchaseErrorListener,
         purchaseUpdatedListener,
         ErrorCode,
       } = await loadIapModule();
 
-      await initConnection();
+      await ensureStoreKitConnection();
 
       if (!mounted) {
+        storeKitConnection.current = null;
         void endConnection();
         return;
       }
@@ -130,17 +147,21 @@ export default function useSubscriptionActions({
       cleanup = () => {
         purchaseSubscription.remove();
         errorSubscription.remove();
+        storeKitConnection.current = null;
         void endConnection();
       };
     };
 
-    void registerListeners();
+    void registerListeners().catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'StoreKit 연결을 초기화하지 못했습니다.';
+      console.warn('StoreKit 초기화 실패:', message);
+    });
 
     return () => {
       mounted = false;
       cleanup?.();
     };
-  }, [processPurchase]);
+  }, [ensureStoreKitConnection, processPurchase]);
 
   useEffect(() => {
     if (!canUseStoreKit) return;
@@ -157,8 +178,8 @@ export default function useSubscriptionActions({
 
       isSyncingAvailablePurchases.current = true;
       try {
-        const { getAvailablePurchases, initConnection } = await loadIapModule();
-        await initConnection();
+        const { getAvailablePurchases } = await loadIapModule();
+        await ensureStoreKitConnection();
         const purchases = await getAvailablePurchases();
 
         for (const purchase of purchases) {
@@ -175,7 +196,7 @@ export default function useSubscriptionActions({
     };
 
     void syncAvailablePurchases();
-  }, [processPurchase, step]);
+  }, [ensureStoreKitConnection, processPurchase, step]);
 
   useEffect(() => {
     if (!canUseStoreKit) return;
@@ -193,8 +214,8 @@ export default function useSubscriptionActions({
       if (productIds.length === 0) return;
 
       try {
-        const { fetchProducts, initConnection } = await loadIapModule();
-        await initConnection();
+        const { fetchProducts } = await loadIapModule();
+        await ensureStoreKitConnection();
         const products = await fetchProducts({ skus: productIds, type: 'subs' });
         if (cancelled) return;
 
@@ -217,7 +238,7 @@ export default function useSubscriptionActions({
     return () => {
       cancelled = true;
     };
-  }, [step]);
+  }, [ensureStoreKitConnection, step]);
 
   const handleSubscribe = async (plan: PaidSubscriptionPlan) => {
     if (!canUseStoreKit) {
@@ -235,8 +256,8 @@ export default function useSubscriptionActions({
 
     try {
       setIsSubscriptionProcessing(true);
-      const { fetchProducts, initConnection, requestPurchase } = await loadIapModule();
-      await initConnection();
+      const { fetchProducts, requestPurchase } = await loadIapModule();
+      await ensureStoreKitConnection();
       const products = await fetchProducts({
         skus: [productId],
         type: 'subs',
@@ -269,8 +290,8 @@ export default function useSubscriptionActions({
     }
 
     try {
-      const { initConnection, showManageSubscriptionsIOS } = await loadIapModule();
-      await initConnection();
+      const { showManageSubscriptionsIOS } = await loadIapModule();
+      await ensureStoreKitConnection();
       await showManageSubscriptionsIOS();
       setStep('mypage');
     } catch (error) {
