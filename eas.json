@@ -14,7 +14,9 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://python-mlt6.onrender.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://python-mlt6.onrender.com",
+        "EXPO_PUBLIC_IOS_BASIC_SUBSCRIPTION_PRODUCT_ID": "com.batman.bat.basic.monthly",
+        "EXPO_PUBLIC_IOS_PRO_SUBSCRIPTION_PRODUCT_ID": "com.batman.bat.pro.monthly"
       }
     }
   },
