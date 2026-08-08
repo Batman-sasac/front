@@ -3,7 +3,7 @@ import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { figmaFontScale, figmaScale, subscriptionColors, subscriptionShadow } from '../../styles/subscriptionStyles';
 import SubscriptionBadge from './SubscriptionBadge';
 import SubscriptionButton from './SubscriptionButton';
-import type { SubscriptionPlan } from '../../api/iap';
+import type { PaidSubscriptionPlan, SubscriptionPlan, SubscriptionPrices } from '../../api/iap';
 
 type PlanLayout = {
     rowWidth: number;
@@ -20,10 +20,11 @@ type Props = {
     limitReached: boolean;
     planBorderColor: string;
     onFreePress: () => void;
-    onSubscribe: (plan: Exclude<SubscriptionPlan, 'free'>) => void;
+    onSubscribe: (plan: PaidSubscriptionPlan) => void;
     onManage: () => void;
     onCouponPress: () => void;
     isProcessing: boolean;
+    prices?: SubscriptionPrices;
 };
 
 export default function SubscriptionPlanCards({
@@ -37,6 +38,7 @@ export default function SubscriptionPlanCards({
     onManage,
     onCouponPress,
     isProcessing,
+    prices,
 }: Props) {
     const resolvedSubscribed = currentPlan !== 'free';
     const rowDynamicStyle: StyleProp<ViewStyle> = !isCompact
@@ -116,7 +118,7 @@ export default function SubscriptionPlanCards({
                 </View>
 
                 <Text style={styles.planTitle}>Basic 플랜</Text>
-                <Text style={styles.planPrice}>월 4,900원</Text>
+                <Text style={styles.planPrice}>월 {prices?.basic ?? '4,900원'}</Text>
                 <Text style={styles.planBullet}>• 월 100페이지 사용</Text>
                 <Text style={styles.planBullet}>• 매월 자동 갱신</Text>
                 <Text style={styles.planBullet}>• 월 단위 사용량 초기화 (이월 없음)</Text>
@@ -163,7 +165,7 @@ export default function SubscriptionPlanCards({
                 </View>
 
                 <Text style={styles.planTitle}>Pro 플랜</Text>
-                <Text style={styles.planPrice}>월 9,900원</Text>
+                <Text style={styles.planPrice}>월 {prices?.pro ?? '9,900원'}</Text>
                 <Text style={styles.planBullet}>• 월 250페이지 사용</Text>
                 <Text style={styles.planBullet}>• 매월 자동 갱신</Text>
                 <Text style={styles.planBullet}>• 월 단위 사용량 초기화 (이월 없음)</Text>

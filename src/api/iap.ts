@@ -3,6 +3,8 @@ import config from '../lib/config';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
 
 export type SubscriptionPlan = 'free' | 'basic' | 'pro';
+export type PaidSubscriptionPlan = Exclude<SubscriptionPlan, 'free'>;
+export type SubscriptionPrices = Partial<Record<PaidSubscriptionPlan, string>>;
 
 export type SubscriptionStatus = {
     status: 'none' | 'active' | 'grace_period' | 'billing_retry' | 'expired' | 'revoked' | string;

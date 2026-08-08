@@ -5,7 +5,7 @@ import { Alert, Platform } from 'react-native';
 import type { Purchase } from 'react-native-iap';
 
 import { verifySubscription } from '../../api/iap';
-import type { SubscriptionPlan } from '../../api/iap';
+import type { PaidSubscriptionPlan, SubscriptionPlan, SubscriptionPrices } from '../../api/iap';
 import { getToken } from '../../lib/storage';
 import type { AppStep } from '../../navigation/routes';
 
@@ -16,7 +16,7 @@ const IOS_BASIC_SUBSCRIPTION_PRODUCT_ID =
 const IOS_PRO_SUBSCRIPTION_PRODUCT_ID =
   process.env.EXPO_PUBLIC_IOS_PRO_SUBSCRIPTION_PRODUCT_ID?.trim() ?? '';
 
-const PRODUCT_IDS_BY_PLAN: Record<Exclude<SubscriptionPlan, 'free'>, string> = {
+const PRODUCT_IDS_BY_PLAN: Record<PaidSubscriptionPlan, string> = {
   basic: IOS_BASIC_SUBSCRIPTION_PRODUCT_ID,
   pro: IOS_PRO_SUBSCRIPTION_PRODUCT_ID,
 };
@@ -46,9 +46,11 @@ export default function useSubscriptionActions({
   refreshOcrUsage,
 }: UseSubscriptionActionsParams) {
   const [isSubscriptionProcessing, setIsSubscriptionProcessing] = useState(false);
+  const [subscriptionPrices, setSubscriptionPrices] = useState<SubscriptionPrices>({});
   const processingTransactionIds = useRef<Set<string>>(new Set());
   const lastSyncedToken = useRef<string | null>(null);
   const isSyncingAvailablePurchases = useRef(false);
+  const hasFetchedSubscriptionPrices = useRef(false);
 
   const processPurchase = useCallback(async (purchase: Purchase, showAlert: boolean) => {
     if (!IOS_SUBSCRIPTION_PRODUCT_IDS.has(purchase.productId)) return;
@@ -175,7 +177,49 @@ export default function useSubscriptionActions({
     void syncAvailablePurchases();
   }, [processPurchase, step]);
 
-  const handleSubscribe = async (plan: Exclude<SubscriptionPlan, 'free'>) => {
+  useEffect(() => {
+    if (!canUseStoreKit) return;
+    if (step !== 'subscribe') {
+      hasFetchedSubscriptionPrices.current = false;
+      return;
+    }
+    if (hasFetchedSubscriptionPrices.current) return;
+
+    hasFetchedSubscriptionPrices.current = true;
+    let cancelled = false;
+
+    const loadSubscriptionPrices = async () => {
+      const productIds = Object.values(PRODUCT_IDS_BY_PLAN).filter(Boolean);
+      if (productIds.length === 0) return;
+
+      try {
+        const { fetchProducts, initConnection } = await loadIapModule();
+        await initConnection();
+        const products = await fetchProducts({ skus: productIds, type: 'subs' });
+        if (cancelled) return;
+
+        const prices: SubscriptionPrices = {};
+        for (const product of products ?? []) {
+          if (product.id === IOS_BASIC_SUBSCRIPTION_PRODUCT_ID) {
+            prices.basic = product.displayPrice;
+          } else if (product.id === IOS_PRO_SUBSCRIPTION_PRODUCT_ID) {
+            prices.pro = product.displayPrice;
+          }
+        }
+        setSubscriptionPrices(prices);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '구독 상품 가격을 조회하지 못했습니다.';
+        console.warn('구독 상품 가격 조회 실패:', message);
+      }
+    };
+
+    void loadSubscriptionPrices();
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
+
+  const handleSubscribe = async (plan: PaidSubscriptionPlan) => {
     if (!canUseStoreKit) {
       Alert.alert('안내', 'iOS dev client 또는 실제 앱 빌드에서만 App Store 구독 결제를 사용할 수 있습니다.');
       return;
@@ -255,5 +299,6 @@ export default function useSubscriptionActions({
     handleUsageModalClose,
     handleUsageModalSubscribe,
     isSubscriptionProcessing,
+    subscriptionPrices,
   };
 }

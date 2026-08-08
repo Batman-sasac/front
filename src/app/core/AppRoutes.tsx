@@ -122,6 +122,7 @@ export type AppRoutesProps = {
   handleCancelSubscribe: React.ComponentProps<typeof SubscribeScreen>['onCancelSubscribe'];
   handleSubscriptionStatusChange: React.ComponentProps<typeof SubscribeScreen>['onSubscriptionStatusChange'];
   isSubscriptionProcessing: React.ComponentProps<typeof SubscribeScreen>['isSubscriptionProcessing'];
+  subscriptionPrices: React.ComponentProps<typeof SubscribeScreen>['subscriptionPrices'];
   handleErrorRetry: React.ComponentProps<typeof ErrorScreen>['onRetry'];
   handleSubmitReport: React.ComponentProps<typeof ErrorScreen>['onSubmitReport'];
   showUsageExhaustedModal: boolean;
@@ -195,6 +196,7 @@ export default function AppRoutes({
   handleCancelSubscribe,
   handleSubscriptionStatusChange,
   isSubscriptionProcessing,
+  subscriptionPrices,
   handleErrorRetry,
   handleSubmitReport,
   showUsageExhaustedModal,
@@ -428,6 +430,7 @@ export default function AppRoutes({
           onCancelSubscribe={handleCancelSubscribe}
           onSubscriptionStatusChange={handleSubscriptionStatusChange}
           isSubscriptionProcessing={isSubscriptionProcessing}
+          subscriptionPrices={subscriptionPrices}
         />
       )}
 

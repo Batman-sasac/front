@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { redeemCoupon } from '../../api/coupon';
 import { getSubscriptionStatus } from '../../api/iap';
-import type { SubscriptionPlan } from '../../api/iap';
+import type { SubscriptionPlan, SubscriptionPrices } from '../../api/iap';
 import { getOcrUsage, OcrUsageResponse } from '../../api/ocr';
 import AppScreenHeader from '../../components/common/AppScreenHeader';
 import SubscriptionCancelModal from '../../components/subscription/SubscriptionCancelModal';
@@ -26,6 +26,7 @@ type Props = {
     onCancelSubscribe: () => void;
     onSubscriptionStatusChange: (isActive: boolean) => void;
     isSubscriptionProcessing: boolean;
+    subscriptionPrices: SubscriptionPrices;
 };
 
 export default function SubscribeScreen({
@@ -37,6 +38,7 @@ export default function SubscribeScreen({
     onCancelSubscribe,
     onSubscriptionStatusChange,
     isSubscriptionProcessing,
+    subscriptionPrices,
 }: Props) {
     const { width: windowWidth } = useWindowDimensions();
     const isCompact = windowWidth < 700;
@@ -146,6 +148,7 @@ export default function SubscribeScreen({
                     onManage={onCancelSubscribe}
                     onCouponPress={() => setShowCouponModal(true)}
                     isProcessing={isSubscriptionProcessing}
+                    prices={subscriptionPrices}
                 />
             </View>
 
