@@ -31,6 +31,7 @@ async function loadIapModule() {
 }
 
 type UseSubscriptionActionsParams = {
+  step: AppStep;
   setStep: (step: AppStep) => void;
   setIsSubscribed: Dispatch<SetStateAction<boolean>>;
   setShowUsageExhaustedModal: Dispatch<SetStateAction<boolean>>;
@@ -38,6 +39,7 @@ type UseSubscriptionActionsParams = {
 };
 
 export default function useSubscriptionActions({
+  step,
   setStep,
   setIsSubscribed,
   setShowUsageExhaustedModal,
@@ -45,8 +47,10 @@ export default function useSubscriptionActions({
 }: UseSubscriptionActionsParams) {
   const [isSubscriptionProcessing, setIsSubscriptionProcessing] = useState(false);
   const processingTransactionIds = useRef<Set<string>>(new Set());
+  const lastSyncedToken = useRef<string | null>(null);
+  const isSyncingAvailablePurchases = useRef(false);
 
-  const handlePurchaseUpdated = useCallback(async (purchase: Purchase) => {
+  const processPurchase = useCallback(async (purchase: Purchase, showAlert: boolean) => {
     if (!IOS_SUBSCRIPTION_PRODUCT_IDS.has(purchase.productId)) return;
     if (purchase.purchaseState !== 'purchased') return;
 
@@ -73,11 +77,17 @@ export default function useSubscriptionActions({
       await finishTransaction({ purchase, isConsumable: false });
       setIsSubscribed(true);
       await refreshOcrUsage();
-      const planName = status.plan === 'pro' ? 'Pro' : 'Basic';
-      Alert.alert('구독 완료', `${planName} 플랜이 적용되었습니다.`);
+      if (showAlert) {
+        const planName = status.plan === 'pro' ? 'Pro' : 'Basic';
+        Alert.alert('구독 완료', `${planName} 플랜이 적용되었습니다.`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '구독 검증에 실패했습니다.';
-      Alert.alert('구독 검증 실패', message);
+      if (showAlert) {
+        Alert.alert('구독 검증 실패', message);
+      } else {
+        console.warn('기존 구독 자동 확인 실패:', message);
+      }
     } finally {
       processingTransactionIds.current.delete(transactionId);
       setIsSubscriptionProcessing(false);
@@ -93,10 +103,13 @@ export default function useSubscriptionActions({
     const registerListeners = async () => {
       const {
         endConnection,
+        initConnection,
         purchaseErrorListener,
         purchaseUpdatedListener,
         ErrorCode,
       } = await loadIapModule();
+
+      await initConnection();
 
       if (!mounted) {
         void endConnection();
@@ -104,7 +117,7 @@ export default function useSubscriptionActions({
       }
 
       const purchaseSubscription = purchaseUpdatedListener((purchase) => {
-        void handlePurchaseUpdated(purchase);
+        void processPurchase(purchase, true);
       });
       const errorSubscription = purchaseErrorListener((error) => {
         setIsSubscriptionProcessing(false);
@@ -125,7 +138,42 @@ export default function useSubscriptionActions({
       mounted = false;
       cleanup?.();
     };
-  }, [handlePurchaseUpdated]);
+  }, [processPurchase]);
+
+  useEffect(() => {
+    if (!canUseStoreKit) return;
+    if (step === 'login') lastSyncedToken.current = null;
+    if (step === 'splash' || step === 'login' || step === 'nickname') return;
+
+    const syncAvailablePurchases = async () => {
+      const token = await getToken();
+      if (!token) {
+        lastSyncedToken.current = null;
+        return;
+      }
+      if (lastSyncedToken.current === token || isSyncingAvailablePurchases.current) return;
+
+      isSyncingAvailablePurchases.current = true;
+      try {
+        const { getAvailablePurchases, initConnection } = await loadIapModule();
+        await initConnection();
+        const purchases = await getAvailablePurchases();
+
+        for (const purchase of purchases) {
+          await processPurchase(purchase, false);
+        }
+
+        lastSyncedToken.current = token;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '기존 구독을 확인하지 못했습니다.';
+        console.warn('기존 구독 자동 동기화 실패:', message);
+      } finally {
+        isSyncingAvailablePurchases.current = false;
+      }
+    };
+
+    void syncAvailablePurchases();
+  }, [processPurchase, step]);
 
   const handleSubscribe = async (plan: Exclude<SubscriptionPlan, 'free'>) => {
     if (!canUseStoreKit) {
