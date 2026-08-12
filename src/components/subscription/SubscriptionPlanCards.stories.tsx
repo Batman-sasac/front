@@ -50,12 +50,12 @@ const meta = {
   args: {
     isCompact: false,
     layout: desktopLayout,
-    resolvedSubscribed: false,
+    currentPlan: 'free',
     limitReached: false,
     planBorderColor: subscriptionColors.primaryBlue,
     onFreePress: () => {},
     onSubscribe: () => {},
-    onProPress: () => {},
+    onManage: () => {},
     onCouponPress: () => {},
     isProcessing: false,
   },
@@ -79,7 +79,7 @@ export const LimitReached: Story = {
 
 export const Subscribed: Story = {
   args: {
-    resolvedSubscribed: true,
+    currentPlan: 'basic',
   },
 };
 

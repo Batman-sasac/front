@@ -5,11 +5,24 @@ import { Alert, Platform } from 'react-native';
 import type { Purchase } from 'react-native-iap';
 
 import { verifySubscription } from '../../api/iap';
+import type { PaidSubscriptionPlan, SubscriptionPlan, SubscriptionPrices } from '../../api/iap';
 import { getToken } from '../../lib/storage';
 import type { AppStep } from '../../navigation/routes';
 
-const IOS_SUBSCRIPTION_PRODUCT_ID =
-  process.env.EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID?.trim() ?? '';
+const IOS_BASIC_SUBSCRIPTION_PRODUCT_ID =
+  process.env.EXPO_PUBLIC_IOS_BASIC_SUBSCRIPTION_PRODUCT_ID?.trim()
+  || process.env.EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID?.trim()
+  || '';
+const IOS_PRO_SUBSCRIPTION_PRODUCT_ID =
+  process.env.EXPO_PUBLIC_IOS_PRO_SUBSCRIPTION_PRODUCT_ID?.trim() ?? '';
+
+const PRODUCT_IDS_BY_PLAN: Record<PaidSubscriptionPlan, string> = {
+  basic: IOS_BASIC_SUBSCRIPTION_PRODUCT_ID,
+  pro: IOS_PRO_SUBSCRIPTION_PRODUCT_ID,
+};
+const IOS_SUBSCRIPTION_PRODUCT_IDS = new Set(
+  Object.values(PRODUCT_IDS_BY_PLAN).filter(Boolean),
+);
 
 const canUseStoreKit = Platform.OS === 'ios' && Constants.appOwnership !== 'expo';
 
@@ -18,6 +31,7 @@ async function loadIapModule() {
 }
 
 type UseSubscriptionActionsParams = {
+  step: AppStep;
   setStep: (step: AppStep) => void;
   setIsSubscribed: Dispatch<SetStateAction<boolean>>;
   setShowUsageExhaustedModal: Dispatch<SetStateAction<boolean>>;
@@ -25,16 +39,38 @@ type UseSubscriptionActionsParams = {
 };
 
 export default function useSubscriptionActions({
+  step,
   setStep,
   setIsSubscribed,
   setShowUsageExhaustedModal,
   refreshOcrUsage,
 }: UseSubscriptionActionsParams) {
   const [isSubscriptionProcessing, setIsSubscriptionProcessing] = useState(false);
+  const [subscriptionPrices, setSubscriptionPrices] = useState<SubscriptionPrices>({});
   const processingTransactionIds = useRef<Set<string>>(new Set());
+  const lastSyncedToken = useRef<string | null>(null);
+  const isSyncingAvailablePurchases = useRef(false);
+  const hasFetchedSubscriptionPrices = useRef(false);
+  const storeKitConnection = useRef<Promise<boolean> | null>(null);
 
-  const handlePurchaseUpdated = useCallback(async (purchase: Purchase) => {
-    if (purchase.productId !== IOS_SUBSCRIPTION_PRODUCT_ID) return;
+  const ensureStoreKitConnection = useCallback(async () => {
+    if (!storeKitConnection.current) {
+      storeKitConnection.current = loadIapModule().then(({ initConnection }) => initConnection());
+    }
+
+    const connection = storeKitConnection.current;
+    try {
+      return await connection;
+    } catch (error) {
+      if (storeKitConnection.current === connection) {
+        storeKitConnection.current = null;
+      }
+      throw error;
+    }
+  }, []);
+
+  const processPurchase = useCallback(async (purchase: Purchase, showAlert: boolean) => {
+    if (!IOS_SUBSCRIPTION_PRODUCT_IDS.has(purchase.productId)) return;
     if (purchase.purchaseState !== 'purchased') return;
 
     const transactionId = purchase.transactionId;
@@ -60,10 +96,17 @@ export default function useSubscriptionActions({
       await finishTransaction({ purchase, isConsumable: false });
       setIsSubscribed(true);
       await refreshOcrUsage();
-      Alert.alert('구독 완료', '프리미엄 플랜이 적용되었습니다.');
+      if (showAlert) {
+        const planName = status.plan === 'pro' ? 'Pro' : 'Basic';
+        Alert.alert('구독 완료', `${planName} 플랜이 적용되었습니다.`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '구독 검증에 실패했습니다.';
-      Alert.alert('구독 검증 실패', message);
+      if (showAlert) {
+        Alert.alert('구독 검증 실패', message);
+      } else {
+        console.warn('기존 구독 자동 확인 실패:', message);
+      }
     } finally {
       processingTransactionIds.current.delete(transactionId);
       setIsSubscriptionProcessing(false);
@@ -84,13 +127,16 @@ export default function useSubscriptionActions({
         ErrorCode,
       } = await loadIapModule();
 
+      await ensureStoreKitConnection();
+
       if (!mounted) {
+        storeKitConnection.current = null;
         void endConnection();
         return;
       }
 
       const purchaseSubscription = purchaseUpdatedListener((purchase) => {
-        void handlePurchaseUpdated(purchase);
+        void processPurchase(purchase, true);
       });
       const errorSubscription = purchaseErrorListener((error) => {
         setIsSubscriptionProcessing(false);
@@ -101,34 +147,119 @@ export default function useSubscriptionActions({
       cleanup = () => {
         purchaseSubscription.remove();
         errorSubscription.remove();
+        storeKitConnection.current = null;
         void endConnection();
       };
     };
 
-    void registerListeners();
+    void registerListeners().catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'StoreKit 연결을 초기화하지 못했습니다.';
+      console.warn('StoreKit 초기화 실패:', message);
+    });
 
     return () => {
       mounted = false;
       cleanup?.();
     };
-  }, [handlePurchaseUpdated]);
+  }, [ensureStoreKitConnection, processPurchase]);
 
-  const handleSubscribe = async () => {
+  useEffect(() => {
+    if (!canUseStoreKit) return;
+    if (step === 'login') lastSyncedToken.current = null;
+    if (step === 'splash' || step === 'login' || step === 'nickname') return;
+
+    const syncAvailablePurchases = async () => {
+      const token = await getToken();
+      if (!token) {
+        lastSyncedToken.current = null;
+        return;
+      }
+      if (lastSyncedToken.current === token || isSyncingAvailablePurchases.current) return;
+
+      isSyncingAvailablePurchases.current = true;
+      try {
+        const { getAvailablePurchases } = await loadIapModule();
+        await ensureStoreKitConnection();
+        const purchases = await getAvailablePurchases();
+
+        for (const purchase of purchases) {
+          await processPurchase(purchase, false);
+        }
+
+        lastSyncedToken.current = token;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '기존 구독을 확인하지 못했습니다.';
+        console.warn('기존 구독 자동 동기화 실패:', message);
+      } finally {
+        isSyncingAvailablePurchases.current = false;
+      }
+    };
+
+    void syncAvailablePurchases();
+  }, [ensureStoreKitConnection, processPurchase, step]);
+
+  useEffect(() => {
+    if (!canUseStoreKit) return;
+    if (step !== 'subscribe') {
+      hasFetchedSubscriptionPrices.current = false;
+      return;
+    }
+    if (hasFetchedSubscriptionPrices.current) return;
+
+    hasFetchedSubscriptionPrices.current = true;
+    let cancelled = false;
+
+    const loadSubscriptionPrices = async () => {
+      const productIds = Object.values(PRODUCT_IDS_BY_PLAN).filter(Boolean);
+      if (productIds.length === 0) return;
+
+      try {
+        const { fetchProducts } = await loadIapModule();
+        await ensureStoreKitConnection();
+        const products = await fetchProducts({ skus: productIds, type: 'subs' });
+        if (cancelled) return;
+
+        const prices: SubscriptionPrices = {};
+        for (const product of products ?? []) {
+          if (product.id === IOS_BASIC_SUBSCRIPTION_PRODUCT_ID) {
+            prices.basic = product.displayPrice;
+          } else if (product.id === IOS_PRO_SUBSCRIPTION_PRODUCT_ID) {
+            prices.pro = product.displayPrice;
+          }
+        }
+        setSubscriptionPrices(prices);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '구독 상품 가격을 조회하지 못했습니다.';
+        console.warn('구독 상품 가격 조회 실패:', message);
+      }
+    };
+
+    void loadSubscriptionPrices();
+    return () => {
+      cancelled = true;
+    };
+  }, [ensureStoreKitConnection, step]);
+
+  const handleSubscribe = async (plan: PaidSubscriptionPlan) => {
     if (!canUseStoreKit) {
       Alert.alert('안내', 'iOS dev client 또는 실제 앱 빌드에서만 App Store 구독 결제를 사용할 수 있습니다.');
       return;
     }
-    if (!IOS_SUBSCRIPTION_PRODUCT_ID) {
-      Alert.alert('설정 필요', 'EXPO_PUBLIC_IOS_SUBSCRIPTION_PRODUCT_ID를 App Store Connect 구독 상품 ID로 설정해주세요.');
+    const productId = PRODUCT_IDS_BY_PLAN[plan];
+    if (!productId) {
+      const envName = plan === 'basic'
+        ? 'EXPO_PUBLIC_IOS_BASIC_SUBSCRIPTION_PRODUCT_ID'
+        : 'EXPO_PUBLIC_IOS_PRO_SUBSCRIPTION_PRODUCT_ID';
+      Alert.alert('설정 필요', `${envName}를 App Store Connect 구독 상품 ID로 설정해주세요.`);
       return;
     }
 
     try {
       setIsSubscriptionProcessing(true);
-      const { fetchProducts, initConnection, requestPurchase } = await loadIapModule();
-      await initConnection();
+      const { fetchProducts, requestPurchase } = await loadIapModule();
+      await ensureStoreKitConnection();
       const products = await fetchProducts({
-        skus: [IOS_SUBSCRIPTION_PRODUCT_ID],
+        skus: [productId],
         type: 'subs',
       });
 
@@ -140,7 +271,7 @@ export default function useSubscriptionActions({
         type: 'subs',
         request: {
           apple: {
-            sku: IOS_SUBSCRIPTION_PRODUCT_ID,
+            sku: productId,
             andDangerouslyFinishTransactionAutomatically: false,
           },
         },
@@ -159,8 +290,8 @@ export default function useSubscriptionActions({
     }
 
     try {
-      const { initConnection, showManageSubscriptionsIOS } = await loadIapModule();
-      await initConnection();
+      const { showManageSubscriptionsIOS } = await loadIapModule();
+      await ensureStoreKitConnection();
       await showManageSubscriptionsIOS();
       setStep('mypage');
     } catch (error) {
@@ -189,5 +320,6 @@ export default function useSubscriptionActions({
     handleUsageModalClose,
     handleUsageModalSubscribe,
     isSubscriptionProcessing,
+    subscriptionPrices,
   };
 }

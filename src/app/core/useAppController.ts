@@ -196,7 +196,9 @@ export default function useAppController() {
     handleUsageModalClose,
     handleUsageModalSubscribe,
     isSubscriptionProcessing,
+    subscriptionPrices,
   } = useSubscriptionActions({
+    step,
     setStep,
     setIsSubscribed,
     setShowUsageExhaustedModal,
@@ -294,6 +296,7 @@ export default function useAppController() {
     handleCancelSubscribe,
     handleSubscriptionStatusChange,
     isSubscriptionProcessing,
+    subscriptionPrices,
     handleErrorRetry,
     handleSubmitReport,
     showUsageExhaustedModal,

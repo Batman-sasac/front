@@ -31,6 +31,7 @@ export default function useOcrUsageGate() {
 
       const usage = await getOcrUsage();
       setOcrUsage(usage);
+      setIsSubscribed(usage.is_subscribed === true);
       return usage;
     } catch (error) {
       console.error('OCR 사용량 조회 실패:', error);
