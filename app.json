@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Bat",
-    "slug": "frontend",
-    "version": "1.0.2",
+    "slug": "bat",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/ios_icon.png",
     "userInterfaceStyle": "light",
@@ -71,15 +71,15 @@
     },
     "extra": {
       "eas": {
-        "projectId": "fe671185-4f2f-4705-899c-f5c1dfb3f574"
+        "projectId": "d29b2e3f-f993-4e0e-b46a-305ad06acbd8"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/fe671185-4f2f-4705-899c-f5c1dfb3f574"
+      "url": "https://u.expo.dev/d29b2e3f-f993-4e0e-b46a-305ad06acbd8"
     },
-    "owner": "binssss"
+    "owner": "batman-team"
   }
 }
