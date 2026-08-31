@@ -4,7 +4,7 @@ import { Image, Pressable, Text, View } from "react-native";
 import HomeLevelProgress from "../../../components/home/HomeLevelProgress";
 import HomeSurfaceCard from "../../../components/home/HomeSurfaceCard";
 import { scale } from "../../../lib/layout";
-import { getLevelUpCharacterSource } from "../constants/homeCharacters";
+import { getLevelUpCharacterSource } from "../../../lib/learningCharacter";
 import { getLevelProgress } from "../logic/homeMetrics";
 import { styles } from "../styles/HomeScreen.styles";
 
