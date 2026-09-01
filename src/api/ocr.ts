@@ -1,892 +1,267 @@
-// src/api/ocr.ts
-export type BlankItem = {
-    id: number;
-    word: string;
-    meaningLong?: string;
-};
+import { fetchWithTimeout } from "../lib/fetchWithTimeout";
+import { getOcrAuthHeaders, OCR_API_BASE } from "./ocrClient";
+import {
+  isRecord,
+  normalizePageItem,
+  normalizeReviewWord,
+} from "./ocrNormalizers";
+import type {
+  BlankItemSave,
+  OcrProgressMessage,
+  OcrUsageResponse,
+  PageItem,
+  ScaffoldingPayload,
+} from "./ocrTypes";
 
-/** 클로바 enableTableDetection → 백엔드가 내려주는 표 블록 (셀 문자열 그리드) */
-export type OcrTableBlock = {
-    rows: string[][];
-};
-
-export type LayoutBlock = {
-    text: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
-
-export type BlankCandidate = {
-    id: string;
-    text: string;
-    page_index: number;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
-
-// ocr_app.py의 /ocr/save 스펙: 페이지, 빈칸, 사용자 답변 모두 JSON
-export type PageItem = {
-    original_text: string;
-    keywords: string[];
-    /** General OCR 표 인식 결과; 없으면 생략 */
-    tables?: OcrTableBlock[];
-    /** OCR 레이아웃 블록; 없으면 생략 */
-    layout_blocks?: LayoutBlock[];
-    /** OCR 빈칸 후보 박스; 없으면 생략 */
-    blank_candidates?: BlankCandidate[];
-};
-
-export type BlankItemSave = {
-    blank_index: number;
-    word: string;
-    page_index: number;
-    candidate_id?: string;
-};
-
-export type ScaffoldingPayload = {
-    title: string;
-    extractedText: string;
-    blanks: BlankItem[];
-    pages?: PageItem[];
-    blankItems?: BlankItemSave[];
-    layoutMeta?: Record<string, unknown>;
-    imageUrl?: string | null;
-    user_answers?: string[];
-};
-
-export type OcrResponse =
-    | { status: 'success'; original_text: string; keywords: string[] }
-    | { status: 'error'; message: string };
-
-export type OcrUsageResponse = {
-    status: 'ok' | 'limit_reached' | 'error';
-    pages_used: number;
-    pages_limit: number;
-    remaining: number;
-    message?: string;
-    /** 백엔드에서 화이트리스트 유저인 경우 내려주는 플래그 */
-    is_unlimited?: boolean;
-    plan?: 'free' | 'basic' | 'pro';
-    plan_limit?: number;
-    page_bonus?: number;
-    product_id?: string | null;
-    is_subscribed?: boolean;
-};
-
-import config from '../lib/config';
-import { fetchWithTimeout } from '../lib/fetchWithTimeout';
-
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? config.apiBaseUrl;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
-}
-
-function getErrorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
-}
-
-export type OcrProgressMessage = {
-    type: 'ocr_progress';
-    status: 'page_done' | 'page_error';
-    page: number;
-    total_pages: number;
-    filename?: string;
-};
+export type * from "./ocrTypes";
+export { getMonthlyStats, getWeeklyGrowth } from "./learningStats";
+export {
+  deleteReviewCard,
+  getQuizForReview,
+  getReviewCards,
+} from "./ocrReview";
+export { getHint, gradeStudy, saveTest, submitReviewStudy } from "./study";
 
 type RunOcrOptions = {
-    fileName?: string;
-    mimeType?: string;
-    jobId?: string;
-    onProgress?: (message: OcrProgressMessage) => void;
+  fileName?: string;
+  mimeType?: string;
+  jobId?: string;
+  onProgress?: (message: OcrProgressMessage) => void;
 };
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function getOcrWebSocketUrl(jobId: string) {
-    const normalizedBase = (API_BASE ?? '').trim().replace(/\/+$/, '');
-    return normalizedBase
-        .replace(/^https:\/\//i, 'wss://')
-        .replace(/^http:\/\//i, 'ws://') + `/ws/ocr/${jobId}`;
-}
-
-/** POST /ocr 의 pages[].tables 정규화 */
-function normalizeOcrTables(raw: unknown): OcrTableBlock[] | undefined {
-    if (!Array.isArray(raw) || raw.length === 0) return undefined;
-    const out: OcrTableBlock[] = [];
-    for (const t of raw) {
-        if (!t || typeof t !== 'object') continue;
-        const rows = (t as { rows?: unknown }).rows;
-        if (!Array.isArray(rows) || rows.length === 0) continue;
-        const grid = rows.map((r) =>
-            Array.isArray(r) ? r.map((c) => String(c ?? '')) : [],
-        );
-        if (grid.some((row) => row.length > 0)) {
-            out.push({ rows: grid });
-        }
-    }
-    return out.length > 0 ? out : undefined;
-}
-
-function normalizeLayoutBlocks(raw: unknown): LayoutBlock[] | undefined {
-    if (!Array.isArray(raw) || raw.length === 0) return undefined;
-
-    const out: LayoutBlock[] = [];
-    for (const block of raw) {
-        if (!block || typeof block !== 'object') continue;
-        const candidate = block as {
-            text?: unknown;
-            x?: unknown;
-            y?: unknown;
-            width?: unknown;
-            height?: unknown;
-        };
-        const text = String(candidate.text ?? '').trim();
-        const x = Number(candidate.x);
-        const y = Number(candidate.y);
-        const width = Number(candidate.width);
-        const height = Number(candidate.height);
-
-        if (!text) continue;
-        if (
-            !Number.isFinite(x)
-            || !Number.isFinite(y)
-            || !Number.isFinite(width)
-            || !Number.isFinite(height)
-        ) {
-            continue;
-        }
-
-        out.push({
-            text,
-            x,
-            y,
-            width,
-            height,
-        });
-    }
-
-    return out.length > 0 ? out : undefined;
-}
-
-function normalizeBlankCandidates(raw: unknown): BlankCandidate[] | undefined {
-    if (!Array.isArray(raw) || raw.length === 0) return undefined;
-
-    const out: BlankCandidate[] = [];
-    for (const candidate of raw) {
-        if (!candidate || typeof candidate !== 'object') continue;
-
-        const rawCandidate = candidate as {
-            id?: unknown;
-            text?: unknown;
-            page_index?: unknown;
-            x?: unknown;
-            y?: unknown;
-            width?: unknown;
-            height?: unknown;
-        };
-
-        const id = String(rawCandidate.id ?? '').trim();
-        const text = String(rawCandidate.text ?? '').trim();
-        const pageIndex = Number(rawCandidate.page_index);
-        const x = Number(rawCandidate.x);
-        const y = Number(rawCandidate.y);
-        const width = Number(rawCandidate.width);
-        const height = Number(rawCandidate.height);
-
-        if (!id || !text) continue;
-        if (
-            !Number.isFinite(pageIndex)
-            || !Number.isFinite(x)
-            || !Number.isFinite(y)
-            || !Number.isFinite(width)
-            || !Number.isFinite(height)
-        ) {
-            continue;
-        }
-
-        out.push({
-            id,
-            text,
-            page_index: pageIndex,
-            x,
-            y,
-            width,
-            height,
-        });
-    }
-
-    return out.length > 0 ? out : undefined;
-}
-
-function normalizePageItem(raw: {
-    original_text?: string;
-    keywords?: string[];
-    tables?: unknown;
-    layout_blocks?: unknown;
-    blank_candidates?: unknown;
-}): PageItem {
-    const normalizeKeyword = (value: unknown) => String(value ?? '').trim();
-
-    return {
-        original_text: raw?.original_text ?? '',
-        keywords: Array.isArray(raw?.keywords)
-            ? raw.keywords.map(normalizeKeyword).filter(Boolean)
-            : [],
-        tables: normalizeOcrTables(raw?.tables),
-        layout_blocks: normalizeLayoutBlocks(raw?.layout_blocks),
-        blank_candidates: normalizeBlankCandidates(raw?.blank_candidates),
-    };
-}
-
-function normalizeReviewWord(value: unknown) {
-    return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
-}
-
-function normalizeStoredBlankItem(raw: unknown, fallbackIndex: number): BlankItemSave | null {
-    if (!raw || typeof raw !== 'object') return null;
-
-    const item = raw as {
-        blank_index?: unknown;
-        word?: unknown;
-        page_index?: unknown;
-        candidate_id?: unknown;
-    };
-
-    const word = String(item.word ?? '').trim();
-    if (!word) return null;
-
-    const blankIndexRaw = Number(item.blank_index);
-    const pageIndexRaw = Number(item.page_index);
-    const candidateId = String(item.candidate_id ?? '').trim();
-
-    return {
-        blank_index: Number.isFinite(blankIndexRaw) ? blankIndexRaw : fallbackIndex,
-        word,
-        page_index: Number.isFinite(pageIndexRaw) ? pageIndexRaw : 0,
-        ...(candidateId ? { candidate_id: candidateId } : {}),
-    };
-}
-
-function buildFallbackReviewBlankItems(blanks: BlankItem[], pages?: PageItem[]): BlankItemSave[] {
-    const candidatePool: Array<{ word: string; page_index: number; candidate_id?: string }> = [];
-
-    (pages ?? []).forEach((page, pageIndex) => {
-        const pageCandidates = page.blank_candidates ?? [];
-        if (pageCandidates.length > 0) {
-            pageCandidates.forEach((candidate) => {
-                candidatePool.push({
-                    word: candidate.text,
-                    page_index: candidate.page_index ?? pageIndex,
-                    candidate_id: candidate.id,
-                });
-            });
-            return;
-        }
-
-        page.keywords.forEach((word) => {
-            candidatePool.push({
-                word,
-                page_index: pageIndex,
-            });
-        });
-    });
-
-    const usedCandidateIndexes = new Set<number>();
-
-    return blanks.map((blank, index) => {
-        const blankIndex = typeof blank.id === 'number' ? blank.id : index;
-        const normalizedWord = normalizeReviewWord(blank.word);
-        const matchedCandidateIndex = candidatePool.findIndex(
-            (candidate, candidateIndex) =>
-                !usedCandidateIndexes.has(candidateIndex)
-                && normalizeReviewWord(candidate.word) === normalizedWord,
-        );
-
-        if (matchedCandidateIndex >= 0) {
-            usedCandidateIndexes.add(matchedCandidateIndex);
-            const matchedCandidate = candidatePool[matchedCandidateIndex];
-            return {
-                blank_index: blankIndex,
-                word: matchedCandidate.word || blank.word,
-                page_index: matchedCandidate.page_index,
-                ...(matchedCandidate.candidate_id ? { candidate_id: matchedCandidate.candidate_id } : {}),
-            };
-        }
-
-        return {
-            blank_index: blankIndex,
-            word: blank.word,
-            page_index: 0,
-        };
-    });
+  const normalizedBase = OCR_API_BASE.trim().replace(/\/+$/, "");
+  return `${normalizedBase
+    .replace(/^https:\/\//i, "wss://")
+    .replace(/^http:\/\//i, "ws://")}/ws/ocr/${jobId}`;
 }
 
 export async function runOcr(
-    fileUri: string,
-    cropInfo?: { px: number; py: number; pw: number; ph: number },
-    options?: RunOcrOptions,
+  fileUri: string,
+  cropInfo?: { px: number; py: number; pw: number; ph: number },
+  options?: RunOcrOptions,
 ): Promise<ScaffoldingPayload> {
-    console.log('OCR 요청 시작 - fileUri:', fileUri, 'cropInfo:', cropInfo);
+  console.log("OCR 요청 시작 - fileUri:", fileUri, "cropInfo:", cropInfo);
+  const form = new FormData();
+  const nameFromMeta = options?.fileName?.trim();
+  const nameFromUri = fileUri.split("/").pop()?.split("?")[0] ?? "";
+  const normalizedFileName = nameFromMeta || nameFromUri || "upload";
+  const fileExtensionMatch = normalizedFileName.match(/\.([a-z0-9]+)$/i);
+  const fileExtension =
+    fileExtensionMatch?.[1]?.toLowerCase() ||
+    fileUri.split(".").pop()?.toLowerCase() ||
+    "jpg";
+  const mimeType =
+    options?.mimeType ||
+    (fileExtension === "png"
+      ? "image/png"
+      : fileExtension === "pdf"
+        ? "application/pdf"
+        : "image/jpeg");
+  const uploadFileName = normalizedFileName.includes(".")
+    ? normalizedFileName
+    : `upload.${fileExtension}`;
 
-    const form = new FormData();
+  try {
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    const file = new File([blob], uploadFileName, { type: mimeType });
+    form.append("file", file);
+    console.log("FormData 생성 완료 (Blob):", {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+    });
+  } catch (blobError) {
+    console.log("Blob 변환 실패, RN 방식 사용:", blobError);
+    form.append("file", {
+      uri: fileUri,
+      name: uploadFileName,
+      type: mimeType,
+    } as unknown as Blob);
+  }
 
-    const nameFromMeta = options?.fileName?.trim();
-    const nameFromUri = fileUri.split('/').pop()?.split('?')[0] ?? '';
-    const normalizedFileName = nameFromMeta || nameFromUri || 'upload';
-    const fileExtensionMatch = normalizedFileName.match(/\.([a-z0-9]+)$/i);
-    const fileExtension = fileExtensionMatch?.[1]?.toLowerCase()
-        || fileUri.split('.').pop()?.toLowerCase()
-        || 'jpg';
-    const mimeType = options?.mimeType
-        || (fileExtension === 'png'
-            ? 'image/png'
-            : fileExtension === 'pdf'
-                ? 'application/pdf'
-                : 'image/jpeg');
-    const uploadFileName = normalizedFileName.includes('.')
-        ? normalizedFileName
-        : `upload.${fileExtension}`;
+  if (cropInfo && mimeType.startsWith("image/")) {
+    form.append("crop_x", String(cropInfo.px));
+    form.append("crop_y", String(cropInfo.py));
+    form.append("crop_width", String(cropInfo.pw));
+    form.append("crop_height", String(cropInfo.ph));
+    console.log("Crop 정보 추가:", cropInfo);
+  }
+  if (options?.jobId) form.append("job_id", options.jobId);
 
+  const shouldTrackProgress =
+    !!options?.jobId && typeof options?.onProgress === "function";
+  let webSocket: WebSocket | null = null;
+
+  if (shouldTrackProgress && options?.jobId) {
     try {
-        // 모바일 환경에서 파일 URI를 Blob으로 변환 시도
-        const response = await fetch(fileUri);
-        const blob = await response.blob();
-
-        // Blob을 File 객체로 변환 (웹 호환)
-        const file = new File([blob], uploadFileName, { type: mimeType });
-
-        form.append('file', file);
-        console.log('FormData 생성 완료 (Blob):', { name: file.name, type: file.type, size: file.size });
-    } catch (blobError) {
-        // Blob 변환 실패 시 RN 방식으로 fallback
-        console.log('Blob 변환 실패, RN 방식 사용:', blobError);
-        form.append('file', {
-            uri: fileUri,
-            name: uploadFileName,
-            type: mimeType,
-        } as unknown as Blob);
-    }
-
-    // crop 정보가 있으면 form에 추가 (서버에서 crop)
-    // 참고: 상위에서 "크롭된 파일 자체"를 만들어 넘기는 경우 cropInfo는 undefined로 들어온다.
-    if (cropInfo && mimeType.startsWith('image/')) {
-        form.append('crop_x', String(cropInfo.px));
-        form.append('crop_y', String(cropInfo.py));
-        form.append('crop_width', String(cropInfo.pw));
-        form.append('crop_height', String(cropInfo.ph));
-        console.log('Crop 정보 추가:', cropInfo);
-    }
-
-    if (options?.jobId) {
-        form.append('job_id', options.jobId);
-    }
-
-    // 토큰 가져오기
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-    const shouldTrackProgress = !!options?.jobId && typeof options?.onProgress === 'function';
-    let ws: WebSocket | null = null;
-
-    if (shouldTrackProgress && options?.jobId) {
+      webSocket = new WebSocket(getOcrWebSocketUrl(options.jobId));
+      webSocket.onmessage = (event) => {
         try {
-            ws = new WebSocket(getOcrWebSocketUrl(options.jobId));
-            ws.onmessage = (event) => {
-                try {
-                    const parsed = JSON.parse(String(event.data ?? '')) as OcrProgressMessage;
-                    if (parsed?.type === 'ocr_progress') {
-                        options.onProgress?.(parsed);
-                    }
-                } catch (error) {
-                    console.warn('OCR progress 메시지 파싱 실패:', error);
-                }
-            };
-            ws.onerror = (event) => {
-                console.warn('OCR progress WebSocket 오류:', event);
-            };
-
-            await new Promise<void>((resolve) => {
-                let settled = false;
-                const finish = () => {
-                    if (settled) return;
-                    settled = true;
-                    resolve();
-                };
-
-                const timeout = setTimeout(finish, 1200);
-
-                ws!.onopen = () => {
-                    clearTimeout(timeout);
-                    finish();
-                };
-                ws!.onclose = () => {
-                    clearTimeout(timeout);
-                    finish();
-                };
-                ws!.onerror = () => {
-                    clearTimeout(timeout);
-                    finish();
-                };
-            });
+          const message = JSON.parse(
+            String(event.data ?? ""),
+          ) as OcrProgressMessage;
+          if (message?.type === "ocr_progress") options.onProgress?.(message);
         } catch (error) {
-            console.warn('OCR progress WebSocket 연결 실패:', error);
-            ws = null;
+          console.warn("OCR progress 메시지 파싱 실패:", error);
         }
-    }
-
-    try {
-        let res: Response;
-        try {
-            res = await fetch(`${API_BASE}/ocr`, {
-            method: 'POST',
-            body: form,
-            headers: {
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${token || ''}`,
-            },
-            });
-        } catch (error) {
-            // React Native/Expo에서 네트워크 레벨 실패는 "Network request failed"로 뭉뚱그려진다.
-            // URL/파일정보만이라도 남겨서 원인 파악을 쉽게 한다.
-            console.error('OCR 네트워크 실패:', {
-                message: getErrorMessage(error),
-                apiBase: API_BASE,
-                url: `${API_BASE}/ocr`,
-                fileUri,
-                uploadFileName,
-                mimeType,
-                cropInfo,
-            });
-            throw error;
-        }
-
-        console.log('OCR 응답 상태:', res.status);
-
-        if (!res.ok) {
-            const errorText = await res.text();
-            console.error('OCR 오류 응답:', errorText);
-            throw new Error(`OCR HTTP ${res.status}: ${errorText}`);
-        }
-        const rawData: unknown = await res.json();
-        const data = isRecord(rawData) ? rawData : {};
-
-        if (data.status === 'limit_reached') {
-            throw new Error(
-                typeof data.message === 'string'
-                    ? data.message
-                    : '이용 가능한 무료 횟수를 모두 사용했습니다.',
-            );
-        }
-
-        const inner = isRecord(data.data) ? data.data : data;
-
-        let pages: PageItem[] = [];
-        let originalText: string;
-        let blankItems: BlankItemSave[] = [];
-
-        // 백엔드가 pages 배열 반환 (PDF/다중 이미지)
-        if (Array.isArray(inner.pages) && inner.pages.length > 0) {
-            pages = inner.pages.map(normalizePageItem);
-
-            originalText = pages
-                .map((p) => p.original_text ?? '')
-                .join('\n\n');
-
-            for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
-                const page = pages[pageIndex];
-                const pageCandidates = page.blank_candidates ?? [];
-                const usedCandidateIndexes = new Set<number>();
-
-                for (const keyword of page.keywords ?? []) {
-                    const normalizedKeyword = normalizeReviewWord(keyword);
-                    const matchedCandidateIndex = pageCandidates.findIndex(
-                        (candidate, candidateIndex) =>
-                            !usedCandidateIndexes.has(candidateIndex)
-                            && normalizeReviewWord(candidate.text) === normalizedKeyword,
-                    );
-                    const matchedCandidate = matchedCandidateIndex >= 0
-                        ? pageCandidates[matchedCandidateIndex]
-                        : null;
-
-                    if (matchedCandidateIndex >= 0) {
-                        usedCandidateIndexes.add(matchedCandidateIndex);
-                    }
-
-                    blankItems.push({
-                        blank_index: blankItems.length,
-                        word: keyword,
-                        page_index: matchedCandidate?.page_index ?? pageIndex,
-                        ...(matchedCandidate?.id ? { candidate_id: matchedCandidate.id } : {}),
-                    });
-                }
-            }
-        } else {
-            // 하위 호환: 단일 original_text, keywords
-            originalText = typeof inner.original_text === 'string' ? inner.original_text : '';
-            const rawKeywords = Array.isArray(inner.keywords)
-                ? inner.keywords.map((value: unknown) => String(value ?? '').trim()).filter(Boolean)
-                : [];
-            const kwSet = new Set<string>();
-            const keywords = rawKeywords.filter((word: string) => {
-                if (kwSet.has(word)) return false;
-                kwSet.add(word);
-                return true;
-            });
-            pages = [{ original_text: originalText, keywords }];
-            blankItems = [];
-        }
-
-        const blanks = blankItems.map((blank) => ({
-            id: blank.blank_index,
-            word: blank.word,
-            meaningLong: `${blank.word} 뜻 (AI 생성 예정)`,
-        }));
-
-        return {
-            title: '학습 자료',
-            extractedText: originalText,
-            blanks: blanks,
-            pages,
-            blankItems,
+      };
+      webSocket.onerror = (event) => {
+        console.warn("OCR progress WebSocket 오류:", event);
+      };
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
         };
-    } finally {
-        if (ws) {
-            setTimeout(() => {
-                try {
-                    ws?.close();
-                } catch (error) {
-                    console.warn('OCR progress WebSocket 종료 실패:', error);
-                }
-            }, 300);
-        }
+        const timeout = setTimeout(finish, 1200);
+        webSocket!.onopen = () => {
+          clearTimeout(timeout);
+          finish();
+        };
+        webSocket!.onclose = () => {
+          clearTimeout(timeout);
+          finish();
+        };
+        webSocket!.onerror = () => {
+          clearTimeout(timeout);
+          finish();
+        };
+      });
+    } catch (error) {
+      console.warn("OCR progress WebSocket 연결 실패:", error);
+      webSocket = null;
     }
+  }
+
+  try {
+    let response: Response;
+    try {
+      response = await fetch(`${OCR_API_BASE}/ocr`, {
+        method: "POST",
+        body: form,
+        headers: await getOcrAuthHeaders(),
+      });
+    } catch (error) {
+      console.error("OCR 네트워크 실패:", {
+        message: getErrorMessage(error),
+        apiBase: OCR_API_BASE,
+        url: `${OCR_API_BASE}/ocr`,
+        fileUri,
+        uploadFileName,
+        mimeType,
+        cropInfo,
+      });
+      throw error;
+    }
+
+    console.log("OCR 응답 상태:", response.status);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OCR 오류 응답:", errorText);
+      throw new Error(`OCR HTTP ${response.status}: ${errorText}`);
+    }
+
+    const rawData: unknown = await response.json();
+    const data = isRecord(rawData) ? rawData : {};
+    if (data.status === "limit_reached") {
+      throw new Error(
+        typeof data.message === "string"
+          ? data.message
+          : "이용 가능한 무료 횟수를 모두 사용했습니다.",
+      );
+    }
+
+    const inner = isRecord(data.data) ? data.data : data;
+    let pages: PageItem[] = [];
+    let originalText: string;
+    let blankItems: BlankItemSave[] = [];
+
+    if (Array.isArray(inner.pages) && inner.pages.length > 0) {
+      pages = inner.pages.map(normalizePageItem);
+      originalText = pages.map((page) => page.original_text ?? "").join("\n\n");
+
+      for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+        const page = pages[pageIndex];
+        const pageCandidates = page.blank_candidates ?? [];
+        const usedCandidateIndexes = new Set<number>();
+        for (const keyword of page.keywords ?? []) {
+          const normalizedKeyword = normalizeReviewWord(keyword);
+          const matchedIndex = pageCandidates.findIndex(
+            (candidate, candidateIndex) =>
+              !usedCandidateIndexes.has(candidateIndex) &&
+              normalizeReviewWord(candidate.text) === normalizedKeyword,
+          );
+          const matchedCandidate =
+            matchedIndex >= 0 ? pageCandidates[matchedIndex] : null;
+          if (matchedIndex >= 0) usedCandidateIndexes.add(matchedIndex);
+          blankItems.push({
+            blank_index: blankItems.length,
+            word: keyword,
+            page_index: matchedCandidate?.page_index ?? pageIndex,
+            ...(matchedCandidate?.id
+              ? { candidate_id: matchedCandidate.id }
+              : {}),
+          });
+        }
+      }
+    } else {
+      originalText =
+        typeof inner.original_text === "string" ? inner.original_text : "";
+      const rawKeywords = Array.isArray(inner.keywords)
+        ? inner.keywords
+            .map((value: unknown) => String(value ?? "").trim())
+            .filter(Boolean)
+        : [];
+      const keywordSet = new Set<string>();
+      const keywords = rawKeywords.filter((word: string) => {
+        if (keywordSet.has(word)) return false;
+        keywordSet.add(word);
+        return true;
+      });
+      pages = [{ original_text: originalText, keywords }];
+    }
+
+    const blanks = blankItems.map((blank) => ({
+      id: blank.blank_index,
+      word: blank.word,
+      meaningLong: `${blank.word} 뜻 (AI 생성 예정)`,
+    }));
+    return {
+      title: "학습 자료",
+      extractedText: originalText,
+      blanks,
+      pages,
+      blankItems,
+    };
+  } finally {
+    if (webSocket) {
+      setTimeout(() => {
+        try {
+          webSocket?.close();
+        } catch (error) {
+          console.warn("OCR progress WebSocket 종료 실패:", error);
+        }
+      }, 300);
+    }
+  }
 }
 
 export async function getOcrUsage(): Promise<OcrUsageResponse> {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetchWithTimeout(`${API_BASE}/ocr/usage`, {
-        method: 'GET',
-        headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-    });
-
-    if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`OCR Usage HTTP ${res.status}: ${errorText}`);
-    }
-
-    return res.json();
-}
-
-export type ReviewCardApiItem = {
-    id: number;
-    study_name: string;
-    subject_name: string;
-    ocr_preview?: string | null;
-    created_at: string;
-};
-
-export type ReviewCardListResponse = {
-    status?: string;
-    message?: string;
-    data?: ReviewCardApiItem[];
-    has_more?: boolean;
-};
-
-export async function getReviewCards(page: number, size: number): Promise<ReviewCardListResponse> {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetchWithTimeout(`${API_BASE}/ocr/list?page=${page}&size=${size}`, {
-        headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-    });
-
-    if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`복습 카드 조회 HTTP ${res.status}: ${errorText}`);
-    }
-
-    const json = await res.json() as ReviewCardListResponse;
-    if (json.status === 'error') {
-        throw new Error(json.message || '복습 카드를 불러오지 못했습니다.');
-    }
-    return json;
-}
-
-export async function deleteReviewCard(quizId: number): Promise<void> {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetch(`${API_BASE}/ocr/ocr-data/delete/${quizId}`, {
-        method: 'DELETE',
-        headers: {
-            'Authorization': `Bearer ${token || ''}`,
-        },
-    });
-
-    if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`복습 카드 삭제 HTTP ${res.status}: ${errorText}`);
-    }
-}
-
-export type SaveTestRequest = {
-    subject_name: string;
-    study_name?: string;
-    /** 단일 페이지 호환 */
-    original?: string;
-    answers?: string[];
-    /** 페이지별 원문/키워드 (페이지 사용 시) */
-    pages?: PageItem[];
-    /** 빈칸 정의 (blank_index 순서 = user_answers 인덱스) */
-    blanks?: BlankItemSave[];
-    /** 사용자 작성 답변 (빈칸 순서대로) */
-    user_answers?: string[];
-    quiz?: string;
-};
-
-export async function saveTest(payload: SaveTestRequest) {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetch(`${API_BASE}/ocr/save`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-        body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) throw new Error(`SAVE HTTP ${res.status}`);
-    return res.json();
-}
-
-export type GradeStudyRequest = {
-    quiz_id: number;
-    correct_answers: string[];
-    answer: string[];
-    user_answer: string[];
-    quiz_html: string;
-    ocr_text: {
-        pages: PageItem[];
-        blanks: BlankItemSave[];
-        quiz: { raw: string };
-        layout_meta?: Record<string, unknown>;
-    };
-    /** 페이지별 정답 수 (pages index 기준) */
-    page_correct_counts?: number[];
-    /** 페이지별 문항 수 (pages index 기준) */
-    page_question_counts?: number[];
-    // 백엔드 호환용 추가 필드
-    user_answers?: string[];
-    study_name?: string;
-    subject_name?: string;
-    original_text?: string[];
-    keywords?: string[];
-    grade_cnt?: number;
-};
-
-/** 백엔드 POST /study/grade 응답 */
-export type GradeStudyResponse = {
-    status: 'success' | 'error';
-    score?: number;
-    reward_given?: number;
-    /** 성공 시 누적 포인트 (grade_cnt 0이면 null) */
-    new_points?: number | null;
-    message?: string;
-};
-
-export async function gradeStudy(payload: GradeStudyRequest): Promise<GradeStudyResponse> {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetch(`${API_BASE}/study/grade`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-        body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Grade HTTP ${res.status}: ${errorText}`);
-    }
-    return res.json();
-}
-
-/** 복습 시 DB에 저장한 퀴즈를 ScaffoldingPayload 형태로 조회 */
-export type QuizForReviewResponse = {
-    status: string;
-    data?: {
-        quiz_id: number;
-        title: string;
-        extractedText: string;
-        blanks: BlankItem[];
-        user_answers?: string[];
-        pages?: PageItem[];
-        layout_meta?: Record<string, unknown>;
-        image_url?: string | null;
-    };
-    message?: string;
-};
-
-export async function getQuizForReview(quizId: number): Promise<ScaffoldingPayload & { user_answers?: string[] }> {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetch(`${API_BASE}/ocr/quiz/${quizId}`, {
-        method: 'GET',
-        headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-    });
-
-    if (!res.ok) throw new Error(`퀴즈 조회 HTTP ${res.status}`);
-    const json = (await res.json()) as QuizForReviewResponse;
-    if (json.status !== 'success' || !json.data) throw new Error(json.message ?? '퀴즈를 불러올 수 없습니다.');
-
-    const d = json.data;
-    const pages = Array.isArray(d.pages)
-        ? d.pages.map(normalizePageItem)
-        : undefined;
-    const rawSelectedBlankRefs = Array.isArray((d.layout_meta as { selected_blank_refs?: unknown } | undefined)?.selected_blank_refs)
-        ? ((d.layout_meta as { selected_blank_refs?: unknown[] }).selected_blank_refs ?? [])
-        : [];
-    const normalizedSelectedBlankRefs = rawSelectedBlankRefs
-        .map((item, index) => normalizeStoredBlankItem(item, index))
-        .filter((item): item is BlankItemSave => item != null);
-    const blankItems = normalizedSelectedBlankRefs.length > 0
-        ? normalizedSelectedBlankRefs
-        : buildFallbackReviewBlankItems(d.blanks ?? [], pages);
-
-    return {
-        title: d.title,
-        extractedText: d.extractedText,
-        blanks: d.blanks ?? [],
-        user_answers: d.user_answers,
-        pages,
-        blankItems,
-        layoutMeta: d.layout_meta,
-        imageUrl: d.image_url ?? null,
-    };
-}
-
-// 홈화면 주간/월간 데이터
-export type WeeklyGrowthResponse = {
-    labels: string[];
-    data: number[];
-};
-
-export type MonthlyStatsResponse = {
-    status: string;
-    compare: {
-        last_month_name: string;
-        last_month_count: number;
-        this_month_name: string;
-        this_month_count: number;
-        target_count: number;
-        diff: number;
-    };
-};
-
-export async function getWeeklyGrowth(): Promise<WeeklyGrowthResponse> {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetchWithTimeout(`${API_BASE}/cycle/stats/weekly-growth`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-    });
-
-    if (!res.ok) throw new Error(`Weekly Stats HTTP ${res.status}`);
-    return res.json();
-}
-
-// 복습 완료 시 리워드 지급 및 사용자 답변 저장
-export type ReviewStudyRequest = {
-    quiz_id: number;
-    user_answers: string[];
-};
-
-/** 백엔드 POST /study/review-study 응답 */
-export type ReviewStudyResponse = {
-    status: 'success' | 'error';
-    new_points?: number;
-    message?: string;
-};
-
-export async function submitReviewStudy(payload: ReviewStudyRequest): Promise<ReviewStudyResponse> {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetch(`${API_BASE}/study/review-study`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-        body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) throw new Error(`Review Study HTTP ${res.status}`);
-    return res.json();
-}
-
-// 힌트 가져오기
-export type HintResponse = {
-    status: string;
-    quiz_id: number;
-    data: Array<{
-        h1: string; // 초성
-        h2: string; // 첫 글자
-        h3: string; // 마지막 글자
-    }>;
-};
-
-export async function getHint(quizId: number): Promise<HintResponse> {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetch(`${API_BASE}/study/hint/${quizId}`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-    });
-
-    if (!res.ok) throw new Error(`Hint HTTP ${res.status}`);
-    return res.json();
-}
-
-export async function getMonthlyStats(): Promise<MonthlyStatsResponse> {
-    const { getToken } = await import('../lib/storage');
-    const token = await getToken();
-
-    const res = await fetchWithTimeout(`${API_BASE}/cycle/learning-stats`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token || ''}`,
-        },
-    });
-
-    if (!res.ok) throw new Error(`Monthly Stats HTTP ${res.status}`);
-    return res.json();
+  const response = await fetchWithTimeout(`${OCR_API_BASE}/ocr/usage`, {
+    method: "GET",
+    headers: await getOcrAuthHeaders(),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OCR Usage HTTP ${response.status}: ${errorText}`);
+  }
+  return response.json();
 }
