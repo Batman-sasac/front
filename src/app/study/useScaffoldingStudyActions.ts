@@ -5,29 +5,22 @@ import {
   gradeStudy,
   submitReviewStudy,
   type BlankItemSave,
-  type PageItem,
   type OcrUsageResponse,
   type ScaffoldingPayload,
 } from '../../api/ocr';
 import type { RewardType } from '../../screens/reward/Reward';
-import { buildOrderedStudySaveData } from '../../screens/study/scaffolding/logic/scaffoldingLogic';
 import type { StudySource } from '../../screens/input_data/studySource';
 import type { AppStep } from '../../navigation/routes';
 import type { SourceCropMap } from './studyFlow';
 import { getErrorMessage } from '../error/errors';
-
-type PendingGradePart = {
-  pages: PageItem[];
-  blankItems: BlankItemSave[];
-  keywords: string[];
-  userAnswers: string[];
-  correctCount: number;
-};
-
-type PendingReviewPart = {
-  userAnswers: string[];
-  correctCount: number;
-};
+import {
+  buildGradeStudyRequest,
+  countCorrectAnswers,
+  mergeReviewAnswers,
+  prepareScaffoldingSaveData,
+  type PendingGradePart,
+  type PendingReviewPart,
+} from './scaffoldingStudyData';
 
 type SavePayload = {
   answers: string[];
@@ -214,46 +207,25 @@ export default function useScaffoldingStudyActions({
   }: SavePayload) => {
     if (!scaffoldingPayload) throw new Error('Payload가 없습니다.');
 
-    const blanks = scaffoldingPayload.blanks ?? [];
-    const rawBlankItems = scaffoldingPayload.blankItems && scaffoldingPayload.blankItems.length > 0
-      ? scaffoldingPayload.blankItems
-      : blanks.map((blank, index) => ({ blank_index: index, word: blank.word, page_index: 0 }));
-    const selectedExactBlankItems = (selectedBlankItems ?? [])
-      .map((item, index) => ({
-        blank_index: index,
-        word: item.word,
-        page_index: item.page_index ?? 0,
-        ...(item.candidate_id ? { candidate_id: item.candidate_id } : {}),
-      }))
-      .filter((item) => item.word.trim().length > 0);
-    const orderedSaveData = selectedExactBlankItems.length > 0
-      ? {
-        keywords: selectedExactBlankItems.map((item) => item.word),
-        blankItems: selectedExactBlankItems,
-      }
-      : buildOrderedStudySaveData({
-        selectedBlankIds,
-        blanks,
-        rawBlankItems,
-      });
-    const { keywords, blankItems } = orderedSaveData;
+    const { keywords, blankItems, rawBlankItems } = prepareScaffoldingSaveData({
+      payload: scaffoldingPayload,
+      selectedBlankIds,
+      selectedBlankItems,
+    });
     if (keywords.length === 0 && !isReviewMode) {
       throw new Error('선택한 빈칸 정보가 없습니다.');
     }
 
-    const reviewCorrectCount = userAnswers.reduce((acc, ua, idx) => {
-      const isCorrect = (ua ?? '').trim().toLowerCase() === (keywords[idx] ?? '').trim().toLowerCase();
-      return acc + (isCorrect ? 1 : 0);
-    }, 0);
+    const reviewCorrectCount = countCorrectAnswers(userAnswers, keywords);
 
     if (isReviewMode) {
       const exactReviewAnswerWords = rawBlankItems.length > 0
         ? rawBlankItems.map((item) => item.word)
-        : blanks.map((blank) => blank.word);
-      const exactReviewCorrectCount = userAnswers.reduce((acc, ua, idx) => {
-        const isCorrect = (ua ?? '').trim().toLowerCase() === (exactReviewAnswerWords[idx] ?? '').trim().toLowerCase();
-        return acc + (isCorrect ? 1 : 0);
-      }, 0);
+        : scaffoldingPayload.blanks.map((blank) => blank.word);
+      const exactReviewCorrectCount = countCorrectAnswers(
+        userAnswers,
+        exactReviewAnswerWords,
+      );
       const nextReviewParts = {
         ...pendingReviewPartsRef.current,
         [selectedSourceIndex]: {
@@ -265,8 +237,10 @@ export default function useScaffoldingStudyActions({
 
       const reviewPageCount = Math.max(scaffoldingPayloads.length, 1);
       const isLastReviewPage = selectedSourceIndex >= reviewPageCount - 1;
-      const completedReviewParts = Object.values(nextReviewParts);
-      const accumulatedReviewCorrectCount = completedReviewParts.reduce((acc, part) => acc + part.correctCount, 0);
+      const accumulatedReviewCorrectCount = Object.values(nextReviewParts).reduce(
+        (count, part) => count + part.correctCount,
+        0,
+      );
       const accumulatedReviewEarnedXp = accumulatedReviewCorrectCount * 2;
 
       if (!isLastReviewPage) {
@@ -277,12 +251,10 @@ export default function useScaffoldingStudyActions({
         };
       }
 
-      const mergedReviewUserAnswers: string[] = [];
-      for (let idx = 0; idx < reviewPageCount; idx += 1) {
-        const part = nextReviewParts[idx];
-        if (!part) throw new Error(`${idx + 1}번째 복습 답안이 없어 저장할 수 없습니다.`);
-        mergedReviewUserAnswers.push(...part.userAnswers);
-      }
+      const { userAnswers: mergedReviewUserAnswers } = mergeReviewAnswers(
+        nextReviewParts,
+        reviewPageCount,
+      );
 
       setExp((prev) => prev + accumulatedReviewEarnedXp);
       setIsReviewMode(false);
@@ -346,88 +318,20 @@ export default function useScaffoldingStudyActions({
       };
     }
 
-    const mergedParts: Record<number, PendingGradePart> = {
-      ...pendingGradePartsRef.current,
-    };
-    const mergedPages: PageItem[] = [];
-    const mergedBlanks: BlankItemSave[] = [];
-    const mergedKeywords: string[] = [];
-    const mergedUserAnswers: string[] = [];
-    let pageOffset = 0;
-    let blankOffset = 0;
-    let totalCorrect = 0;
-
-    for (let idx = 0; idx < capturedSources.length; idx += 1) {
-      const pendingPart = mergedParts[idx];
-      if (!pendingPart) throw new Error(`${idx + 1}페이지 학습 결과가 없어 저장할 수 없습니다.`);
-      totalCorrect += pendingPart.correctCount;
-
-      for (const page of pendingPart.pages) mergedPages.push(page);
-
-      for (let blankIdx = 0; blankIdx < pendingPart.blankItems.length; blankIdx += 1) {
-        const blankItem = pendingPart.blankItems[blankIdx];
-        mergedBlanks.push({
-          blank_index: blankOffset + blankIdx,
-          word: blankItem.word,
-          page_index: pageOffset + (blankItem.page_index ?? 0),
-          ...(blankItem.candidate_id ? { candidate_id: blankItem.candidate_id } : {}),
-        });
-      }
-
-      mergedKeywords.push(...pendingPart.keywords);
-      mergedUserAnswers.push(...pendingPart.userAnswers);
-
-      pageOffset += pendingPart.pages.length;
-      blankOffset += pendingPart.keywords.length;
-    }
-
-    const mergedRawText = mergedPages.map((page) => page.original_text ?? '').join('\n\n');
-    const mergedOcrText = {
-      pages: mergedPages,
-      blanks: mergedBlanks,
-      quiz: { raw: mergedRawText },
-      layout_meta: {
-        selected_blank_refs: mergedBlanks.map((blank) => ({
-          blank_index: blank.blank_index,
-          word: blank.word,
-          page_index: blank.page_index,
-          ...(blank.candidate_id ? { candidate_id: blank.candidate_id } : {}),
-        })),
-      },
-    };
-
-    const pageQuestionCounts = Array.from({ length: mergedPages.length }, () => 0);
-    const pageCorrectCounts = Array.from({ length: mergedPages.length }, () => 0);
-    for (let index = 0; index < mergedBlanks.length; index += 1) {
-      const pageIndex = mergedBlanks[index]?.page_index ?? 0;
-      if (pageIndex < 0 || pageIndex >= pageQuestionCounts.length) continue;
-      pageQuestionCounts[pageIndex] += 1;
-      const userAnswer = (mergedUserAnswers[index] ?? '').trim().toLowerCase();
-      const correctAnswer = (mergedKeywords[index] ?? '').trim().toLowerCase();
-      if (userAnswer && correctAnswer && userAnswer === correctAnswer) pageCorrectCounts[pageIndex] += 1;
-    }
-
-    const gradeResult = await gradeStudy({
-      quiz_id: 0,
-      correct_answers: mergedKeywords,
-      answer: mergedKeywords,
-      user_answer: mergedUserAnswers,
-      quiz_html: mergedRawText,
-      ocr_text: mergedOcrText,
-      user_answers: mergedUserAnswers,
-      subject_name: subjectName || scaffoldingPayload.title,
-      study_name: subjectName || scaffoldingPayload.title,
-      original_text: mergedPages.map((page) => page.original_text ?? ''),
-      keywords: mergedKeywords,
-      grade_cnt: totalCorrect,
-      page_correct_counts: pageCorrectCounts,
-      page_question_counts: pageQuestionCounts,
+    const gradeRequest = buildGradeStudyRequest({
+      parts: pendingGradePartsRef.current,
+      sourceCount: capturedSources.length,
+      subjectName,
+      fallbackTitle: scaffoldingPayload.title,
     });
+    const gradeResult = await gradeStudy(gradeRequest);
 
     resetPendingGradeParts();
     const nextPoints = Number(gradeResult?.new_points);
     const rewardGiven = Number(gradeResult?.reward_given);
-    const totalEarned = Number.isFinite(rewardGiven) ? rewardGiven : totalCorrect * 2;
+    const totalEarned = Number.isFinite(rewardGiven)
+      ? rewardGiven
+      : (gradeRequest.grade_cnt ?? 0) * 2;
     batchEarnedXpRef.current = totalEarned;
     setBatchEarnedXp(totalEarned);
 

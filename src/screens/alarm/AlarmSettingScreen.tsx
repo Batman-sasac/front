@@ -1,325 +1,122 @@
-﻿// src/screens/alarm/AlarmSettingScreen.tsx
-import React, { useState, useEffect } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    Switch,
-    Alert,
-} from 'react-native';
-import { appColors, scale, fontScale } from '../../styles/theme';
-import { getToken, getCachedNotificationStatus, setCachedNotificationStatus } from '../../lib/storage';
-import {
-    getMyNotificationStatus,
-    updateNotificationSettings,
-    registerAndSyncPushToken,
-} from '../../api/notification';
-import AlarmSettingSection from '../../components/alarm/AlarmSettingSection';
-import AlarmSettingRow from '../../components/alarm/AlarmSettingRow';
-import AlarmTimeChip from '../../components/alarm/AlarmTimeChip';
-import { getErrorMessage } from '../../app/error/errors';
-import AppBackButton from '../../components/common/AppBackButton';
-import AlarmTimePickerOverlay from '../../components/alarm/AlarmTimePickerOverlay';
+import React from "react";
+import { Switch, Text, View } from "react-native";
 
-/** DB에 저장된 24시간 "HH:MM" / "HH:MM:SS" → 화면용 Time (오전/오후, 1~12시, 5분 단위) */
-function parseRemindTimeToTime(remindTime: string | null | undefined): Time {
-    const def: Time = { ampm: '오후', hour: 7, minute: 30 };
-    if (!remindTime || typeof remindTime !== 'string') return def;
-    const part = String(remindTime).trim().split(':');
-    const h = parseInt(part[0], 10);
-    const m = part.length >= 2 ? parseInt(part[1], 10) : 0;
-    if (Number.isNaN(h)) return def;
-    const hour24 = Math.max(0, Math.min(23, h));
-    const minute = Number.isNaN(m) ? 0 : Math.max(0, Math.min(59, Math.floor(m / 5) * 5));
-    if (hour24 === 0) return { ampm: '오전', hour: 12, minute };
-    if (hour24 < 12) return { ampm: '오전', hour: hour24, minute };
-    if (hour24 === 12) return { ampm: '오후', hour: 12, minute };
-    return { ampm: '오후', hour: hour24 - 12, minute };
-}
-
-type Time = {
-    ampm: '오전' | '오후';
-    hour: number;   // 1 ~ 12
-    minute: number; // 0, 5, 10 ... 55
-};
-
-type ActivePicker = null | 'review' | 'dndStart' | 'dndEnd';
+import AlarmSettingRow from "../../components/alarm/AlarmSettingRow";
+import AlarmSettingSection from "../../components/alarm/AlarmSettingSection";
+import AlarmTimeChip from "../../components/alarm/AlarmTimeChip";
+import AlarmTimePickerOverlay from "../../components/alarm/AlarmTimePickerOverlay";
+import AppBackButton from "../../components/common/AppBackButton";
+import { appColors } from "../../styles/theme";
+import { useAlarmSettings } from "./hooks/useAlarmSettings";
+import { styles } from "./styles/AlarmSettingScreen.styles";
 
 type Props = {
-    // App.tsx에서 step을 'alarm'으로 되돌리기 위해 사용
-    onNavigate: (screen: 'alarm') => void;
+  onNavigate: (screen: "alarm") => void;
 };
 
-const BG = appColors.white;
 const SWITCH_TRACK_COLORS = {
-    false: appColors.borderStrong,
-    true: appColors.primary,
+  false: appColors.borderStrong,
+  true: appColors.primary,
 };
 
 export default function AlarmSettingScreen({ onNavigate }: Props) {
-    // 토글 상태
-    const [reviewEnabled, setReviewEnabled] = useState(true);
-    const [leagueEnabled, setLeagueEnabled] = useState(true);
-    const [dndEnabled, setDndEnabled] = useState(true);
+  const settings = useAlarmSettings();
 
-    // 시간 상태
-    const [reviewTime, setReviewTime] = useState<Time>({
-        ampm: '오후',
-        hour: 7,
-        minute: 30,
-    });
-    const [dndStart, setDndStart] = useState<Time>({
-        ampm: '오후',
-        hour: 10,
-        minute: 30,
-    });
-    const [dndEnd, setDndEnd] = useState<Time>({
-        ampm: '오전',
-        hour: 7,
-        minute: 30,
-    });
+  return (
+    <View style={styles.root}>
+      <View style={styles.header}>
+        <AppBackButton
+          style={styles.backButton}
+          onPress={() => onNavigate("alarm")}
+          iconStyle={styles.backIcon}
+        />
+        <Text style={styles.headerTitle}>알림설정</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
-    // 모달에서 임시로 조작할 시간
-    const [picker, setPicker] = useState<ActivePicker>(null);
-    const [tempTime, setTempTime] = useState<Time>(reviewTime);
-
-    // 캐시 먼저 표시(즉각 반응) → API로 최신값 갱신
-    useEffect(() => {
-        (async () => {
-            const [token, cached] = await Promise.all([getToken(), getCachedNotificationStatus()]);
-            if (!token) return;
-            // 이전에 저장해 둔 값이 있으면 즉시 적용 (수십 ms)
-            if (cached) {
-                setReviewEnabled(cached.is_notify);
-                setReviewTime(parseRemindTimeToTime(cached.remind_time));
+      <View style={styles.content}>
+        <AlarmSettingSection title="복습 알림">
+          <AlarmSettingRow
+            label="복습 알림 설정"
+            description="하루 한 번 복습 알림을 보내드려요"
+            right={
+              <Switch
+                value={settings.reviewEnabled}
+                onValueChange={settings.handleReviewEnabledChange}
+                trackColor={SWITCH_TRACK_COLORS}
+                thumbColor={appColors.white}
+              />
             }
-            registerAndSyncPushToken(token).catch(() => {});
-            try {
-                const res = await getMyNotificationStatus(token);
-                setReviewEnabled(Boolean(res?.is_notify));
-                const raw = res?.remind_time != null ? String(res.remind_time) : null;
-                setReviewTime(parseRemindTimeToTime(raw));
-                await setCachedNotificationStatus({
-                    is_notify: Boolean(res?.is_notify),
-                    remind_time: raw ?? null,
-                });
-            } catch (_e) {
-                // 조회 실패 시 캐시/기본값 유지
+          />
+          <AlarmSettingRow
+            label="복습 알림 시간"
+            right={
+              <AlarmTimeChip
+                label={settings.reviewTimeLabel}
+                onPress={() => settings.openPicker("review")}
+                disabled={!settings.reviewEnabled}
+              />
             }
-        })();
-    }, []);
+          />
+        </AlarmSettingSection>
 
-    const formatTime = (t: Time) => {
-        const mm = t.minute.toString().padStart(2, '0');
-        const suffix = t.ampm === '오전' ? 'AM' : 'PM';
-        return `${t.hour}:${mm} ${suffix}`;
-    };
-
-    const to24HourString = (t: Time) => {
-        const mm = t.minute.toString().padStart(2, '0');
-        const base = t.hour % 12;
-        const hour = t.ampm === '오후' ? base + 12 : base;
-        return `${hour.toString().padStart(2, '0')}:${mm}`;
-    };
-
-    const saveReviewSettings = async (enabled: boolean, time: Time) => {
-        try {
-            const token = await getToken();
-            if (!token) {
-                Alert.alert('알림 설정', '로그인이 필요합니다.');
-                return;
+        <AlarmSettingSection title="리그 알림">
+          <AlarmSettingRow
+            label="리그 알림 설정"
+            description="순위 변동이 있을 때 알려드려요"
+            right={
+              <Switch
+                value={settings.leagueEnabled}
+                onValueChange={settings.setLeagueEnabled}
+                trackColor={SWITCH_TRACK_COLORS}
+                thumbColor={appColors.white}
+              />
             }
-            await updateNotificationSettings(token, {
-                is_notify: enabled,
-                remind_time: to24HourString(time),
-            });
-            await setCachedNotificationStatus({
-                is_notify: enabled,
-                remind_time: to24HourString(time),
-            });
-        } catch (error) {
-            Alert.alert('알림 설정 저장 실패', getErrorMessage(error, '알림 설정 저장에 실패했습니다.'));
+          />
+        </AlarmSettingSection>
+
+        <AlarmSettingSection title="방해 금지 시간">
+          <AlarmSettingRow
+            label="방해 금지 시간 설정"
+            description="설정한 시간에는 알림을 보내지 않아요"
+            right={
+              <Switch
+                value={settings.dndEnabled}
+                onValueChange={settings.setDndEnabled}
+                trackColor={SWITCH_TRACK_COLORS}
+                thumbColor={appColors.white}
+              />
+            }
+          />
+          <AlarmSettingRow
+            label="방해 금지 시간"
+            right={
+              <AlarmTimeChip
+                label={settings.dndLabel}
+                onPress={() => settings.openPicker("dndStart")}
+                disabled={!settings.dndEnabled}
+              />
+            }
+          />
+        </AlarmSettingSection>
+      </View>
+
+      <AlarmTimePickerOverlay
+        visible={settings.picker !== null}
+        title={
+          settings.picker === "review"
+            ? "복습 알림 시간"
+            : settings.picker === "dndStart"
+              ? "방해 금지 시작 시간"
+              : "방해 금지 종료 시간"
         }
-    };
-
-    const dndLabel = `${formatTime(dndStart)} ~ ${formatTime(dndEnd)}`;
-
-    const openPicker = (target: ActivePicker) => {
-        setPicker(target);
-
-        if (target === 'review') setTempTime(reviewTime);
-        if (target === 'dndStart') setTempTime(dndStart);
-        if (target === 'dndEnd') setTempTime(dndEnd);
-    };
-
-    const confirmPicker = () => {
-        if (picker === 'review') {
-            setReviewTime(tempTime);
-            saveReviewSettings(reviewEnabled, tempTime);
-        }
-        if (picker === 'dndStart') setDndStart(tempTime);
-        if (picker === 'dndEnd') setDndEnd(tempTime);
-        setPicker(null);
-    };
-
-    const change = (field: keyof Time, diff: number) => {
-        setTempTime((prev) => {
-            if (field === 'ampm') {
-                return { ...prev, ampm: prev.ampm === '오전' ? '오후' : '오전' };
-            }
-            if (field === 'hour') {
-                let h = prev.hour + diff;
-                if (h < 1) h = 12;
-                if (h > 12) h = 1;
-                return { ...prev, hour: h };
-            }
-            if (field === 'minute') {
-                // 5분 단위로 증감
-                let m = prev.minute + diff;
-                if (m < 0) m = 55;
-                if (m > 55) m = 0;
-                return { ...prev, minute: m };
-            }
-            return prev;
-        });
-    };
-
-    return (
-        <View style={styles.root}>
-            {/* 상단바 */}
-            <View style={styles.header}>
-                <AppBackButton
-                    style={styles.backButton}
-                    onPress={() => onNavigate('alarm')}
-                    iconStyle={styles.backIcon}
-                />
-                <Text style={styles.headerTitle}>알림설정</Text>
-                {/* 오른쪽 비우기(중앙 정렬 맞추기용) */}
-                <View style={{ width: scale(24) }} />
-            </View>
-
-            {/* 내용 영역 */}
-            <View style={styles.content}>
-                <AlarmSettingSection title="복습 알림">
-                    <AlarmSettingRow
-                        label="복습 알림 설정"
-                        description="하루 한 번 복습 알림을 보내드려요"
-                        right={
-                            <Switch
-                                value={reviewEnabled}
-                                onValueChange={(value) => {
-                                    setReviewEnabled(value);
-                                    saveReviewSettings(value, reviewTime);
-                                }}
-                                trackColor={SWITCH_TRACK_COLORS}
-                                thumbColor={appColors.white}
-                            />
-                        }
-                    />
-
-                    <AlarmSettingRow
-                        label="복습 알림 시간"
-                        right={
-                            <AlarmTimeChip
-                                label={formatTime(reviewTime)}
-                                onPress={() => openPicker('review')}
-                                disabled={!reviewEnabled}
-                            />
-                        }
-                    />
-                </AlarmSettingSection>
-
-                <AlarmSettingSection title="리그 알림">
-                    <AlarmSettingRow
-                        label="리그 알림 설정"
-                        description="순위 변동이 있을 때 알려드려요"
-                        right={
-                            <Switch
-                                value={leagueEnabled}
-                                onValueChange={setLeagueEnabled}
-                                trackColor={SWITCH_TRACK_COLORS}
-                                thumbColor={appColors.white}
-                            />
-                        }
-                    />
-                </AlarmSettingSection>
-
-                <AlarmSettingSection title="방해 금지 시간">
-                    <AlarmSettingRow
-                        label="방해 금지 시간 설정"
-                        description="설정한 시간에는 알림을 보내지 않아요"
-                        right={
-                            <Switch
-                                value={dndEnabled}
-                                onValueChange={setDndEnabled}
-                                trackColor={SWITCH_TRACK_COLORS}
-                                thumbColor={appColors.white}
-                            />
-                        }
-                    />
-
-                    <AlarmSettingRow
-                        label="방해 금지 시간"
-                        right={
-                            <AlarmTimeChip
-                                label={dndLabel}
-                                onPress={() => openPicker('dndStart')}
-                                disabled={!dndEnabled}
-                            />
-                        }
-                    />
-                </AlarmSettingSection>
-            </View>
-
-            <AlarmTimePickerOverlay
-                visible={picker !== null}
-                title={
-                    picker === 'review'
-                        ? '복습 알림 시간'
-                        : picker === 'dndStart'
-                          ? '방해 금지 시작 시간'
-                          : '방해 금지 종료 시간'
-                }
-                ampm={tempTime.ampm}
-                hour={tempTime.hour}
-                minute={tempTime.minute}
-                onChange={change}
-                onClose={() => setPicker(null)}
-                onConfirm={confirmPicker}
-            />
-        </View>
-    );
+        ampm={settings.tempTime.ampm}
+        hour={settings.tempTime.hour}
+        minute={settings.tempTime.minute}
+        onChange={settings.changeTempTime}
+        onClose={() => settings.setPicker(null)}
+        onConfirm={settings.confirmPicker}
+      />
+    </View>
+  );
 }
-
-const styles = StyleSheet.create({
-    root: {
-        flex: 1,
-        backgroundColor: BG,
-    },
-
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: scale(32),
-        paddingTop: scale(20),
-        paddingBottom: scale(16),
-    },
-    backButton: {
-        paddingRight: scale(16),
-        paddingVertical: scale(4),
-    },
-    backIcon: {
-        width: scale(18),
-        height: scale(18),
-    },
-    headerTitle: {
-        flex: 1,
-        fontSize: fontScale(20),
-        fontWeight: '800',
-    },
-
-    content: {
-        paddingHorizontal: scale(32),
-        paddingTop: scale(16),
-    },
-});

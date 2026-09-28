@@ -7,6 +7,7 @@ import type { Purchase } from 'react-native-iap';
 import { verifySubscription } from '../../api/iap';
 import type { PaidSubscriptionPlan, SubscriptionPlan, SubscriptionPrices } from '../../api/iap';
 import { getToken } from '../../lib/storage';
+import { showSubscriptionUnavailableAlert } from '../../lib/subscriptionAvailability';
 import type { AppStep } from '../../navigation/routes';
 
 const IOS_BASIC_SUBSCRIPTION_PRODUCT_ID =
@@ -310,7 +311,7 @@ export default function useSubscriptionActions({
 
   const handleUsageModalSubscribe = () => {
     setShowUsageExhaustedModal(false);
-    setStep('subscribe');
+    showSubscriptionUnavailableAlert();
   };
 
   return {

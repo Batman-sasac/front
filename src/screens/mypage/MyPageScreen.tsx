@@ -1,918 +1,135 @@
-﻿import React, { useEffect, useState } from 'react';
-import {
-    Alert,
-    Image,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
-} from 'react-native';
-import { fontScale, scale } from '../../lib/layout';
-import Sidebar from '../../components/Sidebar';
-import OAuthWebView from '../../components/OAuthWebView';
-import { clearAuthData, getToken, getUserInfo as getStoredUserInfo, getCachedMyPageStats, setCachedMyPageStats, saveAuthData, type AuthProvider } from '../../lib/storage';
-import { confirmLogout } from '../../lib/auth';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import {
-    connectAccount,
-    disconnectAccount,
-    getOAuthUrl,
-    getUserStats,
-    loginWithApple,
-    updateNickname as apiUpdateNickname,
-    withdrawAccount,
-} from '../../api/auth';
-import { getMonthlyStats } from '../../api/ocr';
-import { getErrorCode, getErrorMessage } from '../../app/error/errors';
-import MyPageModals from '../../components/mypage/MyPageModals';
+import React from "react";
+import { ScrollView, View } from "react-native";
 
-type Screen = 'home' | 'league' | 'alarm' | 'mypage' | 'takePicture' | 'brushup';
+import OAuthWebView from "../../components/OAuthWebView";
+import Sidebar from "../../components/Sidebar";
+import MyPageModals from "../../components/mypage/MyPageModals";
+import { confirmLogout } from "../../lib/auth";
+import LinkedAccountsSection from "./components/LinkedAccountsSection";
+import MyPageProfileSection from "./components/MyPageProfileSection";
+import { useLinkedAccounts } from "./hooks/useLinkedAccounts";
+import { useMyPageProfile } from "./hooks/useMyPageProfile";
+import { useMyPageStats } from "./hooks/useMyPageStats";
+import { styles } from "./styles/MyPageScreen.styles";
+
+type Screen =
+  | "home"
+  | "league"
+  | "alarm"
+  | "mypage"
+  | "takePicture"
+  | "brushup";
 
 type Props = {
-    nickname: string;
-    typeLabel: string;
-    level: number;
-    totalStudyCount: number;
-    continuousDays: number;
-    monthlyGoal: number | null;
-    onNavigate: (screen: Screen) => void;
-    onMonthlyGoalChange?: (goal: number) => void;
-    onNicknameChange?: (nickname: string) => void;
-    onWithdraw?: () => void;
-    onLogout?: () => void;
-    isSubscribed?: boolean;
-    onPlanManage?: () => void;
-};
-
-const BG = '#F6F7FB';
-
-// 학습자 유형별 색상 → 레벨업 캐릭터 이미지 (레벨 1~5) - HomeScreen과 동일 규칙
-const LEVEL_UP_IMAGES: Record<string, Record<number, ReturnType<typeof require>>> = {
-    green: {
-        1: require('../../../assets/character/level-up/green/green-1.png'),
-        2: require('../../../assets/character/level-up/green/green-2.png'),
-        3: require('../../../assets/character/level-up/green/green-3.png'),
-        4: require('../../../assets/character/level-up/green/green-4.png'),
-        5: require('../../../assets/character/level-up/green/green-5.png'),
-    },
-    red: {
-        1: require('../../../assets/character/level-up/red/red-1.png'),
-        2: require('../../../assets/character/level-up/red/red-2.png'),
-        3: require('../../../assets/character/level-up/red/red-3.png'),
-        4: require('../../../assets/character/level-up/red/red-4.png'),
-        5: require('../../../assets/character/level-up/red/red-5.png'),
-    },
-    yellow: {
-        1: require('../../../assets/character/level-up/yellow/yellow-1.png'),
-        2: require('../../../assets/character/level-up/yellow/yellow-2.png'),
-        3: require('../../../assets/character/level-up/yellow/yellow-3.png'),
-        4: require('../../../assets/character/level-up/yellow/yellow-4.png'),
-        5: require('../../../assets/character/level-up/yellow/yellow-5.png'),
-    },
-    purple: {
-        1: require('../../../assets/character/level-up/purple/purple-1.png'),
-        2: require('../../../assets/character/level-up/purple/purple-2.png'),
-        3: require('../../../assets/character/level-up/purple/purple-3.png'),
-        4: require('../../../assets/character/level-up/purple/purple-4.png'),
-        5: require('../../../assets/character/level-up/purple/purple-5.png'),
-    },
-};
-
-/** 학습자 유형 + 레벨에 따라 레벨업 캐릭터 이미지 반환 (유형별 색상 적용) */
-const getLevelUpCharacterSource = (typeLabel: string, level: number): ReturnType<typeof require> => {
-    const clampedLevel = Math.min(5, Math.max(1, level));
-    if (!typeLabel) {
-        return require('../../../assets/character/bat-character.png');
-    }
-    // TypeResultScreen / HomeScreen에서 사용하는 유형 이름과 맞춰서 매핑
-    if (typeLabel.includes('분석형')) return LEVEL_UP_IMAGES.green[clampedLevel];
-    if (typeLabel.includes('협력형')) return LEVEL_UP_IMAGES.red[clampedLevel];
-    if (typeLabel.includes('창의형')) return LEVEL_UP_IMAGES.yellow[clampedLevel];
-    if (typeLabel.includes('사회형')) return LEVEL_UP_IMAGES.purple[clampedLevel];
-    return require('../../../assets/character/bat-character.png');
-};
-
-const inferProviderFromEmail = (email: string | null): AuthProvider | null => {
-    if (!email) return null;
-    const lowered = email.toLowerCase();
-    if (lowered.endsWith('@kakao.oauth') || lowered.startsWith('kakao_')) return 'kakao';
-    if (lowered.endsWith('@naver.oauth') || lowered.startsWith('naver_')) return 'naver';
-    if (lowered.endsWith('@apple.oauth') || lowered.startsWith('apple_') || lowered.endsWith('@privaterelay.appleid.com')) return 'apple';
-    return null;
+  nickname: string;
+  typeLabel: string;
+  level: number;
+  totalStudyCount: number;
+  continuousDays: number;
+  monthlyGoal: number | null;
+  onNavigate: (screen: Screen) => void;
+  onMonthlyGoalChange?: (goal: number) => void;
+  onNicknameChange?: (nickname: string) => void;
+  onWithdraw?: () => void;
+  onLogout?: () => void;
+  isSubscribed?: boolean;
+  onPlanManage?: () => void;
 };
 
 export default function MyPageScreen({
-    nickname,
-    typeLabel,
-    level,
+  nickname,
+  typeLabel,
+  level,
+  totalStudyCount,
+  continuousDays,
+  monthlyGoal,
+  onNavigate,
+  onMonthlyGoalChange,
+  onNicknameChange,
+  onWithdraw,
+  onLogout,
+  isSubscribed = false,
+  onPlanManage,
+}: Props) {
+  const stats = useMyPageStats({
     totalStudyCount,
     continuousDays,
     monthlyGoal,
-    onNavigate,
     onMonthlyGoalChange,
-    onNicknameChange,
-    onWithdraw,
-    onLogout,
-    isSubscribed = false,
-    onPlanManage,
-}: Props) {
-    const characterSource = getLevelUpCharacterSource(typeLabel, level);
+  });
+  const profile = useMyPageProfile({ nickname, onNicknameChange });
+  const accounts = useLinkedAccounts({ onWithdraw });
 
-    const [currentNickname, setCurrentNickname] = useState(nickname);
-    const [totalStudyCountState, setTotalStudyCountState] = useState(totalStudyCount);
-    const [continuousDaysState, setContinuousDaysState] = useState(continuousDays);
-    const [monthlyGoalState, setMonthlyGoalState] = useState<number | null>(monthlyGoal);
+  const handleLogoutPress = () => {
+    confirmLogout(() => {
+      if (onLogout) onLogout();
+      else onNavigate("home");
+    });
+  };
 
-    const [kakaoEmail, setKakaoEmail] = useState<string | null>(null);
-    const [naverEmail, setNaverEmail] = useState<string | null>(null);
-    const [appleEmail, setAppleEmail] = useState<string | null>(null);
+  return (
+    <View style={styles.root}>
+      <Sidebar
+        activeScreen="mypage"
+        onNavigate={onNavigate}
+        onLogout={handleLogoutPress}
+      />
 
-    const [showOAuthWebView, setShowOAuthWebView] = useState(false);
-    const [oauthProvider, setOauthProvider] = useState<'kakao' | 'naver'>('kakao');
-    const [oauthUrl, setOauthUrl] = useState('');
+      <ScrollView style={styles.main} contentContainerStyle={styles.mainContent}>
+        <MyPageProfileSection
+          nickname={profile.currentNickname}
+          typeLabel={typeLabel}
+          level={level}
+          totalStudyCount={stats.totalStudyCountState}
+          continuousDays={stats.continuousDaysState}
+          monthlyGoal={stats.monthlyGoalState}
+          isSubscribed={isSubscribed}
+          onEditNickname={profile.handleOpenNicknameModal}
+          onEditMonthlyGoal={() => stats.setShowMonthlyGoalModal(true)}
+          onPlanManage={onPlanManage}
+        />
+        <LinkedAccountsSection
+          kakaoEmail={accounts.kakaoEmail}
+          naverEmail={accounts.naverEmail}
+          appleEmail={accounts.appleEmail}
+          onConnectKakao={accounts.handleConnectKakao}
+          onConnectNaver={accounts.handleConnectNaver}
+          onConnectApple={accounts.handleConnectApple}
+          onDisconnect={accounts.tryDisconnect}
+          onWithdraw={() => accounts.setShowWithdrawModal(true)}
+        />
+      </ScrollView>
 
-    const [showSingleDisconnectModal, setShowSingleDisconnectModal] = useState(false);
-    const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-    const [planTooltipTextWidth, setPlanTooltipTextWidth] = useState<number | null>(null);
-    const [showMonthlyGoalModal, setShowMonthlyGoalModal] = useState(false);
-    const [showNicknameModal, setShowNicknameModal] = useState(false);
-
-    const [tempGoal, setTempGoal] = useState(monthlyGoal || 20);
-    const [tempNickname, setTempNickname] = useState(nickname);
-
-    useEffect(() => {
-        const run = async () => {
-            try {
-                const cached = await getCachedMyPageStats();
-                if (cached) {
-                    setTotalStudyCountState(cached.totalStudyCount);
-                    setContinuousDaysState(cached.continuousDays);
-                    setMonthlyGoalState(cached.monthlyGoal);
-                    setTempGoal(cached.monthlyGoal ?? 20);
-                }
-            } catch (e) {
-                console.error('마이페이지 캐시 로드 실패:', e);
-            }
-
-            await loadAccountInfo();
-        };
-        run();
-    }, []);
-
-    const loadAccountInfo = async () => {
-        try {
-            const token = await getToken();
-            if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다.');
-                return;
-            }
-
-            const stored = await getStoredUserInfo();
-            const storedEmail = stored.email ?? null;
-            const provider = stored.provider ?? inferProviderFromEmail(storedEmail);
-            setKakaoEmail(provider === 'kakao' ? storedEmail : null);
-            setNaverEmail(provider === 'naver' ? storedEmail : null);
-            setAppleEmail(provider === 'apple' ? storedEmail : null);
-
-            const [stats, monthlyStats] = await Promise.all([getUserStats(token), getMonthlyStats()]);
-
-            const monthlyGoalValue = stats.data.monthly_goal ?? monthlyStats?.compare?.target_count;
-            const fallbackGoal = typeof monthlyGoal === 'number' ? monthlyGoal : null;
-            const resolvedGoal = monthlyGoalValue && monthlyGoalValue > 0 ? monthlyGoalValue : fallbackGoal ?? monthlyGoalValue;
-
-            const total = Number(stats.data.total_learning_count ?? 0);
-            const consecutive = Number(stats.data.consecutive_days ?? 0);
-            const resolvedGoalNumber = resolvedGoal ?? 0;
-
-            setTotalStudyCountState(total);
-            setContinuousDaysState(consecutive);
-            setMonthlyGoalState(resolvedGoalNumber);
-            setTempGoal(resolvedGoalNumber || 20);
-
-            await setCachedMyPageStats({
-                totalStudyCount: total,
-                continuousDays: consecutive,
-                monthlyGoal: resolvedGoalNumber,
-            });
-        } catch (error) {
-            console.error('계정 정보 로드 실패:', error);
-            Alert.alert('오류', '계정 정보를 불러오지 못했습니다.');
+      <MyPageModals
+        showSingleDisconnect={accounts.showSingleDisconnectModal}
+        showNickname={profile.showNicknameModal}
+        showMonthlyGoal={stats.showMonthlyGoalModal}
+        showWithdraw={accounts.showWithdrawModal}
+        tempNickname={profile.tempNickname}
+        tempGoal={stats.tempGoal}
+        onTempNicknameChange={profile.setTempNickname}
+        onTempGoalChange={stats.setTempGoal}
+        onCloseSingleDisconnect={() =>
+          accounts.setShowSingleDisconnectModal(false)
         }
-    };
+        onCloseNickname={() => profile.setShowNicknameModal(false)}
+        onCloseMonthlyGoal={() => stats.setShowMonthlyGoalModal(false)}
+        onCloseWithdraw={() => accounts.setShowWithdrawModal(false)}
+        onConfirmNickname={profile.handleNicknameChange}
+        onConfirmMonthlyGoal={stats.handleConfirmMonthlyGoal}
+        onConfirmWithdraw={async () => {
+          accounts.setShowWithdrawModal(false);
+          await accounts.handleWithdraw();
+        }}
+      />
 
-    const kakaoConnected = !!kakaoEmail;
-    const naverConnected = !!naverEmail;
-    const appleConnected = !!appleEmail;
-
-    const handleConnectKakao = async () => {
-        try {
-            const url = await getOAuthUrl('kakao');
-            setOauthProvider('kakao');
-            setOauthUrl(url);
-            setShowOAuthWebView(true);
-        } catch (error) {
-            Alert.alert('오류', getErrorMessage(error, '카카오 로그인 URL 생성 실패'));
-        }
-    };
-
-    const handleConnectNaver = async () => {
-        try {
-            const url = await getOAuthUrl('naver');
-            setOauthProvider('naver');
-            setOauthUrl(url);
-            setShowOAuthWebView(true);
-        } catch (error) {
-            Alert.alert('오류', getErrorMessage(error, '네이버 로그인 URL 생성 실패'));
-        }
-    };
-
-    const handleConnectApple = async () => {
-        if (Platform.OS !== 'ios') {
-            Alert.alert('안내', 'Apple 계정 연동은 iOS에서만 가능합니다.');
-            return;
-        }
-
-        try {
-            const available = await AppleAuthentication.isAvailableAsync();
-            if (!available) {
-                Alert.alert('안내', '이 기기에서는 Apple 로그인 기능을 사용할 수 없습니다.');
-                return;
-            }
-
-            const credential = await AppleAuthentication.signInAsync({
-                requestedScopes: [
-                    AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-                    AppleAuthentication.AppleAuthenticationScope.EMAIL,
-                ],
-            });
-
-            const identityToken = credential.identityToken;
-            if (!identityToken) {
-                Alert.alert('오류', 'Apple 인증 토큰을 받지 못했습니다.');
-                return;
-            }
-
-            const result = await loginWithApple(identityToken);
-            if (
-                result.status === 'success' ||
-                result.status === 'nickname_required' ||
-                result.status === 'NICKNAME_REQUIRED'
-            ) {
-                setAppleEmail(result.email);
-                Alert.alert('성공', 'Apple 계정을 연동했습니다.');
-                return;
-            }
-
-            Alert.alert('오류', result.message || 'Apple 계정 연동에 실패했습니다.');
-        } catch (error) {
-            if (getErrorCode(error) === 'ERR_REQUEST_CANCELED') return;
-            Alert.alert('오류', getErrorMessage(error, 'Apple 계정 연동 실패'));
-        }
-    };
-
-    const handleOAuthCode = async (code: string) => {
-        try {
-            const token = await getToken();
-            if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다.');
-                return;
-            }
-
-            const result = await connectAccount(token, oauthProvider, code);
-
-            if (oauthProvider === 'kakao') {
-                setKakaoEmail(result.connected_email);
-            } else {
-                setNaverEmail(result.connected_email);
-            }
-
-            Alert.alert('성공', result.message);
-        } catch (error) {
-            Alert.alert('오류', getErrorMessage(error, '계정 연동 실패'));
-        }
-    };
-
-    const tryDisconnect = async (provider: 'kakao' | 'naver' | 'apple') => {
-        const connectedCount = (kakaoEmail ? 1 : 0) + (naverEmail ? 1 : 0) + (appleEmail ? 1 : 0);
-
-        if (connectedCount <= 1) {
-            setShowSingleDisconnectModal(true);
-            return;
-        }
-
-        try {
-            const token = await getToken();
-            if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다.');
-                return;
-            }
-
-            await disconnectAccount(token, provider);
-
-            if (provider === 'kakao') {
-                setKakaoEmail(null);
-            } else if (provider === 'naver') {
-                setNaverEmail(null);
-            } else {
-                setAppleEmail(null);
-            }
-
-            const providerLabel = provider === 'kakao' ? '카카오' : provider === 'naver' ? '네이버' : 'Apple';
-            Alert.alert('성공', `${providerLabel} 계정 연동을 해제했습니다.`);
-        } catch (error) {
-            Alert.alert('오류', getErrorMessage(error, '연동 해제 실패'));
-        }
-    };
-
-    const handleWithdraw = async () => {
-        try {
-            const token = await getToken();
-            if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다.');
-                return;
-            }
-
-            await withdrawAccount(token);
-            await clearAuthData();
-            setShowWithdrawModal(false);
-
-            Alert.alert('완료', '회원 탈퇴가 완료되었습니다.', [
-                {
-                    text: '확인',
-                    onPress: () => {
-                        if (onWithdraw) onWithdraw();
-                    },
-                },
-            ]);
-        } catch (error) {
-            Alert.alert('오류', getErrorMessage(error, '회원 탈퇴 실패'));
-        }
-    };
-
-    const handleNicknameChange = async (newNickname: string) => {
-        try {
-            const token = await getToken();
-            if (!token) {
-                Alert.alert('오류', '로그인이 필요합니다.');
-                return false;
-            }
-
-            await apiUpdateNickname(token, newNickname);
-
-            // 서버 닉네임 변경 후 로컬 캐시(토큰/이메일/닉네임)도 최신 값으로 동기화
-            const stored = await getStoredUserInfo();
-            const email = stored.email ?? '';
-            await saveAuthData(token, email, newNickname);
-
-            setCurrentNickname(newNickname);
-            onNicknameChange?.(newNickname);
-            Alert.alert('성공', '닉네임이 변경되었습니다.');
-            return true;
-        } catch (error) {
-            Alert.alert('오류', getErrorMessage(error, '닉네임 변경 실패'));
-            return false;
-        }
-    };
-
-    return (
-        <View style={styles.root}>
-            <Sidebar
-                activeScreen="mypage"
-                onNavigate={onNavigate}
-                onLogout={() =>
-                    confirmLogout(() => {
-                        if (onLogout) onLogout();
-                        else onNavigate('home');
-                    })
-                }
-            />
-
-            <ScrollView style={styles.main} contentContainerStyle={styles.mainContent}>
-                <View style={styles.profileSection}>
-                    <View style={styles.leftColumn}>
-                        <Image source={characterSource} style={styles.character} resizeMode="contain" />
-                        <View style={styles.nameRow}>
-                            <Text style={styles.nickname}>{currentNickname}</Text>
-                            <Pressable
-                                style={styles.nicknameEditButton}
-                                onPress={() => {
-                                    setTempNickname(currentNickname);
-                                    setShowNicknameModal(true);
-                                }}
-                            >
-                                <Image
-                                    source={require('../../../assets/mypage/nickname-change.png')}
-                                    style={styles.nicknameEditIcon}
-                                    resizeMode="contain"
-                                />
-                            </Pressable>
-                        </View>
-                    </View>
-
-                    <View style={styles.rightColumn}>
-                        <View style={styles.levelSection}>
-                            <Text style={styles.levelText}>
-                                Level <Text style={styles.levelValue}>{level}</Text>{' '}
-                                <Text style={styles.typeText}>{typeLabel || '학습 유형 미지정'}</Text>
-                            </Text>
-                        </View>
-
-                        <View style={styles.statsRow}>
-                            <View style={styles.statItem}>
-                                <View style={styles.statIconRow}>
-                                    <Image
-                                        source={require('../../../assets/mypage/total-study.png')}
-                                        style={styles.statIcon}
-                                        resizeMode="contain"
-                                    />
-                                    <Text style={styles.statTitle}>총 학습 횟수</Text>
-                                </View>
-                                <Text style={styles.statValue}>{totalStudyCountState}회</Text>
-                            </View>
-
-                            <View style={styles.statItem}>
-                                <View style={styles.statIconRow}>
-                                    <Image
-                                        source={require('../../../assets/mypage/continuous-study.png')}
-                                        style={styles.statIcon}
-                                        resizeMode="contain"
-                                    />
-                                    <Text style={styles.statTitle}>연속 학습일</Text>
-                                </View>
-                                <Text style={styles.statValue}>{continuousDaysState}일</Text>
-                            </View>
-
-                            <Pressable style={styles.statItem} onPress={() => setShowMonthlyGoalModal(true)}>
-                                <View style={styles.statIconRow}>
-                                    <Image
-                                        source={require('../../../assets/mypage/monthly-goal.png')}
-                                        style={styles.statIcon}
-                                        resizeMode="contain"
-                                    />
-                                    <Text style={styles.statTitle}>월간 목표</Text>
-                                </View>
-                                <Text style={styles.statValue}>{monthlyGoalState || 0}회</Text>
-                            </Pressable>
-
-                            <View style={styles.planGuideWrap}>
-                                <Pressable
-                                    accessibilityRole="button"
-                                    accessibilityLabel="구독 플랜 관리"
-                                    style={styles.statItem}
-                                    onPress={onPlanManage}
-                                >
-                                    <View style={styles.statIconRow}>
-                                        <Image
-                                            source={require('../../../assets/mypage/subscription-plan.png')}
-                                            style={styles.statIcon}
-                                            resizeMode="contain"
-                                        />
-                                        <Text style={styles.statTitle}>플랜 관리</Text>
-                                    </View>
-                                    <Text style={styles.statValue}>{isSubscribed ? '구독중' : '무료플랜'}</Text>
-                                </Pressable>
-
-                                <View
-                                    style={[
-                                        styles.planTooltip,
-                                        planTooltipTextWidth != null && {
-                                            width: planTooltipTextWidth + scale(24),
-                                        },
-                                    ]}
-                                    pointerEvents="none"
-                                >
-                                    <View style={styles.planTooltipArrow} />
-                                    <Text
-                                        style={styles.planTooltipText}
-                                        numberOfLines={1}
-                                        onTextLayout={(event) => {
-                                            const measuredWidth = event.nativeEvent.lines[0]?.width;
-                                            if (!measuredWidth) return;
-                                            const nextWidth = Math.ceil(measuredWidth);
-                                            setPlanTooltipTextWidth((currentWidth) =>
-                                                currentWidth === nextWidth ? currentWidth : nextWidth,
-                                            );
-                                        }}
-                                    >
-                                        <Text style={styles.planTooltipStrong}>구독</Text>
-                                        {'하고 AI 학습을 '}
-                                        <Text style={styles.planTooltipStrong}>월 250회</Text>
-                                        {'까지 이용해 보세요.'}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-                </View>
-
-                <View style={styles.accountSection}>
-                    <Text style={styles.sectionTitle}>연결된 계정</Text>
-
-                    <View style={[styles.accountContainer, kakaoConnected && styles.accountContainerConnected]}>
-                        <View style={[styles.accountBox, styles.kakaoBox]}>
-                            <View style={styles.accountRow}>
-                                <View style={styles.providerInfo}>
-                                    <Image
-                                        source={require('../../../assets/kakao.png')}
-                                        style={styles.providerIcon}
-                                        resizeMode="contain"
-                                    />
-                                    <Text style={styles.providerName}>카카오 계정</Text>
-                                </View>
-
-                                {kakaoConnected ? (
-                                    <Pressable style={styles.accountAction} onPress={() => tryDisconnect('kakao')}>
-                                        <Text style={styles.accountActionText}>연동 해제</Text>
-                                        <Image
-                                            source={require('../../../assets/shift.png')}
-                                            style={styles.shiftIcon}
-                                            resizeMode="contain"
-                                        />
-                                    </Pressable>
-                                ) : (
-                                    <Pressable style={styles.accountAction} onPress={handleConnectKakao}>
-                                        <Text style={styles.accountActionText}>연동하기</Text>
-                                        <Image
-                                            source={require('../../../assets/shift.png')}
-                                            style={styles.shiftIcon}
-                                            resizeMode="contain"
-                                        />
-                                    </Pressable>
-                                )}
-                            </View>
-                        </View>
-
-                        {kakaoConnected && (
-                            <View style={styles.emailBox}>
-                                <Text style={styles.emailText}>이메일: {kakaoEmail}</Text>
-                            </View>
-                        )}
-                    </View>
-
-                    <View style={[styles.accountContainer, appleConnected && styles.accountContainerConnectedApple]}>
-                        <View style={[styles.accountBox, styles.appleBox]}>
-                            <View style={styles.accountRow}>
-                                <View style={styles.providerInfo}>
-                                    <Text style={styles.appleProviderIcon}></Text>
-                                    <Text style={[styles.providerName, styles.appleText]}>Apple 계정</Text>
-                                </View>
-
-                                {appleConnected ? (
-                                    <Pressable style={styles.accountAction} onPress={() => tryDisconnect('apple')}>
-                                        <Text style={[styles.accountActionText, styles.appleText]}>연동 해제</Text>
-                                        <Image
-                                            source={require('../../../assets/shift.png')}
-                                            style={styles.shiftIcon}
-                                            resizeMode="contain"
-                                            tintColor="#FFFFFF"
-                                        />
-                                    </Pressable>
-                                ) : (
-                                    <Pressable style={styles.accountAction} onPress={handleConnectApple}>
-                                        <Text style={[styles.accountActionText, styles.appleText]}>연동하기</Text>
-                                        <Image
-                                            source={require('../../../assets/shift.png')}
-                                            style={styles.shiftIcon}
-                                            resizeMode="contain"
-                                            tintColor="#FFFFFF"
-                                        />
-                                    </Pressable>
-                                )}
-                            </View>
-                        </View>
-
-                        {appleConnected && (
-                            <View style={styles.emailBox}>
-                                <Text style={styles.emailText}>이메일: {appleEmail}</Text>
-                            </View>
-                        )}
-                    </View>
-
-                    <View style={[styles.accountContainer, naverConnected && styles.accountContainerConnectedNaver, { display: 'none' }]}>
-                        <View style={[styles.accountBox, styles.naverBox]}>
-                            <View style={styles.accountRow}>
-                                <View style={styles.providerInfo}>
-                                    <Image
-                                        source={require('../../../assets/naver-icon.png')}
-                                        style={styles.providerIcon}
-                                        resizeMode="contain"
-                                    />
-                                    <Text style={[styles.providerName, styles.naverText]}>네이버 계정</Text>
-                                </View>
-
-                                {naverConnected ? (
-                                    <Pressable style={styles.accountAction} onPress={() => tryDisconnect('naver')}>
-                                        <Text style={[styles.accountActionText, styles.naverText]}>연동 해제</Text>
-                                        <Image
-                                            source={require('../../../assets/shift.png')}
-                                            style={styles.shiftIcon}
-                                            resizeMode="contain"
-                                            tintColor="#FFFFFF"
-                                        />
-                                    </Pressable>
-                                ) : (
-                                    <Pressable style={styles.accountAction} onPress={handleConnectNaver}>
-                                        <Text style={[styles.accountActionText, styles.naverText]}>연동하기</Text>
-                                        <Image
-                                            source={require('../../../assets/shift.png')}
-                                            style={styles.shiftIcon}
-                                            resizeMode="contain"
-                                            tintColor="#FFFFFF"
-                                        />
-                                    </Pressable>
-                                )}
-                            </View>
-                        </View>
-
-                        {naverConnected && (
-                            <View style={styles.emailBox}>
-                                <Text style={styles.emailText}>이메일: {naverEmail}</Text>
-                            </View>
-                        )}
-                    </View>
-
-                    <Pressable style={styles.withdrawButton} onPress={() => setShowWithdrawModal(true)}>
-                        <Text style={styles.withdrawText}>회원 탈퇴</Text>
-                    </Pressable>
-                </View>
-            </ScrollView>
-
-            <MyPageModals
-                showSingleDisconnect={showSingleDisconnectModal}
-                showNickname={showNicknameModal}
-                showMonthlyGoal={showMonthlyGoalModal}
-                showWithdraw={showWithdrawModal}
-                tempNickname={tempNickname}
-                tempGoal={tempGoal}
-                onTempNicknameChange={setTempNickname}
-                onTempGoalChange={setTempGoal}
-                onCloseSingleDisconnect={() => setShowSingleDisconnectModal(false)}
-                onCloseNickname={() => setShowNicknameModal(false)}
-                onCloseMonthlyGoal={() => setShowMonthlyGoalModal(false)}
-                onCloseWithdraw={() => setShowWithdrawModal(false)}
-                onConfirmNickname={async () => {
-                    const success = await handleNicknameChange(tempNickname);
-                    if (success) setShowNicknameModal(false);
-                }}
-                onConfirmMonthlyGoal={() => {
-                    onMonthlyGoalChange?.(tempGoal);
-                    setMonthlyGoalState(tempGoal);
-                    setShowMonthlyGoalModal(false);
-                }}
-                onConfirmWithdraw={async () => {
-                    setShowWithdrawModal(false);
-                    await handleWithdraw();
-                }}
-            />
-
-            <OAuthWebView
-                visible={showOAuthWebView}
-                provider={oauthProvider}
-                oauthUrl={oauthUrl}
-                onCode={handleOAuthCode}
-                onClose={() => setShowOAuthWebView(false)}
-            />
-        </View>
-    );
+      <OAuthWebView
+        visible={accounts.showOAuthWebView}
+        provider={accounts.oauthProvider}
+        oauthUrl={accounts.oauthUrl}
+        onCode={accounts.handleOAuthCode}
+        onClose={() => accounts.setShowOAuthWebView(false)}
+      />
+    </View>
+  );
 }
-
-const styles = StyleSheet.create({
-    root: {
-        flex: 1,
-        flexDirection: 'row',
-        backgroundColor: BG,
-    },
-    main: {
-        flex: 1,
-    },
-    mainContent: {
-        gap: scale(0),
-    },
-    profileSection: {
-        flexDirection: 'row',
-        backgroundColor: '#F6F7FB',
-        paddingVertical: scale(40),
-        paddingHorizontal: scale(60),
-        gap: scale(80),
-    },
-    leftColumn: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: scale(12),
-    },
-    character: {
-        width: scale(140),
-        height: scale(140),
-    },
-    nameRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: scale(8),
-    },
-    nickname: {
-        fontSize: fontScale(26),
-        fontWeight: '800',
-    },
-    nicknameEditButton: {
-        padding: scale(4),
-    },
-    nicknameEditIcon: {
-        width: scale(24),
-        height: scale(24),
-    },
-    rightColumn: {
-        flex: 2,
-        gap: scale(24),
-        justifyContent: 'center',
-    },
-    levelSection: {
-        alignItems: 'center',
-    },
-    levelText: {
-        fontSize: fontScale(18),
-        color: '#374151',
-    },
-    levelValue: {
-        fontSize: fontScale(24),
-        fontWeight: '800',
-        color: '#111827',
-    },
-    typeText: {
-        fontSize: fontScale(16),
-        color: '#6B7280',
-    },
-    statsRow: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: scale(32),
-    },
-    statItem: {
-        alignItems: 'center',
-        gap: scale(8),
-    },
-    statIconRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: scale(6),
-    },
-    statIcon: {
-        width: scale(24),
-        height: scale(24),
-    },
-    statTitle: {
-        fontSize: fontScale(13),
-        color: '#6B7280',
-    },
-    statValue: {
-        fontSize: fontScale(20),
-        fontWeight: '800',
-        color: '#111827',
-        marginTop: scale(4),
-    },
-    planGuideWrap: {
-        position: 'relative',
-        alignItems: 'center',
-    },
-    planTooltip: {
-        position: 'absolute',
-        top: scale(72),
-        width: scale(344),
-        left: '50%',
-        transform: [{ translateX: scale(-213) }],
-        height: scale(48),
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: scale(12),
-        borderRadius: scale(12),
-        backgroundColor: '#212124',
-        overflow: 'visible',
-        zIndex: 2,
-    },
-    planTooltipArrow: {
-        position: 'absolute',
-        top: scale(-14),
-        left: scale(204),
-        width: 0,
-        height: 0,
-        borderLeftWidth: scale(9),
-        borderRightWidth: scale(9),
-        borderBottomWidth: scale(16),
-        borderLeftColor: 'transparent',
-        borderRightColor: 'transparent',
-        borderBottomColor: '#212124',
-    },
-    planTooltipText: {
-        color: '#FFFFFF',
-        fontSize: fontScale(16),
-        lineHeight: fontScale(24),
-        fontWeight: '500',
-        textAlign: 'center',
-    },
-    planTooltipStrong: {
-        fontWeight: '700',
-    },
-    accountSection: {
-        backgroundColor: '#FFFFFF',
-        paddingVertical: scale(24),
-        paddingHorizontal: scale(40),
-    },
-    sectionTitle: {
-        fontSize: fontScale(20),
-        fontWeight: '600',
-        marginBottom: scale(16),
-    },
-    accountContainer: {
-        borderRadius: scale(12),
-        marginBottom: scale(12),
-        overflow: 'hidden',
-    },
-    accountContainerConnected: {
-        borderWidth: 2,
-        borderColor: '#FEE500',
-    },
-    accountContainerConnectedNaver: {
-        borderWidth: 2,
-        borderColor: '#03C75A',
-    },
-    accountContainerConnectedApple: {
-        borderWidth: 2,
-        borderColor: '#111827',
-    },
-    accountBox: {
-        paddingVertical: scale(14),
-        paddingHorizontal: scale(16),
-    },
-    kakaoBox: {
-        backgroundColor: '#FEE500',
-    },
-    naverBox: {
-        backgroundColor: '#03C75A',
-    },
-    appleBox: {
-        backgroundColor: '#111827',
-    },
-    accountRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    providerInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: scale(8),
-    },
-    providerIcon: {
-        width: scale(18),
-        height: scale(18),
-    },
-    providerName: {
-        fontSize: fontScale(15),
-        fontWeight: '700',
-    },
-    accountAction: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: scale(4),
-    },
-    accountActionText: {
-        fontSize: fontScale(16),
-        fontWeight: '600',
-        color: '#5F5F5F',
-    },
-    shiftIcon: {
-        width: scale(14),
-        height: scale(14),
-    },
-    emailBox: {
-        backgroundColor: '#FFFFFF',
-        paddingVertical: scale(12),
-        paddingHorizontal: scale(16),
-    },
-    emailText: {
-        fontSize: fontScale(13),
-        color: '#374151',
-    },
-    naverText: {
-        color: '#FFFFFF',
-    },
-    appleText: {
-        color: '#FFFFFF',
-    },
-    appleProviderIcon: {
-        color: '#FFFFFF',
-        fontSize: fontScale(16),
-        fontWeight: '700',
-        width: scale(18),
-        textAlign: 'center',
-    },
-    withdrawButton: {
-        marginTop: scale(16),
-    },
-    withdrawText: {
-        fontSize: fontScale(13),
-        color: '#000000',
-    },
-});

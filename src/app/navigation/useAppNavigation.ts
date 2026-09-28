@@ -1,5 +1,6 @@
 ﻿import type { AppStep } from '../../navigation/routes';
 import type { Screen as SidebarScreen } from '../../components/Sidebar';
+import { showSubscriptionUnavailableAlert } from '../../lib/subscriptionAvailability';
 
 export type MainNavigationScreen = 'home' | 'league' | 'alarm' | 'mypage' | 'takePicture' | 'brushup';
 
@@ -37,11 +38,8 @@ export default function useAppNavigation({
     setStep(screen);
   };
 
-  const handlePlanManageOpen = async () => {
-    const canUseOcr = await canUseOcrOrShowLimit();
-    if (!canUseOcr) return;
-
-    setStep('subscribe');
+  const handlePlanManageOpen = () => {
+    showSubscriptionUnavailableAlert();
   };
 
   return {
